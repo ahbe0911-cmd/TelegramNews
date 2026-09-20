@@ -141,7 +141,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('مشاهده عکس با اندازه کامل'),
         220, scrollable: find.byType(Scrollable).last);
     expect(find.text('مشاهده عکس با اندازه کامل'), findsOneWidget);
-    expect(find.text('ذخیره این خبر'), findsOneWidget);
+    expect(find.text('ذخیره خبر در تلگرام'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('download-' + post.key)), findsOneWidget);
