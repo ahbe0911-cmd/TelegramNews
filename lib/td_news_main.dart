@@ -122,7 +122,7 @@ class _TdHomeState extends State<TdHome> {
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
-  int selectedTab = 0; // 0: news, 1: settings
+  int selectedTab = 0; // 0: news, 1: saved, 2: settings
   bool refreshing = false;
   String? inlineVideoKey;
   final savingPosts = <String>{};
@@ -731,7 +731,20 @@ class _TdHomeState extends State<TdHome> {
                 Expanded(child: Text(post.source,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-                const SizedBox(width: 7),
+                IconButton(
+                  key: ValueKey('bookmark-' + post.key),
+                  tooltip: widget.news.isSaved(post)
+                      ? 'حذف از ذخیره‌شده‌ها' : 'ذخیره خبر',
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 22,
+                  icon: Icon(
+                    widget.news.isSaved(post) ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: widget.news.isSaved(post)
+                        ? const Color(0xffd99a18) : colors.onSurfaceVariant,
+                  ),
+                  onPressed: () => unawaited(widget.news.toggleSaved(post)),
+                ),
+                const SizedBox(width: 2),
                 Text(dateLabel(post.date),
                   style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
               ]),
@@ -839,7 +852,7 @@ class _TdHomeState extends State<TdHome> {
             style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
           const SizedBox(height: 15),
           FilledButton.icon(
-            onPressed: () => setState(() { selectedTab = 1; }),
+            onPressed: () => setState(() { selectedTab = 2; }),
             icon: const Icon(Icons.settings_outlined),
             label: const Text('مدیریت منابع خبری'),
           ),
@@ -894,6 +907,65 @@ class _TdHomeState extends State<TdHome> {
     );
   }
 
+  Widget savedScreen() {
+    final colors = Theme.of(context).colorScheme;
+    final savedPosts = widget.news.savedFeed;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: savedPosts.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const SizedBox(height: 8),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: const Color(0xffffedc3),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(Icons.star_rounded, color: Color(0xffbd8313), size: 25),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('ذخیره‌شده‌ها',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800)),
+                  Text('${savedPosts.length} خبر نشان‌دار',
+                    style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+                ],
+              )),
+            ]),
+            const SizedBox(height: 18),
+            if (savedPosts.isEmpty)
+              surfacePanel(child: Column(children: [
+                Icon(Icons.star_border_rounded, size: 49, color: colors.primary),
+                const SizedBox(height: 10),
+                const Text('هنوز خبری ذخیره نشده است',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const SizedBox(height: 7),
+                Text('ستاره کنار هر خبر را لمس کنید تا اینجا نمایش داده شود.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => setState(() { selectedTab = 0; }),
+                  child: const Text('رفتن به خبرها'),
+                ),
+              ])),
+          ]);
+        }
+        final post = savedPosts[index - 1];
+        return KeyedSubtree(
+          key: ValueKey('saved-' + post.key),
+          child: postCard(post),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: widget.news,
@@ -925,7 +997,7 @@ class _TdHomeState extends State<TdHome> {
                   IconButton(
                     tooltip: 'تنظیمات',
                     icon: const Icon(Icons.tune_rounded),
-                    onPressed: () => setState(() { selectedTab = 1; }),
+                    onPressed: () => setState(() { selectedTab = 2; }),
                   ),
               ],
             ),
@@ -942,7 +1014,9 @@ class _TdHomeState extends State<TdHome> {
                       )
                     : selectedTab == 0
                         ? newsScreen(filtered)
-                        : settingsScreen(),
+                        : selectedTab == 1
+                            ? savedScreen()
+                            : settingsScreen(),
               )),
             ),
             bottomNavigationBar: ready
@@ -957,6 +1031,11 @@ class _TdHomeState extends State<TdHome> {
                         icon: Icon(Icons.home_outlined),
                         selectedIcon: Icon(Icons.home_rounded),
                         label: 'خبرها',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.star_border_rounded),
+                        selectedIcon: Icon(Icons.star_rounded),
+                        label: 'ذخیره‌شده‌ها',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
