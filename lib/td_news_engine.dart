@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,10 +128,12 @@ class NewsPost {
   int? mediaFileId;
   String? mediaPath;
   String? fileName;
+  Uint8List? previewBytes;
 
   NewsPost(this.chatId, this.id, this.date, this.source, this.username, this.body,
       this.photoId, this.photoPath,
-      {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName});
+      {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName,
+       this.previewBytes});
 
   String get key => chatId.toString() + ':' + id.toString();
   String get link => 'https://t.me/' + username + '/' + (id >> 20).toString();
@@ -299,7 +302,7 @@ class TdNewsController extends ChangeNotifier {
 
   /// Only the Telegram TDLib connection uses this loopback proxy.
   /// It does not change Android's system-wide VPN or proxy settings.
-  Future<void> enableLocalProxy({int port = 17881}) async {
+  Future<void> enableLocalProxy({int port = 1080}) async {
     if (state != 'authorizationStateReady') {
       throw StateError('ابتدا وارد حساب تلگرام شوید.');
     }
@@ -341,8 +344,9 @@ class TdNewsController extends ChangeNotifier {
       }
       sources[id] = NewsSource(id, name, chat['title']?.toString() ?? name);
       await persist();
-      await loadHistory(id);
-      status = 'کانال افزوده شد؛ اخبار تازه دریافت می‌شوند.';
+      // Never make the add button wait for media or history download.
+      unawaited(loadHistory(id, limit: 12));
+      status = 'کانال افزوده شد؛ آخرین خبرها در حال بارگذاری‌اند.';
     } finally { busy = false; changed(); }
   }
 
@@ -361,14 +365,15 @@ class TdNewsController extends ChangeNotifier {
 
   Future<void> refresh() async {
     if (state != 'authorizationStateReady') return;
-    for (final source in sources.values.toList()) { await loadHistory(source.id); }
+    // Fetch channel metadata concurrently; avoid serial round-trip delays.
+    await Future.wait(sources.values.map((source) => loadHistory(source.id, limit: 25)));
   }
 
-  Future<void> loadHistory(int id) async {
+  Future<void> loadHistory(int id, {int limit = 25}) async {
     try {
       final response = await bridge.request({
         '@type': 'getChatHistory', 'chat_id': id, 'from_message_id': 0,
-        'offset': 0, 'limit': 40, 'only_local': false,
+        'offset': 0, 'limit': limit, 'only_local': false,
       });
       if (response['messages'] is List) {
         for (final m in response['messages'] as List) {
@@ -478,6 +483,16 @@ class TdNewsController extends ChangeNotifier {
         if (image['id'] is int) fileId = image['id'] as int;
       }
     }
+    // TDLib mini_thumbnail is embedded in message metadata: display it
+    // immediately without downloading the full video or an extra image.
+    Uint8List? previewBytes;
+    final media = content['video'] ?? content['video_note'] ??
+        content['animation'] ?? content['document'];
+    final miniature = media is Map ? media['minithumbnail'] : null;
+    final encoded = miniature is Map ? miniature['data'] : null;
+    if (encoded is String && encoded.isNotEmpty && encoded.length < 120000) {
+      try { previewBytes = base64Decode(encoded); } catch (_) {}
+    }
     final key = chatId.toString() + ':' + messageId.toString();
     final prior = posts[key];
     posts[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
@@ -485,7 +500,8 @@ class TdNewsController extends ChangeNotifier {
         mediaKind: mediaKind,
         mediaFileId: mediaFileId,
         mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
-        fileName: fileName);
+        fileName: fileName,
+        previewBytes: previewBytes ?? prior?.previewBytes);
     changed();
     if (fileId != null && prior?.photoPath == null) {
       photoTargets.putIfAbsent(fileId, () => <String>{}).add(key);
