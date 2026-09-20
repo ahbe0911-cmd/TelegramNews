@@ -455,59 +455,132 @@ class _TdHomeState extends State<TdHome> {
     }
   }
 
-  Widget postCard(NewsPost p) => Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => showModalBottomSheet<void>(
-            context: context, isScrollControlled: true,
-            showDragHandle: true,
-            builder: (context) => SafeArea(child: Padding(
-              padding: const EdgeInsets.all(22),
-              child: SingleChildScrollView(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(p.source, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 12),
-                  Text(p.body, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () => launchUrl(Uri.parse(p.link),
-                        mode: LaunchMode.externalApplication),
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text('باز کردن پست در تلگرام'),
-                  ),
-                ],
-              )),
-            )),
+
+  Widget postCard(NewsPost post) {
+    final colors = Theme.of(context).colorScheme;
+    final hasPhoto = post.photoPath != null && post.photoPath!.isNotEmpty;
+    final headline = post.body.trim().split('\n').first;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: .46)),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: .035),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (p.photoPath != null)
-              Image.file(
-                File(p.photoPath!), height: 180, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            Padding(padding: const EdgeInsets.all(14), child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(p.source + ' • ' + dateLabel(p.date),
-                    style: Theme.of(context).textTheme.labelSmall),
-                const SizedBox(height: 6),
-                Text(
-                  p.body.split('\n').first,
-                  style: const TextStyle(fontFamily: 'Rooznameh',
-                      fontSize: 19, fontWeight: FontWeight.bold),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (sheetContext) => SafeArea(
+            child: FractionallySizedBox(
+              heightFactor: .82,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(post.source, style: Theme.of(sheetContext).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    Text(dateLabel(post.date),
+                      style: Theme.of(sheetContext).textTheme.bodySmall),
+                    const SizedBox(height: 16),
+                    Expanded(child: SingleChildScrollView(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        if (hasPhoto) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.file(
+                              File(post.photoPath!),
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                        SelectableText(post.body,
+                          style: const TextStyle(fontSize: 16, height: 1.9)),
+                      ]),
+                    )),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => launchUrl(Uri.parse(post.link),
+                          mode: LaunchMode.externalApplication),
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: const Text('مشاهده خبر در تلگرام'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ],
                 ),
-                if (p.body.contains('\n')) ...[
-                  const SizedBox(height: 6),
-                  Text(p.body, maxLines: 4, overflow: TextOverflow.ellipsis),
-                ],
-              ],
-            )),
-          ]),
+              ),
+            ),
+          ),
         ),
-      );
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (hasPhoto) Image.file(
+            File(post.photoPath!),
+            height: 192,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(17, 17, 17, 18),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: colors.primaryContainer,
+                  foregroundColor: colors.onPrimaryContainer,
+                  child: const Icon(Icons.campaign_outlined, size: 19),
+                ),
+                const SizedBox(width: 9),
+                Expanded(child: Text(post.source,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                const SizedBox(width: 7),
+                Text(dateLabel(post.date),
+                  style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+              ]),
+              const SizedBox(height: 14),
+              Text(headline,
+                maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 19, height: 1.6,
+                  fontFamily: 'Rooznameh', fontWeight: FontWeight.w700)),
+              if (post.body.trim().contains('\n')) ...[
+                const SizedBox(height: 7),
+                Text(post.body.trim().split('\n').skip(1).join('\n'),
+                  maxLines: 3, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, height: 1.65,
+                    color: colors.onSurfaceVariant)),
+              ],
+              const SizedBox(height: 12),
+              Row(children: [
+                Text('ادامه خبر', style: TextStyle(
+                  color: colors.primary, fontWeight: FontWeight.w700, fontSize: 12)),
+                const SizedBox(width: 3),
+                Icon(Icons.arrow_back_rounded, size: 16, color: colors.primary),
+                const Spacer(),
+                Icon(Icons.open_in_new_rounded, size: 15, color: colors.onSurfaceVariant),
+              ]),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
