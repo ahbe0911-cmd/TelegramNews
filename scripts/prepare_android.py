@@ -104,4 +104,43 @@ s = s.replace('android:label="telegram_news"','android:label="نبض خبر" and
 manifest.write_text(s)
 res = a/'app/src/main/res'
 shutil.copytree(ROOT/'android-res', res, dirs_exist_ok=True)
+# An explicit launcher intent opens the separate TG WS Proxy UI. Its foreground
+# service is not exported, so our app must never claim to start it directly.
+if args.profile == 'modern':
+    native = list((a / 'app/src/main/kotlin').rglob('MainActivity.kt'))
+    if len(native) != 1:
+        raise SystemExit('Unexpected Flutter Kotlin activity layout')
+    activity = native[0]
+    source = activity.read_text()
+    if 'class MainActivity: FlutterActivity()' not in source:
+        raise SystemExit('Unexpected Flutter activity template')
+    source = source.replace('import io.flutter.embedding.android.FlutterActivity',
+'''import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import android.content.Intent''')
+    source = source.replace('class MainActivity: FlutterActivity()',
+'''class MainActivity: FlutterActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
+            "ir.channel.telegram_tdnews/tgws").setMethodCallHandler { call, result ->
+            if (call.method == "open") {
+                try {
+                    val intent = Intent(Intent.ACTION_MAIN)
+                        .setClassName("org.flowseal.tgwsproxy",
+                            "org.flowseal.tgwsproxy.ui.MainActivity")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                    result.success(null)
+                } catch (exception: Exception) {
+                    result.error("NOT_INSTALLED", "Install the supported TG WS Proxy app", null)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
+    }
+}''')
+    activity.write_text(source)
 print('Android host prepared:', args.profile)
