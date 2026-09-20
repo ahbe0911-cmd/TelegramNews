@@ -363,7 +363,7 @@ class TdNewsController extends ChangeNotifier {
       return formatted['text'] as String;
     }
     if (type == 'messagePhoto') return 'خبر تصویری';
-    if (type == 'messageVideo') return 'ویدئو';
+    if (type == 'messageVideo' || type == 'messageVideoNote' || type == 'messageAnimation') return 'ویدئو';
     if (type == 'messageDocument') return 'سند پیوست';
     return 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
   }
