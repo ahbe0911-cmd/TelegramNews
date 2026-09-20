@@ -431,11 +431,22 @@ class TdNewsController extends ChangeNotifier {
       final document = content['document'] as Map;
       fileName = document['file_name']?.toString();
       final file = document['document'];
-      if (((fileName?.toLowerCase().endsWith('.pdf') ?? false) ||
-           document['mime_type'] == 'application/pdf') &&
-          file is Map && file['id'] is int) {
-        mediaKind = 'pdf';
-        mediaFileId = file['id'] as int;
+      final lowerName = fileName?.toLowerCase() ?? '';
+      final mime = document['mime_type']?.toString().toLowerCase() ?? '';
+      if (file is Map && file['id'] is int) {
+        if (lowerName.endsWith('.pdf') || mime == 'application/pdf') {
+          mediaKind = 'pdf';
+          mediaFileId = file['id'] as int;
+        } else if (mime.startsWith('video/') || lowerName.endsWith('.mp4') ||
+            lowerName.endsWith('.m4v') || lowerName.endsWith('.webm')) {
+          mediaKind = 'video';
+          mediaFileId = file['id'] as int;
+        }
+      }
+      final thumb = document['thumbnail'];
+      if (mediaKind != 'none' && thumb is Map && thumb['file'] is Map) {
+        final image = thumb['file'] as Map;
+        if (image['id'] is int) fileId = image['id'] as int;
       }
     }
     final key = chatId.toString() + ':' + messageId.toString();
