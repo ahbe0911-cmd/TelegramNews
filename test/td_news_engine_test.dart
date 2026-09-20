@@ -131,4 +131,33 @@ void main() {
     news.dispose();
   });
 
+  test('bookmarks persist independently of the live feed and can be removed', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final controller = TdNewsController(preferences);
+    final post = NewsPost(
+      -100123456, 120 * 1048576, 1700000000, 'News',
+      'ExampleNews', 'گزارش ذخیره‌شده', null, null,
+      mediaKind: 'pdf', mediaFileId: 4999, fileName: 'report.pdf',
+    );
+    expect(controller.isSaved(post), isFalse);
+    await controller.toggleSaved(post);
+    expect(controller.isSaved(post), isTrue);
+    expect(controller.savedFeed.single.body, 'گزارش ذخیره‌شده');
+    controller.dispose();
+
+    final restored = TdNewsController(preferences);
+    expect(restored.savedFeed, hasLength(1));
+    expect(restored.savedFeed.single.link, post.link);
+    expect(restored.savedFeed.single.mediaKind, 'pdf');
+    expect(restored.savedFeed.single.mediaFileId, 4999);
+    await restored.toggleSaved(restored.savedFeed.single);
+    expect(restored.savedFeed, isEmpty);
+    restored.dispose();
+
+    final reopened = TdNewsController(preferences);
+    expect(reopened.savedFeed, isEmpty);
+    reopened.dispose();
+  });
+
 }
