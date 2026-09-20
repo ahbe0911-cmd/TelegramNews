@@ -461,6 +461,11 @@ class TdNewsController extends ChangeNotifier {
           final image = thumb['file'] as Map;
           if (image['id'] is int) fileId = image['id'] as int;
         }
+      } else {
+        mediaKind = 'file';
+        fileName = name.isEmpty ? 'animation.gif' : name;
+        final file = animation['animation'];
+        if (file is Map && file['id'] is int) mediaFileId = file['id'] as int;
       }
     } else if (content['@type'] == 'messageDocument' && content['document'] is Map) {
       final document = content['document'] as Map;
@@ -482,7 +487,7 @@ class TdNewsController extends ChangeNotifier {
         }
       }
       final thumb = document['thumbnail'];
-      if (mediaKind != 'none' && thumb is Map && thumb['file'] is Map) {
+      if (thumb is Map && thumb['file'] is Map) {
         final image = thumb['file'] as Map;
         if (image['id'] is int) fileId = image['id'] as int;
       }
@@ -582,7 +587,7 @@ class TdNewsController extends ChangeNotifier {
         : file['size'] is int ? file['size'] as int : 0;
     final downloaded = local['downloaded_size'];
     if (expected > 0 && downloaded is int) {
-      final next = (downloaded / expected).clamp(0.0, 0.99);
+      final next = (downloaded / expected).clamp(0.0, 0.99).toDouble();
       final old = downloadProgress[id] ?? 0;
       if (next - old >= .035) {
         downloadProgress[id] = next;
@@ -599,7 +604,6 @@ class TdNewsController extends ChangeNotifier {
       });
       updatePhoto(file);
     } catch (_) { /* The text post remains readable. */ }
-    finally { _thumbnailStarted.remove(id); }
   }
 
   void updatePhoto(Map<String, dynamic> file) {
