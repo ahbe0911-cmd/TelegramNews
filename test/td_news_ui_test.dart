@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('channel editor stays in settings, not on the news feed', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'td_ws_auto': false});
     final preferences = await SharedPreferences.getInstance();
     final news = TdNewsController(preferences);
     news.state = 'authorizationStateReady';
