@@ -425,6 +425,20 @@ class _TdHomeState extends State<TdHome> {
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           child: Column(children: [
             SwitchListTile.adaptive(
+              key: const ValueKey('embedded-proxy-toggle'),
+              secondary: const Icon(Icons.shield_outlined),
+              title: const Text('پروکسی داخلی تلگرام'),
+              subtitle: Text(widget.news.embeddedProxyStatus),
+              value: widget.news.embeddedProxyEnabled,
+              onChanged: (enabled) async {
+                await widget.news.setEmbeddedProxyEnabled(enabled);
+                if (!mounted) return;
+                message(widget.news.embeddedProxyStatus);
+              },
+            ),
+            Divider(height: 1, indent: 60,
+              color: colors.outlineVariant.withValues(alpha: .55)),
+            SwitchListTile.adaptive(
               secondary: Icon(widget.dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined),
               title: const Text('حالت تاریک'),
               subtitle: const Text('تغییر رنگ‌بندی برنامه'),

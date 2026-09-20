@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tdlib/tdlib.dart';
+import 'td_embedded_proxy.dart';
 
 /// The blocking TDLib receive loop runs away from Flutter's UI isolate.
 Future<void> tdWorker(SendPort output) async {
@@ -166,6 +167,9 @@ class TdNewsController extends ChangeNotifier {
   int apiId = 0;
   String apiHash = '';
   String dbDirectory = '';
+  bool get embeddedProxyEnabled => prefs.getBool('embedded_proxy_enabled') ?? true;
+  bool embeddedProxyActive = false;
+  String embeddedProxyStatus = 'در انتظار اتصال';
 
   TdNewsController(this.prefs) {
     for (final raw in prefs.getStringList('td_channels') ?? <String>[]) {
@@ -233,6 +237,49 @@ class TdNewsController extends ChangeNotifier {
   List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
     ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id)));
 
+  /// A local listener does not guarantee Telegram is reachable over the network.
+  Future<void> configureEmbeddedProxy() async {
+    if (!embeddedProxyEnabled) {
+      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+      try { await EmbeddedTelegramProxy.stop(); } catch (_) {}
+      embeddedProxyActive = false;
+      embeddedProxyStatus = 'غیرفعال؛ اتصال مستقیم';
+      changed();
+      return;
+    }
+    embeddedProxyStatus = 'در حال فعال‌سازی پروکسی داخلی…';
+    changed();
+    try {
+      final proxy = await EmbeddedTelegramProxy.start();
+      await bridge.request({
+        '@type': 'addProxy',
+        'server': proxy.host,
+        'port': proxy.port,
+        'enable': true,
+        'type': {'@type': 'proxyTypeMtproto', 'secret': proxy.secret},
+      });
+      embeddedProxyActive = true;
+      embeddedProxyStatus = 'پروکسی محلی فعال است؛ اتصال تلگرام در حال بررسی';
+    } catch (_) {
+      embeddedProxyActive = false;
+      embeddedProxyStatus = 'پروکسی داخلی در دسترس نیست؛ اتصال مستقیم';
+      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+      try { await EmbeddedTelegramProxy.stop(); } catch (_) {}
+    }
+    changed();
+  }
+
+  Future<void> setEmbeddedProxyEnabled(bool enabled) async {
+    await prefs.setBool('embedded_proxy_enabled', enabled);
+    if (bridge.sender != null) {
+      await configureEmbeddedProxy();
+    } else {
+      embeddedProxyActive = false;
+      embeddedProxyStatus = enabled ? 'با ورود به برنامه فعال می‌شود' : 'غیرفعال؛ اتصال مستقیم';
+      changed();
+    }
+  }
+
   Future<void> start(int id, String hash, String path) async {
     if (state != 'setup' && state != 'failed') return;
     apiId = id;
@@ -244,10 +291,7 @@ class TdNewsController extends ChangeNotifier {
     try {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
-      // Clear any old proxy left by earlier app versions before connecting directly.
-      try {
-        await bridge.request({'@type': 'disableProxy'});
-      } catch (_) { /* First-launch auth can still proceed without a proxy. */ }
+      await configureEmbeddedProxy();
       await onAuthorization(await bridge.request({'@type': 'getAuthorizationState'}));
     } catch (_) {
       state = 'failed';
@@ -330,9 +374,7 @@ class TdNewsController extends ChangeNotifier {
         changed();
       }
     } else if (state == 'authorizationStateReady') {
-      // Old app builds may have saved an unusable localhost proxy. Keep this
-      // release direct-only and clear that setting after TDLib is authorized.
-      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+      // Keep the configured in-app proxy after authentication completes.
       // Render TDLib's on-device cache before waiting for a remote round trip.
       for (final source in sources.values) {
         unawaited(loadHistory(source.id, limit: 12, onlyLocal: true));
