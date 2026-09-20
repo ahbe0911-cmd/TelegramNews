@@ -123,9 +123,14 @@ class NewsPost {
   String body;
   int? photoId;
   String? photoPath;
+  String mediaKind; // photo | video | pdf | none
+  int? mediaFileId;
+  String? mediaPath;
+  String? fileName;
 
   NewsPost(this.chatId, this.id, this.date, this.source, this.username, this.body,
-      this.photoId, this.photoPath);
+      this.photoId, this.photoPath,
+      {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName});
 
   String get key => chatId.toString() + ':' + id.toString();
   String get link => 'https://t.me/' + username + '/' + (id >> 20).toString();
@@ -144,6 +149,7 @@ class TdNewsController extends ChangeNotifier {
   final sources = <int, NewsSource>{};
   final posts = <String, NewsPost>{};
   final photoTargets = <int, Set<String>>{};
+  final downloadWaiters = <int, Completer<String>>{};
   StreamSubscription<Map<String, dynamic>>? listener;
   String state = 'setup';
   String status = 'API ID و API Hash را برای ورود وارد کنید';
@@ -209,7 +215,11 @@ class TdNewsController extends ChangeNotifier {
           changed();
         }
       case 'updateFile':
-        if (event['file'] is Map) updatePhoto(Map<String, dynamic>.from(event['file'] as Map));
+        if (event['file'] is Map) {
+          final file = Map<String, dynamic>.from(event['file'] as Map);
+          updatePhoto(file);
+          completeAttachment(file);
+        }
       case 'engineFailure':
         state = 'failed';
         status = 'کتابخانه بومی TDLib اجرا نشد.';
@@ -341,14 +351,17 @@ class TdNewsController extends ChangeNotifier {
   String messageText(Map<String, dynamic> content) {
     final type = content['@type'];
     final formatted = type == 'messageText' ? content['text']
-        : (type == 'messagePhoto' || type == 'messageVideo') ? content['caption'] : null;
+        : (type == 'messagePhoto' || type == 'messageVideo' ||
+           type == 'messageDocument' || type == 'messageAnimation')
+            ? content['caption'] : null;
     if (formatted is Map && formatted['text'] is String &&
         (formatted['text'] as String).trim().isNotEmpty) {
       return formatted['text'] as String;
     }
-    return type == 'messagePhoto' ? 'خبر تصویری'
-        : type == 'messageVideo' ? 'ویدئو؛ برای مشاهده در تلگرام باز کنید'
-        : 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
+    if (type == 'messagePhoto') return 'خبر تصویری';
+    if (type == 'messageVideo') return 'ویدئو';
+    if (type == 'messageDocument') return 'سند پیوست';
+    return 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
   }
 
   void record(Map<String, dynamic> message) {
@@ -359,17 +372,44 @@ class TdNewsController extends ChangeNotifier {
     final source = sources[chatId]!;
     final content = Map<String, dynamic>.from(message['content'] as Map);
     int? fileId;
+    int? mediaFileId;
+    String? fileName;
+    String mediaKind = 'none';
     if (content['@type'] == 'messagePhoto' && content['photo'] is Map) {
+      mediaKind = 'photo';
       final sizes = (content['photo'] as Map)['sizes'];
       if (sizes is List && sizes.isNotEmpty && sizes.last is Map) {
         final photo = (sizes.last as Map)['photo'];
         if (photo is Map && photo['id'] is int) fileId = photo['id'] as int;
       }
+    } else if (content['@type'] == 'messageVideo' && content['video'] is Map) {
+      mediaKind = 'video';
+      final video = content['video'] as Map;
+      final file = video['video'];
+      if (file is Map && file['id'] is int) mediaFileId = file['id'] as int;
+      final thumb = video['thumbnail'];
+      if (thumb is Map && thumb['file'] is Map) {
+        final image = thumb['file'] as Map;
+        if (image['id'] is int) fileId = image['id'] as int;
+      }
+    } else if (content['@type'] == 'messageDocument' && content['document'] is Map) {
+      final document = content['document'] as Map;
+      fileName = document['file_name']?.toString();
+      final file = document['document'];
+      if ((fileName?.toLowerCase().endsWith('.pdf') ?? false) &&
+          file is Map && file['id'] is int) {
+        mediaKind = 'pdf';
+        mediaFileId = file['id'] as int;
+      }
     }
     final key = chatId.toString() + ':' + messageId.toString();
     final prior = posts[key];
     posts[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
-        source.title, source.username, messageText(content), fileId, prior?.photoPath);
+        source.title, source.username, messageText(content), fileId, prior?.photoPath,
+        mediaKind: mediaKind,
+        mediaFileId: mediaFileId,
+        mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
+        fileName: fileName);
     changed();
     if (fileId != null && prior?.photoPath == null) {
       photoTargets.putIfAbsent(fileId, () => <String>{}).add(key);
