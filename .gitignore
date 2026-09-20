@@ -1,0 +1,14 @@
+.dart_tool/
+.packages
+build/
+android/
+!android-res/
+node_modules/
+functions/.env*
+functions/.secret.local
+config.json
+*.jks
+*.keystore
+.firebase/
+
+!functions/.env.example

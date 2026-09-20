@@ -1,0 +1,38 @@
+name: telegram_news
+description: Persian Telegram channel news reader
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: 2.6.1
+  http: ^1.2.2
+  shared_preferences: 2.3.2
+  shamsi_date: ^1.0.4
+  iconsax: ^0.0.8
+  shimmer: ^3.0.0
+  flutter_widget_from_html_core: ^0.15.2
+  url_launcher: 6.3.0
+  share_plus: 10.0.2
+  firebase_core: ^4.0.0
+  firebase_messaging: ^16.0.0
+  flutter_local_notifications: 19.5.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 4.0.0
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: CustomFont
+      fonts:
+        - asset: assets/fonts/CustomFont.ttf
+          weight: 400
+        - asset: assets/fonts/CustomFont-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/CustomFont-Light.ttf
+          weight: 300

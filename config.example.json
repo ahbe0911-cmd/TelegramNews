@@ -1,0 +1,5 @@
+{
+  "API_BASE_URL": "https://europe-west1-YOUR_PROJECT.cloudfunctions.net/api",
+  "FIREBASE_ENABLED": true,
+  "APP_TITLE": "نبض خبر"
+}
