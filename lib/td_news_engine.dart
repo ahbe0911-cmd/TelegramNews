@@ -380,6 +380,8 @@ class TdNewsController extends ChangeNotifier {
     }
     if (type == 'messagePhoto') return 'خبر تصویری';
     if (type == 'messageVideo' || type == 'messageVideoNote' || type == 'messageAnimation') return 'ویدئو';
+    if (type == 'messageAudio') return 'فایل صوتی';
+    if (type == 'messageVoiceNote') return 'پیام صوتی';
     if (type == 'messageDocument') {
       final doc = content['document'];
       final name = doc is Map ? doc['file_name']?.toString() : null;
@@ -402,10 +404,23 @@ class TdNewsController extends ChangeNotifier {
     if (content['@type'] == 'messagePhoto' && content['photo'] is Map) {
       mediaKind = 'photo';
       final sizes = (content['photo'] as Map)['sizes'];
-      if (sizes is List && sizes.isNotEmpty && sizes.last is Map) {
-        final photo = (sizes.last as Map)['photo'];
-        if (photo is Map && photo['id'] is int) fileId = photo['id'] as int;
+      if (sizes is List) {
+        int largest = -1;
+        int previewRank = 1 << 30;
+        for (final candidate in sizes) {
+          if (candidate is! Map || candidate['photo'] is! Map) continue;
+          final photo = candidate['photo'] as Map;
+          final id = photo['id'];
+          if (id is! int) continue;
+          final width = candidate['width'] is int ? candidate['width'] as int : 0;
+          final height = candidate['height'] is int ? candidate['height'] as int : 0;
+          final area = width * height;
+          if (area >= largest) { largest = area; mediaFileId = id; }
+          final rank = (width - 640).abs() + (height - 640).abs();
+          if (rank < previewRank) { previewRank = rank; fileId = id; }
+        }
       }
+      fileId ??= mediaFileId;
     } else if (content['@type'] == 'messageVideo' && content['video'] is Map) {
       mediaKind = 'video';
       final video = content['video'] as Map;
@@ -457,6 +472,9 @@ class TdNewsController extends ChangeNotifier {
             lowerName.endsWith('.m4v') || lowerName.endsWith('.webm')) {
           mediaKind = 'video';
           mediaFileId = file['id'] as int;
+        } else {
+          mediaKind = 'file';
+          mediaFileId = file['id'] as int;
         }
       }
       final thumb = document['thumbnail'];
@@ -464,6 +482,16 @@ class TdNewsController extends ChangeNotifier {
         final image = thumb['file'] as Map;
         if (image['id'] is int) fileId = image['id'] as int;
       }
+    } else if (content['@type'] == 'messageAudio' && content['audio'] is Map) {
+      mediaKind = 'file';
+      final audio = content['audio'] as Map;
+      fileName = audio['file_name']?.toString();
+      mediaFileId = audio['audio'] is Map ? (audio['audio'] as Map)['id'] as int? : null;
+    } else if (content['@type'] == 'messageVoiceNote' && content['voice_note'] is Map) {
+      mediaKind = 'file';
+      fileName = 'voice-note.ogg';
+      final voice = content['voice_note'] as Map;
+      mediaFileId = voice['voice'] is Map ? (voice['voice'] as Map)['id'] as int? : null;
     }
     // TDLib mini_thumbnail is embedded in message metadata: display it
     // immediately without downloading the full video or an extra image.
