@@ -276,6 +276,9 @@ class TdNewsController extends ChangeNotifier {
         changed();
       }
     } else if (state == 'authorizationStateReady') {
+      // Old app builds may have saved an unusable localhost proxy. Keep this
+      // release direct-only and clear that setting after TDLib is authorized.
+      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
       // Render TDLib's on-device cache before waiting for a remote round trip.
       for (final source in sources.values) {
         unawaited(loadHistory(source.id, limit: 12, onlyLocal: true));
