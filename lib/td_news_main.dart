@@ -68,7 +68,8 @@ class _TdNewsAppState extends State<TdNewsApp> {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xff255f9a),
+            seedColor: const Color(0xff0866dc),
+            primary: const Color(0xff0866dc),
             surface: const Color(0xffffffff),
           ),
           fontFamily: 'CustomFont',
@@ -124,6 +125,7 @@ class _TdHomeState extends State<TdHome> {
   bool submitting = false;
   int selectedTab = 0; // 0: news, 1: saved, 2: settings
   bool refreshing = false;
+  bool showSearch = false;
   String? inlineVideoKey;
   final savingPosts = <String>{};
   @override
@@ -487,12 +489,51 @@ class _TdHomeState extends State<TdHome> {
     ));
   }
 
-  Widget postCard(NewsPost post) {
+  Widget postCard(NewsPost post, {bool featured = false}) {
     final colors = Theme.of(context).colorScheme;
     final hasPhoto = post.photoPath != null && post.photoPath!.isNotEmpty;
     final hasPreview = post.previewBytes != null && post.previewBytes!.isNotEmpty;
     final headline = post.body.trim().split('\n').first;
     final playingInline = inlineVideoKey == post.key;
+    final compactPhoto = !featured && post.mediaKind == 'photo' && (hasPhoto || hasPreview);
+    Widget photo({double? height}) => hasPhoto
+        ? Image.file(File(post.photoPath!), height: height, width: double.infinity,
+            fit: BoxFit.cover, filterQuality: FilterQuality.low,
+            errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined))
+        : Image.memory(post.previewBytes!, height: height, width: double.infinity,
+            fit: BoxFit.cover, filterQuality: FilterQuality.low,
+            errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined));
+    final copy = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8, runSpacing: 6, children: [
+        Container(
+          constraints: const BoxConstraints(maxWidth: 190),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: colors.primary.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(30)),
+          child: Text(post.source, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colors.primary, fontSize: 11, fontWeight: FontWeight.w700))),
+        Row(mainAxisSize: MainAxisSize.min, textDirection: TextDirection.ltr, children: [
+          Icon(Icons.schedule_outlined, size: 16, color: colors.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Text(dateLabel(post.date), textDirection: TextDirection.ltr,
+            style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant)),
+        ]),
+      ]),
+      const SizedBox(height: 11),
+      Text(headline, textAlign: TextAlign.justify, textDirection: TextDirection.rtl,
+        maxLines: 3, overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: featured ? 20 : 17, height: 1.6,
+          fontFamily: 'Rooznameh', fontWeight: FontWeight.w700)),
+      if (post.body.trim().contains('\n')) ...[
+        const SizedBox(height: 6),
+        Text(post.body.trim().split('\n').skip(1).join('\n'),
+          textAlign: TextAlign.justify, textDirection: TextDirection.rtl,
+          maxLines: compactPhoto ? 2 : 3, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 13, height: 1.65, color: colors.onSurfaceVariant)),
+      ],
+    ]);
     if (post.photoId != null && !hasPhoto) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.news.requestThumbnail(post);
@@ -503,10 +544,10 @@ class _TdHomeState extends State<TdHome> {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colors.outlineVariant.withValues(alpha: .38)),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: .12)),
         boxShadow: [
           BoxShadow(
-            color: colors.shadow.withValues(alpha: .055),
+            color: colors.primary.withValues(alpha: .065),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -706,93 +747,48 @@ class _TdHomeState extends State<TdHome> {
                 Icon(Icons.download_for_offline_outlined, color: colors.primary),
               ]),
             )
-          else if (hasPhoto)
-            Image.file(
-              File(post.photoPath!), height: 192, width: double.infinity,
-              fit: BoxFit.cover,
-              filterQuality: FilterQuality.low,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            )
-          else if (post.mediaKind == 'photo' && hasPreview)
-            Image.memory(post.previewBytes!, height: 192, width: double.infinity,
-              fit: BoxFit.cover, filterQuality: FilterQuality.low,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+          else if (!compactPhoto && (hasPhoto || (post.mediaKind == 'photo' && hasPreview)))
+            AspectRatio(aspectRatio: 1.95, child: photo()),
           Padding(
-            padding: const EdgeInsets.fromLTRB(17, 17, 17, 18),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: colors.primaryContainer,
-                  foregroundColor: colors.onPrimaryContainer,
-                  child: const Icon(Icons.campaign_outlined, size: 19),
-                ),
-                const SizedBox(width: 9),
-                Expanded(child: Text(post.source,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-                IconButton(
-                  key: ValueKey('bookmark-' + post.key),
-                  tooltip: widget.news.isSaved(post)
-                      ? 'حذف از ذخیره‌شده‌ها' : 'ذخیره خبر',
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 22,
-                  icon: Icon(
-                    widget.news.isSaved(post) ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: widget.news.isSaved(post)
-                        ? const Color(0xffd99a18) : colors.onSurfaceVariant,
-                  ),
-                  onPressed: () => unawaited(widget.news.toggleSaved(post)),
-                ),
-                const SizedBox(width: 2),
-                Text(dateLabel(post.date),
-                  style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-              ]),
-              const SizedBox(height: 14),
-              Text(headline,
-                textAlign: TextAlign.justify,
-                textDirection: TextDirection.rtl,
-                maxLines: 3, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 19, height: 1.6,
-                  fontFamily: 'Rooznameh', fontWeight: FontWeight.w700)),
-              if (post.body.trim().contains('\n')) ...[
-                const SizedBox(height: 7),
-                Text(post.body.trim().split('\n').skip(1).join('\n'),
-                  textAlign: TextAlign.justify,
-                  textDirection: TextDirection.rtl,
-                  maxLines: 3, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, height: 1.65,
-                    color: colors.onSurfaceVariant)),
-              ],
+              if (compactPhoto)
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  ClipRRect(borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(width: MediaQuery.sizeOf(context).width < 370 ? 92 : 108,
+                      height: 120, child: photo())),
+                  const SizedBox(width: 11),
+                  Expanded(child: copy),
+                ])
+              else copy,
               const SizedBox(height: 12),
-              Row(children: [
-                Text(post.mediaKind == 'pdf' ? 'خواندن PDF'
-                    : post.mediaKind == 'video' ? 'پخش ویدئو'
-                    : post.mediaKind == 'file' ? 'دریافت فایل'
-                    : post.mediaKind == 'photo' ? 'نمایش تصویر' : 'ادامه خبر', style: TextStyle(
-                  color: colors.primary, fontWeight: FontWeight.w700, fontSize: 12)),
-                const SizedBox(width: 3),
-                Icon(Icons.arrow_back_rounded, size: 16, color: colors.primary),
-                const Spacer(),
-                if (post.mediaFileId != null || post.photoId != null)
-                  savingPosts.contains(post.key)
-                      ? const SizedBox(width: 22, height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: colors.primaryContainer.withValues(alpha: .72),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            key: ValueKey('download-' + post.key),
-                            tooltip: 'دانلود و ذخیره در گوشی',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => savePost(post),
-                            icon: Icon(Icons.download_rounded, color: colors.onPrimaryContainer),
-                          ),
-                        ),
-                Icon(Icons.open_in_new_rounded, size: 15, color: colors.onSurfaceVariant),
-              ]),
+              Divider(height: 1, color: colors.outlineVariant.withValues(alpha: .4)),
+              IntrinsicHeight(child: Row(children: [
+                Expanded(child: TextButton.icon(
+                  key: ValueKey('bookmark-' + post.key),
+                  onPressed: () => unawaited(widget.news.toggleSaved(post)),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: widget.news.isSaved(post) ? colors.primary : colors.onSurface),
+                  icon: Icon(widget.news.isSaved(post) ? Icons.star_rounded : Icons.star_border_rounded,
+                    size: 26),
+                  label: Text(widget.news.isSaved(post) ? 'ذخیره شد' : 'ذخیره'),
+                )),
+                VerticalDivider(width: 1, indent: 10, endIndent: 10,
+                  color: colors.outlineVariant.withValues(alpha: .4)),
+                Expanded(child: (post.mediaFileId != null || post.photoId != null)
+                  ? savingPosts.contains(post.key)
+                    ? const Center(child: SizedBox(width: 22, height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2)))
+                    : TextButton.icon(
+                        key: ValueKey('download-' + post.key),
+                        onPressed: () => savePost(post),
+                        style: TextButton.styleFrom(minimumSize: const Size(48, 48),
+                          foregroundColor: colors.onSurface),
+                        icon: const Icon(Icons.file_download_outlined, size: 25),
+                        label: const Text('دانلود'))
+                  : const Center(child: Text('ادامه خبر', style: TextStyle(fontSize: 12)))),
+              ])),
             ]),
           ),
         ]),
@@ -803,38 +799,14 @@ class _TdHomeState extends State<TdHome> {
   Widget newsScreen(List<NewsPost> filtered) {
     final colors = Theme.of(context).colorScheme;
     final header = <Widget>[
-      const NewsClockCard(),
-      const SizedBox(height: 14),
-      TextField(
-        controller: search,
-        onChanged: (value) => setState(() { filter = value; }),
-        decoration: decoratedInput('جست‌وجو در میان خبرها', icon: Icons.search_rounded),
-      ),
-      const SizedBox(height: 15),
-      Row(children: [
-        Text('آخرین خبرها',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(50)),
-          child: Text(filtered.length.toString(),
-            style: TextStyle(color: colors.onPrimaryContainer,
-                fontSize: 12, fontWeight: FontWeight.w800)),
+      if (showSearch) ...[
+        TextField(
+          controller: search,
+          onChanged: (value) => setState(() { filter = value; }),
+          decoration: decoratedInput('جست‌وجو در میان خبرها', icon: Icons.search_rounded),
         ),
-        const Spacer(),
-        IconButton(
-          onPressed: refreshing ? null : refreshNews,
-          tooltip: 'تازه‌سازی اخبار',
-          icon: refreshing
-              ? const SizedBox(width: 19, height: 19,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.refresh_rounded),
-        ),
-      ]),
-      const SizedBox(height: 8),
+        const SizedBox(height: 12),
+      ],
       if (widget.news.sources.isEmpty)
         surfacePanel(child: Column(children: [
           Container(
@@ -871,7 +843,6 @@ class _TdHomeState extends State<TdHome> {
           Text('برای تازه‌سازی، صفحه را پایین بکشید.',
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
         ])),
-      if (filtered.isNotEmpty) const SizedBox(height: 3),
     ];
     return RefreshIndicator(
       onRefresh: refreshNews,
@@ -893,7 +864,7 @@ class _TdHomeState extends State<TdHome> {
             final offset = index - header.length;
             if (offset < filtered.length) {
               final post = filtered[offset];
-              return KeyedSubtree(key: ValueKey(post.key), child: postCard(post));
+              return KeyedSubtree(key: ValueKey(post.key), child: postCard(post, featured: offset == 0));
             }
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 17),
@@ -976,30 +947,20 @@ class _TdHomeState extends State<TdHome> {
                   .toLowerCase().contains(filter.trim().toLowerCase())).toList();
           final colors = Theme.of(context).colorScheme;
           return Scaffold(
-            appBar: AppBar(
-              title: Row(children: [
-                Container(
-                  width: 37, height: 37,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.newspaper_rounded, size: 21,
-                    color: colors.onPrimaryContainer),
-                ),
-                const SizedBox(width: 10),
-                const Text('نبض خبر', style: TextStyle(
-                  fontFamily: 'Rooznameh', fontSize: 23,
-                  fontWeight: FontWeight.w800)),
-              ]),
-              actions: [
-                if (ready && selectedTab == 0)
-                  IconButton(
-                    tooltip: 'تنظیمات',
-                    icon: const Icon(Icons.tune_rounded),
-                    onPressed: () => setState(() { selectedTab = 2; }),
-                  ),
-              ],
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(88),
+              child: Material(
+                color: colors.surface,
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                child: SafeArea(bottom: false, child: NewsClockCard(
+                  onSettings: ready ? () => setState(() { selectedTab = 2; }) : null,
+                  onSearch: ready ? () => setState(() {
+                    selectedTab = 0;
+                    showSearch = !showSearch;
+                    if (!showSearch) { search.clear(); filter = ''; }
+                  }) : null,
+                )),
+              ),
             ),
             body: SafeArea(
               child: Center(child: ConstrainedBox(
@@ -1020,7 +981,19 @@ class _TdHomeState extends State<TdHome> {
               )),
             ),
             bottomNavigationBar: ready
-                ? NavigationBar(
+                ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: .07),
+                      blurRadius: 20, offset: const Offset(0, -4))]),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    child: NavigationBar(
+                    height: 76,
+                    elevation: 0,
+                    backgroundColor: colors.surface,
+                    indicatorColor: colors.primary.withValues(alpha: .13),
                     selectedIndex: selectedTab,
                     onDestinationSelected: (index) => setState(() {
                       inlineVideoKey = null;
@@ -1033,8 +1006,8 @@ class _TdHomeState extends State<TdHome> {
                         label: 'خبرها',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.star_border_rounded),
-                        selectedIcon: Icon(Icons.star_rounded),
+                        icon: Icon(Icons.bookmark_border_rounded),
+                        selectedIcon: Icon(Icons.bookmark_rounded),
                         label: 'ذخیره‌شده‌ها',
                       ),
                       NavigationDestination(
@@ -1043,9 +1016,10 @@ class _TdHomeState extends State<TdHome> {
                         label: 'تنظیمات',
                       ),
                     ],
-                  )
+                  )))
                 : null,
           );
         },
       );
 }
+

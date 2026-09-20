@@ -5,7 +5,9 @@ import 'package:shamsi_date/shamsi_date.dart';
 
 /// Lightweight twelve-hour clock; it does not rebuild the news feed.
 class NewsClockCard extends StatefulWidget {
-  const NewsClockCard({super.key});
+  final VoidCallback? onSettings;
+  final VoidCallback? onSearch;
+  const NewsClockCard({super.key, this.onSettings, this.onSearch});
   @override
   State<NewsClockCard> createState() => _NewsClockCardState();
 }
@@ -34,51 +36,54 @@ class _NewsClockCardState extends State<NewsClockCard> {
     final shamsi = Jalali.fromDateTime(now).formatter;
     final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
     final minute = now.minute.toString().padLeft(2, '0');
-    final ampm = now.hour < 12 ? 'قبل‌ازظهر' : 'بعدازظهر';
     final weekday = const ['دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه', 'یکشنبه'][now.weekday - 1];
     final date = shamsi.yyyy.toString() + '/' + shamsi.mm + '/' + shamsi.dd;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight, end: Alignment.bottomLeft,
-          colors: [
-            color.primaryContainer,
-            color.primaryContainer.withValues(alpha: .6),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(19),
-      ),
+    return SizedBox(height: 88, child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(children: [
-        Container(
-          width: 43, height: 43,
-          decoration: BoxDecoration(
-            color: color.surface.withValues(alpha: .8),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Icon(Icons.schedule_rounded, color: color.primary, size: 23),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(weekday + ' • ' + date,
-              style: TextStyle(fontSize: 12, color: color.onPrimaryContainer)),
-            const SizedBox(height: 3),
-            const Text('آخرین اخبار کانال‌های شما',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-          ],
-        )),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(hour.toString() + ':' + minute,
-            textDirection: TextDirection.ltr,
-            style: TextStyle(color: color.onPrimaryContainer,
-              fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'CustomFont')),
-          Text(ampm, style: TextStyle(
-            fontSize: 10, color: color.onPrimaryContainer)),
-        ]),
+        SizedBox(width: 100, child: Row(children: [
+          Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: Column(children: [
+            Text('$hour:$minute', textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+            Text(weekday, style: const TextStyle(fontSize: 11)),
+            Text(date, textDirection: TextDirection.ltr,
+              style: TextStyle(fontSize: 10, color: color.onSurfaceVariant)),
+          ]))),
+          const SizedBox(width: 6),
+          const Icon(Icons.calendar_month_outlined, size: 23),
+        ])),
+        Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Text('نبض خبر', style: TextStyle(fontFamily: 'Rooznameh',
+            fontSize: 25, fontWeight: FontWeight.w800)),
+          SizedBox(width: 65, height: 10,
+            child: CustomPaint(painter: _PulsePainter(color.primary))),
+          const SizedBox(height: 3),
+          FittedBox(fit: BoxFit.scaleDown, child: Text('اخبار سریع، مطمئن، به‌روز',
+            style: TextStyle(fontSize: 10, color: color.onSurfaceVariant))),
+        ])),
+        SizedBox(width: 64, child: Row(children: [
+          Expanded(child: IconButton(
+            padding: EdgeInsets.zero, tooltip: 'جست‌وجوی خبر',
+            icon: const Icon(Icons.search_rounded, size: 20), onPressed: widget.onSearch)),
+          Expanded(child: IconButton(
+            padding: EdgeInsets.zero, tooltip: 'تنظیمات',
+            icon: const Icon(Icons.settings_outlined, size: 25), onPressed: widget.onSettings)),
+        ])),
       ]),
-    );
+    ));
   }
+}
+
+class _PulsePainter extends CustomPainter {
+  final Color color;
+  const _PulsePainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()..moveTo(0, 5)..lineTo(24, 5)..lineTo(29, 1)
+      ..lineTo(33, 9)..lineTo(37, 4)..lineTo(size.width, 4);
+    canvas.drawPath(path, Paint()..color = color..strokeWidth = 1.7
+      ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+  }
+  @override
+  bool shouldRepaint(_PulsePainter oldDelegate) => oldDelegate.color != color;
 }
