@@ -174,11 +174,27 @@ class TdNewsController extends ChangeNotifier {
   bool telegramSavedBusy = false;
   bool telegramSavedHasMore = true;
   String? telegramSavedError;
+  final forwardedToTelegram = <String>{};
+  final forwardingToTelegram = <String>{};
+  final _forwardByTemporaryId = <int, String>{};
+  String? telegramForwardError;
+
+  bool isForwardedToTelegram(NewsPost post) => forwardedToTelegram.contains(post.key);
+  bool isForwardingToTelegram(NewsPost post) => forwardingToTelegram.contains(post.key);
+
+  Future<void> _markForwarded(String key) async {
+    forwardingToTelegram.remove(key);
+    forwardedToTelegram.add(key);
+    await prefs.setStringList('td_forwarded_to_telegram', forwardedToTelegram.toList());
+    changed();
+  }
+
 
   List<NewsPost> get telegramSavedFeed => telegramSavedMessages.values.toList()
     ..sort((a, b) => b.id.compareTo(a.id));
 
   TdNewsController(this.prefs) {
+    forwardedToTelegram.addAll(prefs.getStringList('td_forwarded_to_telegram') ?? const <String>[]);
     for (final raw in prefs.getStringList('td_channels') ?? <String>[]) {
       try {
         final source = NewsSource.fromJson(jsonDecode(raw) as Map<String, dynamic>);
@@ -244,53 +260,116 @@ class TdNewsController extends ChangeNotifier {
   List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
     ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id)));
 
-  /// Opens the Telegram account's actual self-chat through TDLib.
-  /// The phone must already be signed in and able to reach Telegram.
-  Future<void> loadTelegramSavedMessages({bool older = false}) async {
-    if (state != 'authorizationStateReady') {
+  Future<int> _savedChatId() async {
+    if (state != 'authorizationStateReady' || bridge.sender == null) {
       throw StateError('ابتدا وارد حساب تلگرام شوید.');
     }
+    if (telegramSavedChatId != null) return telegramSavedChatId!;
+    final me = await bridge.request({'@type': 'getMe'});
+    final myId = me['id'];
+    if (myId is! int || myId <= 0) throw StateError('شناسه حساب دریافت نشد.');
+    final chat = await bridge.request({
+      '@type': 'createPrivateChat', 'user_id': myId, 'force': true,
+    });
+    final id = chat['id'];
+    if (id is! int) throw StateError('Saved Messages در دسترس نیست.');
+    telegramSavedChatId = id;
+    return id;
+  }
+
+  /// Sends text to the actual Telegram self-chat.
+  Future<void> sendTelegramSavedText(String text) async {
+    final body = text.trim();
+    if (body.isEmpty) throw const FormatException('متن پیام خالی است.');
+    if (body.length > 4000) throw const FormatException('پیام را کوتاه‌تر کنید.');
+    final id = await _savedChatId();
+    final result = await bridge.request({
+      '@type': 'sendMessage',
+      'chat_id': id,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': body, 'entities': []},
+      },
+    });
+    if (result['@type'] != 'message') {
+      throw StateError('تلگرام پیام را نپذیرفت.');
+    }
+    record(result, fromTelegramSaved: true);
+  }
+
+  /// Forwards an actual news message including its media if forwardable.
+  /// Pending messages are not marked saved until TDLib confirms success.
+  Future<void> forwardNewsToTelegramSaved(NewsPost post) async {
+    if (forwardedToTelegram.contains(post.key) ||
+        forwardingToTelegram.contains(post.key)) return;
+    forwardingToTelegram.add(post.key);
+    telegramForwardError = null;
+    changed();
+    try {
+      final destination = await _savedChatId();
+      if (destination == post.chatId) {
+        throw StateError('پیام از قبل در پیام‌های ذخیره‌شده است.');
+      }
+      final result = await bridge.request({
+        '@type': 'forwardMessages',
+        'chat_id': destination,
+        'from_chat_id': post.chatId,
+        'message_ids': [post.id],
+        'send_copy': false,
+        'remove_caption': false,
+      });
+      final messages = result['messages'];
+      if (messages is! List || messages.isEmpty || messages.first is! Map) {
+        throw StateError('تلگرام ارسال این خبر را نپذیرفت.');
+      }
+      final sent = Map<String, dynamic>.from(messages.first as Map);
+      final state = sent['sending_state'];
+      final stateType = state is Map ? state['@type'] : null;
+      if (stateType == 'messageSendingStateFailed') {
+        throw StateError('خبر ارسال نشد.');
+      }
+      if (stateType == 'messageSendingStatePending') {
+        final tempId = sent['id'];
+        if (tempId is! int) throw StateError('شناسه ارسال دریافت نشد.');
+        _forwardByTemporaryId[tempId] = post.key;
+      } else {
+        await _markForwarded(post.key);
+      }
+      record(sent, fromTelegramSaved: true);
+    } catch (_) {
+      forwardingToTelegram.remove(post.key);
+      telegramForwardError = 'ذخیره خبر در تلگرام ناموفق بود؛ دوباره تلاش کنید.';
+      changed();
+      rethrow;
+    }
+  }
+
+  Future<void> loadTelegramSavedMessages({bool older = false}) async {
     if (telegramSavedBusy || (older && !telegramSavedHasMore)) return;
     telegramSavedBusy = true;
     telegramSavedError = null;
     changed();
     try {
-      if (telegramSavedChatId == null) {
-        final me = await bridge.request({'@type': 'getMe'});
-        final myId = me['id'];
-        if (myId is! int || myId <= 0) {
-          throw StateError('شناسه حساب تلگرام دریافت نشد.');
-        }
-        final chat = await bridge.request({
-          '@type': 'createPrivateChat', 'user_id': myId, 'force': true,
-        });
-        final chatId = chat['id'];
-        if (chatId is! int) throw StateError('پیام‌های ذخیره‌شده در دسترس نیست.');
-        telegramSavedChatId = chatId;
-      }
+      final id = await _savedChatId();
       final current = telegramSavedFeed;
       final response = await bridge.request({
         '@type': 'getChatHistory',
-        'chat_id': telegramSavedChatId,
+        'chat_id': id,
         'from_message_id': older && current.isNotEmpty ? current.last.id : 0,
         'offset': 0, 'limit': 30, 'only_local': false,
       });
       final messages = response['messages'];
-      if (messages is! List) {
-        throw StateError('پاسخ تاریخچه پیام‌ها معتبر نیست.');
-      }
+      if (messages is! List) throw StateError('پاسخ تاریخچه معتبر نیست.');
       final before = telegramSavedMessages.length;
       for (final raw in messages) {
-        if (raw is Map) {
-          record(Map<String, dynamic>.from(raw),
+        if (raw is Map) record(Map<String, dynamic>.from(raw),
             fromTelegramSaved: true, notify: false);
-        }
       }
       telegramSavedHasMore = messages.length >= 30 &&
           (!older || telegramSavedMessages.length > before);
       changed();
     } catch (_) {
-      telegramSavedError = 'دریافت پیام‌های ذخیره‌شده ممکن نشد؛ اتصال تلگرام را بررسی کنید و دوباره تلاش کنید.';
+      telegramSavedError = 'دریافت پیام‌های ذخیره‌شده ممکن نشد؛ اتصال تلگرام را بررسی کنید.';
       changed();
     } finally {
       telegramSavedBusy = false;
@@ -326,6 +405,28 @@ class TdNewsController extends ChangeNotifier {
       case 'updateAuthorizationState':
         if (event['authorization_state'] is Map) {
           unawaited(onAuthorization(Map<String, dynamic>.from(event['authorization_state'] as Map)));
+        }
+      case 'updateMessageSendSucceeded':
+        final oldId = event['old_message_id'];
+        final confirmed = event['message'];
+        if (oldId is int) {
+          final key = _forwardByTemporaryId.remove(oldId);
+          if (key != null) unawaited(_markForwarded(key));
+          if (confirmed is Map && confirmed['chat_id'] == telegramSavedChatId) {
+            telegramSavedMessages.remove(confirmed['chat_id'].toString() + ':' +
+                oldId.toString());
+            record(Map<String, dynamic>.from(confirmed), fromTelegramSaved: true);
+          }
+        }
+      case 'updateMessageSendFailed':
+        final oldId = event['old_message_id'];
+        if (oldId is int) {
+          final key = _forwardByTemporaryId.remove(oldId);
+          if (key != null) {
+            forwardingToTelegram.remove(key);
+            telegramForwardError = 'ذخیره خبر در تلگرام ناموفق بود؛ دوباره تلاش کنید.';
+            changed();
+          }
         }
       case 'updateNewMessage':
         if (event['message'] is Map) {
