@@ -1,0 +1,11 @@
+name = "telegram-news-free"
+main = "src/index.mjs"
+compatibility_date = "2026-09-20"
+
+[vars]
+TELEGRAM_CHANNEL_ID = "@ahbe1400"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "telegram-news-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
