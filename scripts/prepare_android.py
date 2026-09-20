@@ -136,7 +136,7 @@ if args.profile == 'modern':
                 try {
                     val file = File(path)
                     if (!file.isFile) throw IllegalStateException("Downloaded file is missing")
-                    val safe = title.replace(Regex("[/\\\\\\u0000-\\u001f]"), "_").take(100)
+                    val safe = title.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").take(90)
                     val saved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         val values = ContentValues().apply {
                             put(MediaStore.MediaColumns.DISPLAY_NAME, safe)
