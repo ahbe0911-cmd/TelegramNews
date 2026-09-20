@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
 
@@ -141,7 +142,32 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
             : error != null
                 ? Center(child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(error!, textAlign: TextAlign.center),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off_rounded, size: 42),
+                        const SizedBox(height: 12),
+                        Text(error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              loading = true;
+                              error = null;
+                            });
+                            _openMedia();
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('تلاش دوباره'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => launchUrl(Uri.parse(widget.post.link),
+                            mode: LaunchMode.externalApplication),
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('باز کردن خبر در تلگرام'),
+                        ),
+                      ],
+                    ),
                   ))
                 : isPdf
                     ? PdfViewPinch(controller: pdf!)
