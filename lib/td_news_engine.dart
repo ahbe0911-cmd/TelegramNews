@@ -152,6 +152,8 @@ class TdNewsController extends ChangeNotifier {
   final SharedPreferences prefs;
   final bridge = TdBridge();
   final sources = <int, NewsSource>{};
+  /// Channel names awaiting remote resolution; do not block the settings UI.
+  final pendingChannels = <String, String>{};
   final posts = <String, NewsPost>{};
   final saved = <String, NewsPost>{};
   final photoTargets = <int, Set<String>>{};
@@ -271,7 +273,7 @@ class TdNewsController extends ChangeNotifier {
     final myId = me['id'];
     if (myId is! int || myId <= 0) throw StateError('شناسه حساب دریافت نشد.');
     final chat = await bridge.request({
-      '@type': 'createPrivateChat', 'user_id': myId, 'force': true,
+      '@type': 'createPrivateChat', 'user_id': myId, 'force': false,
     });
     final id = chat['id'];
     if (id is! int) throw StateError('Saved Messages در دسترس نیست.');
@@ -346,6 +348,24 @@ class TdNewsController extends ChangeNotifier {
     }
   }
 
+  Future<void> _appendSavedHistory(Map<String, dynamic> response,
+      {required bool older}) async {
+    final messages = response['messages'];
+    if (messages is! List) return;
+    final before = telegramSavedMessages.length;
+    for (final raw in messages) {
+      if (raw is Map) {
+        record(Map<String, dynamic>.from(raw),
+            fromTelegramSaved: true, notify: false);
+      }
+    }
+    if (messages.isNotEmpty) {
+      telegramSavedHasMore = messages.length >= 20 &&
+          (!older || telegramSavedMessages.length > before);
+    }
+    changed();
+  }
+
   Future<void> loadTelegramSavedMessages({bool older = false}) async {
     if (telegramSavedBusy || (older && !telegramSavedHasMore)) return;
     telegramSavedBusy = true;
@@ -354,24 +374,29 @@ class TdNewsController extends ChangeNotifier {
     try {
       final id = await _savedChatId();
       final current = telegramSavedFeed;
+      final fromId = older && current.isNotEmpty ? current.last.id : 0;
+      if (!older && current.isEmpty) {
+        // Render existing TDLib on-device messages while the network request
+        // runs. Network fetch does not block the first visible chat bubbles.
+        try {
+          final cached = await bridge.request({
+            '@type': 'getChatHistory', 'chat_id': id,
+            'from_message_id': 0, 'offset': 0,
+            'limit': 20, 'only_local': true,
+          }).timeout(const Duration(seconds: 4));
+          await _appendSavedHistory(cached, older: false);
+        } catch (_) { /* No local cache yet; continue with network. */ }
+      }
       final response = await bridge.request({
         '@type': 'getChatHistory',
-        'chat_id': id,
-        'from_message_id': older && current.isNotEmpty ? current.last.id : 0,
-        'offset': 0, 'limit': 30, 'only_local': false,
+        'chat_id': id, 'from_message_id': fromId,
+        'offset': 0, 'limit': 20, 'only_local': false,
       });
-      final messages = response['messages'];
-      if (messages is! List) throw StateError('پاسخ تاریخچه معتبر نیست.');
-      final before = telegramSavedMessages.length;
-      for (final raw in messages) {
-        if (raw is Map) record(Map<String, dynamic>.from(raw),
-            fromTelegramSaved: true, notify: false);
-      }
-      telegramSavedHasMore = messages.length >= 30 &&
-          (!older || telegramSavedMessages.length > before);
-      changed();
+      await _appendSavedHistory(response, older: older);
     } catch (_) {
-      telegramSavedError = 'دریافت پیام‌های ذخیره‌شده ممکن نشد؛ اتصال تلگرام را بررسی کنید.';
+      telegramSavedError = telegramSavedMessages.isEmpty
+          ? 'دریافت پیام‌ها با تأخیر روبه‌رو شد؛ اتصال تلگرام را بررسی کنید.'
+          : null;
       changed();
     } finally {
       telegramSavedBusy = false;
@@ -537,29 +562,65 @@ class TdNewsController extends ChangeNotifier {
     } finally { busy = false; changed(); }
   }
 
+  /// Queue discovery immediately. A slow Telegram search must not freeze the
+  /// add-channel button or make users wait for the 40-second request timeout.
   Future<void> addChannel(String raw) async {
-    if (state != 'authorizationStateReady') throw StateError('ابتدا وارد تلگرام شوید.');
+    if (state != 'authorizationStateReady') {
+      throw StateError('ابتدا وارد تلگرام شوید.');
+    }
     final name = parsePublicUsername(raw);
-    if (name == null) throw FormatException('آدرس کانال باید مانند t.me/channelname باشد.');
-    busy = true; changed();
+    if (name == null) {
+      throw FormatException('آدرس کانال باید مانند t.me/channelname باشد.');
+    }
+    if (sources.values.any((source) =>
+        source.username.toLowerCase() == name.toLowerCase())) return;
+    if (pendingChannels[name] == 'در حال شناسایی کانال…') return;
+    pendingChannels[name] = 'در حال شناسایی کانال…';
+    status = 'کانال @$name در صف بررسی تلگرام قرار گرفت.';
+    changed();
+    unawaited(_resolveChannel(name));
+  }
+
+  Future<void> _resolveChannel(String name) async {
     try {
-      final chat = await bridge.request({'@type': 'searchPublicChat', 'username': name});
+      final chat = await bridge.request({
+        '@type': 'searchPublicChat', 'username': name,
+      });
+      if (disposed || !pendingChannels.containsKey(name)) return;
       final type = chat['type'];
-      if (type is! Map || type['@type'] != 'chatTypeSupergroup' || type['is_channel'] != true) {
-        throw StateError('آدرس مربوط به یک کانال عمومی نیست.');
+      if (type is! Map || type['@type'] != 'chatTypeSupergroup' ||
+          type['is_channel'] != true) {
+        throw StateError('این آدرس کانال عمومی نیست.');
       }
-      final id = chat['id'] as int;
-      // Make the source visible immediately after Telegram resolves it.
-      // Joining and history loading are network work and must not keep the
-      // Add button blocked for several seconds.
+      final id = chat['id'];
+      if (id is! int) throw StateError('شناسه کانال معتبر نیست.');
       sources[id] = NewsSource(id, name, chat['title']?.toString() ?? name);
       await persist();
+      pendingChannels.remove(name);
       _sortedFeed = null;
-      status = 'کانال اضافه شد؛ خبرهای ذخیره‌شده فوراً نمایش داده می‌شوند.';
+      status = 'کانال @$name به منابع خبری اضافه شد.';
       changed();
       unawaited(loadHistory(id, limit: 12, onlyLocal: true));
       unawaited(_joinAndWarm(id));
-    } finally { busy = false; changed(); }
+    } catch (_) {
+      if (disposed || !pendingChannels.containsKey(name)) return;
+      pendingChannels[name] =
+          'ارتباط با تلگرام برقرار نشد؛ برای تلاش دوباره لمس کنید.';
+      changed();
+    }
+  }
+
+  void retryChannel(String name) {
+    if (!pendingChannels.containsKey(name) ||
+        pendingChannels[name] == 'در حال شناسایی کانال…') return;
+    pendingChannels[name] = 'در حال شناسایی کانال…';
+    changed();
+    unawaited(_resolveChannel(name));
+  }
+
+  void cancelPendingChannel(String name) {
+    pendingChannels.remove(name);
+    changed();
   }
 
   Future<void> _joinAndWarm(int id) async {

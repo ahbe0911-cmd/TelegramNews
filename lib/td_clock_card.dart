@@ -6,9 +6,8 @@ import 'package:shamsi_date/shamsi_date.dart';
 
 /// Lightweight twelve-hour clock; it does not rebuild the news feed.
 class NewsClockCard extends StatefulWidget {
-  final VoidCallback? onSettings;
   final VoidCallback? onSearch;
-  const NewsClockCard({super.key, this.onSettings, this.onSearch});
+  const NewsClockCard({super.key, this.onSearch});
   @override
   State<NewsClockCard> createState() => _NewsClockCardState();
 }
@@ -44,7 +43,7 @@ class _NewsClockCardState extends State<NewsClockCard> {
       child: Row(children: [
         SizedBox(width: 100, child: Row(children: [
           Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: Column(children: [
-            Text('$hour:$minute', textDirection: TextDirection.ltr,
+            Text('$hour:$minute ${now.hour < 12 ? 'AM' : 'PM'}', textDirection: TextDirection.ltr,
               style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
             Text(weekday, style: const TextStyle(fontSize: 11)),
             Text(date, textDirection: TextDirection.ltr,
@@ -62,14 +61,10 @@ class _NewsClockCardState extends State<NewsClockCard> {
           FittedBox(fit: BoxFit.scaleDown, child: Text(AppBrand.tagline,
             style: TextStyle(fontSize: 10, color: color.onSurfaceVariant))),
         ])),
-        SizedBox(width: 64, child: Row(children: [
-          Expanded(child: IconButton(
-            padding: EdgeInsets.zero, tooltip: 'جست‌وجوی خبر',
-            icon: const Icon(Icons.search_rounded, size: 20), onPressed: widget.onSearch)),
-          Expanded(child: IconButton(
-            padding: EdgeInsets.zero, tooltip: 'تنظیمات',
-            icon: const Icon(Icons.settings_outlined, size: 25), onPressed: widget.onSettings)),
-        ])),
+        SizedBox(width: 44, child: IconButton(
+          padding: EdgeInsets.zero, tooltip: 'جست‌وجوی خبر',
+          icon: const Icon(Icons.search_rounded, size: 23),
+          onPressed: widget.onSearch)),
       ]),
     ));
   }

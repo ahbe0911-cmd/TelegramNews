@@ -189,7 +189,7 @@ class _TdHomeState extends State<TdHome> {
     try {
       await widget.news.addChannel(channel.text);
       channel.clear();
-      message('کانال به منابع خبری اضافه شد.');
+      message('درخواست افزودن ثبت شد؛ وضعیت کانال در تنظیمات نمایش داده می‌شود.');
     } catch (error) {
       message(error.toString().replaceFirst('Bad state: ', '').replaceFirst('FormatException: ', ''));
     } finally {
@@ -202,7 +202,8 @@ class _TdHomeState extends State<TdHome> {
     final j = Jalali.fromDateTime(d).formatter;
     return ' ' + j.yyyy.toString() + '/' + j.mm + '/' + j.dd +
         ' • ' + (d.hour % 12 == 0 ? 12 : d.hour % 12).toString() +
-        ':' + d.minute.toString().padLeft(2, '0');
+        ':' + d.minute.toString().padLeft(2, '0') +
+        (d.hour < 12 ? ' AM' : ' PM');
   }
 
   Widget sectionTitle(String title, {Widget? trailing}) => Padding(
@@ -376,7 +377,28 @@ class _TdHomeState extends State<TdHome> {
         )),
         const SizedBox(height: 24),
         sectionTitle('کانال‌های من'),
-        if (widget.news.sources.isEmpty)
+        if (widget.news.pendingChannels.isNotEmpty)
+          surfacePanel(padding: const EdgeInsets.all(9),
+            child: Column(children: [
+              for (final pending in widget.news.pendingChannels.entries)
+                ListTile(
+                  key: ValueKey('pending-channel-' + pending.key),
+                  leading: pending.value == 'در حال شناسایی کانال…'
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.wifi_off_outlined),
+                  title: Text('@' + pending.key,
+                    textDirection: TextDirection.ltr),
+                  subtitle: Text(pending.value),
+                  onTap: pending.value == 'در حال شناسایی کانال…'
+                      ? null : () => widget.news.retryChannel(pending.key),
+                  trailing: IconButton(
+                    tooltip: 'لغو درخواست افزودن',
+                    onPressed: () => widget.news.cancelPendingChannel(pending.key),
+                    icon: const Icon(Icons.close_rounded)),
+                ),
+            ])),
+        if (widget.news.sources.isEmpty && widget.news.pendingChannels.isEmpty)
           surfacePanel(child: const Text('هنوز کانالی اضافه نکرده‌اید.'))
         else
           surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -959,7 +981,6 @@ class _TdHomeState extends State<TdHome> {
                 color: colors.surface,
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
                 child: SafeArea(bottom: false, child: NewsClockCard(
-                  onSettings: ready ? () => setState(() { selectedTab = 2; }) : null,
                   onSearch: ready ? () => setState(() {
                     selectedTab = 0;
                     showSearch = !showSearch;

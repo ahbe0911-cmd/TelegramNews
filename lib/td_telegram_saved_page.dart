@@ -28,7 +28,9 @@ class _TelegramSavedMessagesPageState extends State<TelegramSavedMessagesPage> {
   void initState() {
     super.initState();
     if (widget.news.state == 'authorizationStateReady' &&
-        widget.news.bridge.sender != null) {
+        widget.news.bridge.sender != null &&
+        widget.news.telegramSavedMessages.isEmpty &&
+        !widget.news.telegramSavedBusy) {
       unawaited(widget.news.loadTelegramSavedMessages());
     }
   }
@@ -95,7 +97,8 @@ class _TelegramSavedMessagesPageState extends State<TelegramSavedMessagesPage> {
             : null;
     final date = DateTime.fromMillisecondsSinceEpoch(post.date * 1000).toLocal();
     final time = (date.hour % 12 == 0 ? 12 : date.hour % 12).toString() +
-        ':' + date.minute.toString().padLeft(2, '0');
+        ':' + date.minute.toString().padLeft(2, '0') +
+        (date.hour < 12 ? ' AM' : ' PM');
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
@@ -113,9 +116,25 @@ class _TelegramSavedMessagesPageState extends State<TelegramSavedMessagesPage> {
             if (preview != null) ...[
               ClipRRect(borderRadius: BorderRadius.circular(12),
                 child: post.mediaKind == 'photo'
-                    ? AspectRatio(
-                        aspectRatio: (post.photoAspectRatio ?? 1.0).clamp(.35, 2.5),
-                        child: preview)
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 310),
+                        child: post.photoPath != null
+                            ? preview
+                            : SizedBox(height: 110, child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Opacity(opacity: .35, child: preview),
+                                  const Center(child: Column(
+                                    mainAxisSize: MainAxisSize.min, children: [
+                                      SizedBox(width: 18, height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2)),
+                                      SizedBox(height: 7),
+                                      Text('در حال دریافت تصویر…',
+                                        style: TextStyle(fontSize: 11)),
+                                    ],
+                                  )),
+                                ],
+                              )))
                     : SizedBox(height: 170, child: preview)),
               const SizedBox(height: 8),
             ],
