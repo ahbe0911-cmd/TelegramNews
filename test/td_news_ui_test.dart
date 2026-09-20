@@ -31,9 +31,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('افزودن کانال عمومی'), findsOneWidget);
     expect(find.text('کانال‌های من'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('TG WS Proxy'), 170,
+    await tester.scrollUntilVisible(find.text('WebSocket داخلی تلگرام'), 170,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('TG WS Proxy'), findsOneWidget);
+    expect(find.text('WebSocket داخلی تلگرام'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('حالت تاریک'), findsOneWidget);
