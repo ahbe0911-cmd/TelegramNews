@@ -364,7 +364,11 @@ class TdNewsController extends ChangeNotifier {
     }
     if (type == 'messagePhoto') return 'خبر تصویری';
     if (type == 'messageVideo' || type == 'messageVideoNote' || type == 'messageAnimation') return 'ویدئو';
-    if (type == 'messageDocument') return 'سند پیوست';
+    if (type == 'messageDocument') {
+      final doc = content['document'];
+      final name = doc is Map ? doc['file_name']?.toString() : null;
+      return name == null || name.isEmpty ? 'سند پیوست' : name;
+    }
     return 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
   }
 
