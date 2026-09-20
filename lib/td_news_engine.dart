@@ -411,6 +411,22 @@ class TdNewsController extends ChangeNotifier {
         final image = thumb['file'] as Map;
         if (image['id'] is int) fileId = image['id'] as int;
       }
+    } else if (content['@type'] == 'messageAnimation' &&
+        content['animation'] is Map) {
+      final animation = content['animation'] as Map;
+      final name = animation['file_name']?.toString() ?? '';
+      final mime = animation['mime_type']?.toString().toLowerCase() ?? '';
+      if (mime == 'video/mp4' || name.toLowerCase().endsWith('.mp4')) {
+        mediaKind = 'video';
+        fileName = name;
+        final file = animation['animation'];
+        if (file is Map && file['id'] is int) mediaFileId = file['id'] as int;
+        final thumb = animation['thumbnail'];
+        if (thumb is Map && thumb['file'] is Map) {
+          final image = thumb['file'] as Map;
+          if (image['id'] is int) fileId = image['id'] as int;
+        }
+      }
     } else if (content['@type'] == 'messageDocument' && content['document'] is Map) {
       final document = content['document'] as Map;
       fileName = document['file_name']?.toString();
