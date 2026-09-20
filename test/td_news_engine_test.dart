@@ -69,6 +69,65 @@ void main() {
     expect(document.fileName, 'report.PDF');
     expect(document.body, 'گزارش تازه');
 
+    news.record({
+      'chat_id': -100123456, 'id': 107 * 1048576, 'date': 1700000003,
+      'content': {
+        '@type': 'messageVideoNote',
+        'video_note': {'video': {'id': 3003}},
+      },
+    });
+    final note = news.feed.first;
+    expect(note.mediaKind, 'video');
+    expect(note.mediaFileId, 3003);
+    expect(note.body, 'ویدئو');
+
+    news.record({
+      'chat_id': -100123456, 'id': 108 * 1048576, 'date': 1700000004,
+      'content': {
+        '@type': 'messageDocument',
+        'document': {
+          'file_name': 'clip.mp4',
+          'mime_type': 'video/mp4',
+          'document': {'id': 3004},
+        },
+        'caption': {'text': 'فیلم خبر'},
+      },
+    });
+    final mp4 = news.feed.first;
+    expect(mp4.mediaKind, 'video');
+    expect(mp4.mediaFileId, 3004);
+    expect(mp4.body, 'فیلم خبر');
+
+    news.record({
+      'chat_id': -100123456, 'id': 109 * 1048576, 'date': 1700000005,
+      'content': {
+        '@type': 'messageAnimation',
+        'animation': {
+          'mime_type': 'video/mp4',
+          'animation': {'id': 3005},
+        },
+      },
+    });
+    final animation = news.feed.first;
+    expect(animation.mediaKind, 'video');
+    expect(animation.mediaFileId, 3005);
+
+    news.record({
+      'chat_id': -100123456, 'id': 110 * 1048576, 'date': 1700000006,
+      'content': {
+        '@type': 'messageDocument',
+        'document': {
+          'file_name': 'newspaper.pdf',
+          'mime_type': 'application/pdf',
+          'document': {'id': 3006},
+        },
+      },
+    });
+    final pdf = news.feed.first;
+    expect(pdf.mediaKind, 'pdf');
+    expect(pdf.mediaFileId, 3006);
+    expect(pdf.body, 'newspaper.pdf');
+
     news.dispose();
   });
 
