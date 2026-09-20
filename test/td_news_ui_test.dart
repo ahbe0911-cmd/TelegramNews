@@ -31,6 +31,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('افزودن کانال عمومی'), findsOneWidget);
     expect(find.text('کانال‌های من'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('V2Ray ویژه اتصال تلگرام'), 170,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('V2Ray ویژه اتصال تلگرام'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
         scrollable: find.byType(Scrollable).first);
