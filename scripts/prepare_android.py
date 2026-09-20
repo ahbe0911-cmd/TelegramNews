@@ -112,15 +112,18 @@ if args.profile == 'modern':
         raise SystemExit('Unexpected Flutter Kotlin activity layout')
     activity = native[0]
     source = activity.read_text()
-    if 'class MainActivity: FlutterActivity()' not in source:
+    activity_match = re.search(
+        r'class\s+MainActivity\s*:\s*FlutterActivity\(\)\s*(?:\{\s*\})?',
+        source,
+    )
+    if activity_match is None:
         raise SystemExit('Unexpected Flutter activity template')
     source = source.replace('import io.flutter.embedding.android.FlutterActivity',
 '''import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.content.Intent''')
-    source = source.replace('class MainActivity: FlutterActivity()',
-'''class MainActivity: FlutterActivity() {
+    source = source[:activity_match.start()] + '''class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
@@ -141,6 +144,6 @@ import android.content.Intent''')
             }
         }
     }
-}''')
+}''' + source[activity_match.end():]
     activity.write_text(source)
 print('Android host prepared:', args.profile)
