@@ -12,6 +12,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'td_news_engine.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
+import 'td_clock_card.dart';
+import 'td_downloads.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,6 +125,7 @@ class _TdHomeState extends State<TdHome> {
   int selectedTab = 0; // 0: news, 1: settings
   bool refreshing = false;
   String? inlineVideoKey;
+  final savingPosts = <String>{};
   @override
   void dispose() {
     apiId.dispose();
@@ -464,6 +467,20 @@ class _TdHomeState extends State<TdHome> {
   }
 
 
+  Future<void> savePost(NewsPost post) async {
+    if (!savingPosts.add(post.key)) return;
+    setState(() {});
+    try {
+      await NewsDownloadService.save(widget.news, post);
+      message('فایل در پوشه Downloads/NabzKhabar ذخیره شد.');
+    } catch (_) {
+      message('ذخیره فایل انجام نشد؛ اینترنت و فضای گوشی را بررسی کنید.');
+    } finally {
+      savingPosts.remove(post.key);
+      if (mounted) setState(() {});
+    }
+  }
+
   void openAttachment(NewsPost post) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => NewsMediaViewer(news: widget.news, post: post),
@@ -476,6 +493,11 @@ class _TdHomeState extends State<TdHome> {
     final hasPreview = post.previewBytes != null && post.previewBytes!.isNotEmpty;
     final headline = post.body.trim().split('\n').first;
     final playingInline = inlineVideoKey == post.key;
+    if (post.photoId != null && !hasPhoto) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.news.requestThumbnail(post);
+      });
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -493,7 +515,10 @@ class _TdHomeState extends State<TdHome> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          if (post.mediaKind == 'pdf') { openAttachment(post); return; }
+          if (post.mediaKind == 'pdf' || post.mediaKind == 'photo') {
+            openAttachment(post); return;
+          }
+          if (post.mediaKind == 'file') { unawaited(savePost(post)); return; }
           if (post.mediaKind == 'video') {
             setState(() { inlineVideoKey = playingInline ? null : post.key; });
             return;
@@ -629,6 +654,18 @@ class _TdHomeState extends State<TdHome> {
                 ),
               ]),
             )
+          else if (post.mediaKind == 'file')
+            Container(
+              padding: const EdgeInsets.all(18),
+              height: 100, color: colors.primaryContainer.withValues(alpha: .4),
+              child: Row(children: [
+                Icon(Icons.insert_drive_file_rounded, color: colors.primary, size: 39),
+                const SizedBox(width: 11),
+                Expanded(child: Text(post.fileName ?? 'فایل پیوست',
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+              ]),
+            )
           else if (hasPhoto)
             Image.file(
               File(post.photoPath!), height: 192, width: double.infinity,
@@ -672,11 +709,23 @@ class _TdHomeState extends State<TdHome> {
               const SizedBox(height: 12),
               Row(children: [
                 Text(post.mediaKind == 'pdf' ? 'خواندن PDF'
-                    : post.mediaKind == 'video' ? 'پخش ویدئو' : 'ادامه خبر', style: TextStyle(
+                    : post.mediaKind == 'video' ? 'پخش ویدئو'
+                    : post.mediaKind == 'file' ? 'دریافت فایل'
+                    : post.mediaKind == 'photo' ? 'نمایش تصویر' : 'ادامه خبر', style: TextStyle(
                   color: colors.primary, fontWeight: FontWeight.w700, fontSize: 12)),
                 const SizedBox(width: 3),
                 Icon(Icons.arrow_back_rounded, size: 16, color: colors.primary),
                 const Spacer(),
+                if (post.mediaFileId != null || post.photoId != null)
+                  savingPosts.contains(post.key)
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          key: ValueKey('download-' + post.key),
+                          tooltip: 'دانلود و ذخیره در گوشی',
+                          onPressed: () => savePost(post),
+                          icon: Icon(Icons.download_rounded, color: colors.primary),
+                        ),
                 Icon(Icons.open_in_new_rounded, size: 15, color: colors.onSurfaceVariant),
               ]),
             ]),
