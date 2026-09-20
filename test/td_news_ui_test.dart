@@ -45,4 +45,49 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     news.dispose();
   });
+  testWidgets('star saves a news card and saved tab shows and removes it', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'td_channels': [
+        '{"id":-100123456,"username":"ExampleNews","title":"Example News"}',
+      ],
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final news = TdNewsController(preferences);
+    news.state = 'authorizationStateReady';
+    news.record({
+      'chat_id': -100123456,
+      'id': 125 * 1048576,
+      'date': 1700000010,
+      'content': {
+        '@type': 'messageText',
+        'text': {'text': 'خبر قابل ذخیره'},
+      },
+    });
+    final post = news.feed.single;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: TdHome(news: news, onToggleTheme: () {}, dark: false),
+      ),
+    ));
+
+    expect(find.byKey(ValueKey('bookmark-' + post.key)), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('bookmark-' + post.key)));
+    await tester.pump();
+    expect(news.isSaved(post), isTrue);
+
+    await tester.tap(find.text('ذخیره‌شده‌ها').last);
+    await tester.pump();
+    expect(find.text('خبر قابل ذخیره'), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey('bookmark-' + post.key)));
+    await tester.pump();
+    expect(news.savedFeed, isEmpty);
+    expect(find.text('هنوز خبری ذخیره نشده است'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    news.dispose();
+  });
+
 }
