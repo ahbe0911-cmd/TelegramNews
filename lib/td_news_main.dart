@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'td_news_engine.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
+import 'td_v2ray.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -116,6 +117,8 @@ class _TdHomeState extends State<TdHome> {
   final login = TextEditingController();
   final channel = TextEditingController();
   final search = TextEditingController();
+  final proxyLink = TextEditingController();
+  late final TdV2rayController proxy = TdV2rayController(widget.news);
   String filter = '';
   bool submitting = false;
   int selectedTab = 0; // 0: news, 1: settings
@@ -129,6 +132,8 @@ class _TdHomeState extends State<TdHome> {
     login.dispose();
     channel.dispose();
     search.dispose();
+    proxyLink.dispose();
+    proxy.dispose();
     super.dispose();
   }
 
@@ -312,6 +317,84 @@ class _TdHomeState extends State<TdHome> {
         ),
       );
 
+  Widget proxySettingsPanel() {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: proxy,
+      builder: (context, _) => surfacePanel(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Icon(Icons.shield_outlined, color: colors.primary),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('V2Ray ویژه اتصال تلگرام',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            Icon(proxy.connected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: proxy.connected ? Colors.green : colors.onSurfaceVariant),
+          ]),
+          const SizedBox(height: 8),
+          Text('اختیاری؛ تنها ارتباط TDLib از پراکسی داخلی عبور می‌کند. '
+            'برای جلوگیری از کندی، هنگام نیاز فعالش کنید.',
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+          const SizedBox(height: 13),
+          TextField(
+            controller: proxyLink,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: decoratedInput('vless:// یا vmess://', icon: Icons.link_rounded),
+          ),
+          const SizedBox(height: 9),
+          TextButton.icon(
+            onPressed: proxy.busy ? null : () async {
+              try {
+                final saved = await proxy.readSavedLink();
+                if (saved != null && saved.isNotEmpty) {
+                  proxyLink.text = saved;
+                  message('حساب ذخیره‌شده بازیابی شد.');
+                } else {
+                  message('هنوز حسابی در حافظه امن گوشی ذخیره نشده است.');
+                }
+              } catch (_) {
+                message('خواندن حساب ذخیره‌شده ممکن نشد.');
+              }
+            },
+            icon: const Icon(Icons.key_rounded, size: 18),
+            label: const Text('بازیابی حساب ذخیره‌شده'),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: proxy.busy
+                ? null
+                : proxy.connected
+                    ? () async {
+                        try { await proxy.disconnect(); }
+                        catch (_) { message('قطع ارتباط انجام نشد. دوباره تلاش کنید.'); }
+                      }
+                    : () async {
+                        try { await proxy.connect(proxyLink.text); }
+                        catch (_) { message('اتصال برقرار نشد؛ لینک یا سرور را بررسی کنید.'); }
+                      },
+            icon: proxy.busy
+                ? const SizedBox(width: 17, height: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(proxy.connected ? Icons.link_off_rounded : Icons.power_settings_new_rounded),
+            label: Text(proxy.busy ? 'لطفاً منتظر بمانید…'
+                : proxy.connected ? 'قطع اتصال داخلی' : 'فعال‌سازی اتصال داخلی'),
+          ),
+          const SizedBox(height: 6),
+          Text(proxy.status,
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          const Text('لینک حساب را فقط در همین صفحه وارد کنید؛ '
+            'اطلاعات حساب در گیت‌هاب قرار نمی‌گیرد.',
+            style: TextStyle(fontSize: 11)),
+        ]),
+      ),
+    );
+  }
+
   Widget settingsScreen() {
     final colors = Theme.of(context).colorScheme;
     return ListView(
@@ -413,6 +496,9 @@ class _TdHomeState extends State<TdHome> {
               ],
             ]),
           ),
+        const SizedBox(height: 24),
+        sectionTitle('اتصال داخلی تلگرام'),
+        proxySettingsPanel(),
         const SizedBox(height: 24),
         sectionTitle('نمایش و همگام‌سازی'),
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
