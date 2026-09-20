@@ -11,6 +11,7 @@ void main() {
   testWidgets('video plays in the feed only after an explicit tap and text is justified',
       (tester) async {
     SharedPreferences.setMockInitialValues({
+      'td_ws_auto': false,
       'td_channels': [
         '{"id":-100123456,"username":"ExampleNews","title":"خبرگزاری"}',
       ],
