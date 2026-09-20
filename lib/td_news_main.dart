@@ -276,41 +276,184 @@ class _TdHomeState extends State<TdHome> {
     ]);
   }
 
-  Widget channelPicker() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        sectionTitle('منابع خبری انتخابی', trailing: IconButton(
-          tooltip: 'تازه‌سازی خبرها',
-          onPressed: widget.news.busy ? null : () => widget.news.refresh(),
-          icon: const Icon(Icons.refresh),
+
+  InputDecoration decoratedInput(String hint, {IconData? icon}) => InputDecoration(
+        hintText: hint,
+        prefixIcon: icon == null ? null : Icon(icon),
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 17),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(17)),
+      );
+
+  Widget surfacePanel({required Widget child, EdgeInsets? padding}) => Container(
+        width: double.infinity,
+        padding: padding ?? const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .48)),
+        ),
+        child: child,
+      );
+
+  Widget settingsScreen() {
+    final colors = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+      children: [
+        const SizedBox(height: 8),
+        Text('تنظیمات', style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+          fontWeight: FontWeight.w800,
         )),
-        const Text('با افزودن هر کانال، حساب شما عضو آن می‌شود تا پست‌های جدید را دریافت کند.'),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: TextField(
-            controller: channel, textDirection: TextDirection.ltr,
-            decoration: const InputDecoration(
-              hintText: 't.me/channelname', border: OutlineInputBorder(),
-            ),
-            onSubmitted: (_) => addChannel(),
-          )),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: submitting || widget.news.busy ? null : addChannel,
-            child: const Text('افزودن و عضویت'),
-          ),
-        ]),
-        if (widget.news.sources.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            for (final source in widget.news.sources.values)
-              InputChip(
-                label: Text(source.title),
-                onDeleted: () => widget.news.removeChannel(source.id),
-                deleteIcon: const Icon(Icons.close, size: 17),
-                tooltip: 'حذف از فهرست برنامه (بدون خروج از کانال تلگرام)',
+        const SizedBox(height: 6),
+        Text('مدیریت منابع خبری و ظاهر برنامه', style: TextStyle(color: colors.onSurfaceVariant)),
+        const SizedBox(height: 24),
+        sectionTitle('منابع خبری'),
+        surfacePanel(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              CircleAvatar(
+                backgroundColor: colors.primaryContainer,
+                foregroundColor: colors.onPrimaryContainer,
+                child: const Icon(Icons.add_link_rounded),
               ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('افزودن کانال عمومی',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+            ]),
+            const SizedBox(height: 9),
+            Text('با افزودن کانال، حساب تلگرام شما عضو آن می‌شود تا پست‌های جدید دریافت شوند.',
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13)),
+            const SizedBox(height: 15),
+            TextField(
+              controller: channel,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
+              textInputAction: TextInputAction.done,
+              decoration: decoratedInput('t.me/channelname', icon: Icons.link_rounded),
+              onSubmitted: (_) => addChannel(),
+            ),
+            const SizedBox(height: 11),
+            FilledButton.icon(
+              onPressed: submitting || widget.news.busy ? null : addChannel,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('افزودن و عضویت'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(49),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ],
+        )),
+        const SizedBox(height: 24),
+        sectionTitle('کانال‌های من'),
+        if (widget.news.sources.isEmpty)
+          surfacePanel(child: const Text('هنوز کانالی اضافه نکرده‌اید.'))
+        else
+          surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: Column(children: [
+              for (final source in widget.news.sources.values) ...[
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: colors.primaryContainer,
+                    foregroundColor: colors.onPrimaryContainer,
+                    child: const Icon(Icons.campaign_outlined),
+                  ),
+                  title: Text(source.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('@' + source.username, textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.right),
+                  trailing: IconButton(
+                    tooltip: 'حذف کانال از فهرست برنامه',
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    onPressed: () async {
+                      final shouldRemove = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('حذف منبع خبری؟'),
+                          content: Text('«' + source.title +
+                            '» از فهرست خبرهای برنامه حذف می‌شود. عضویت شما در تلگرام تغییر نمی‌کند.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dialogContext, false),
+                              child: const Text('انصراف'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(dialogContext, true),
+                              child: const Text('حذف از برنامه'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (shouldRemove == true) {
+                        await widget.news.removeChannel(source.id);
+                      }
+                    },
+                  ),
+                ),
+                if (source.id != widget.news.sources.values.last.id)
+                  Divider(height: 1, indent: 62, color: colors.outlineVariant.withValues(alpha: .55)),
+              ],
+            ]),
+          ),
+        const SizedBox(height: 24),
+        sectionTitle('نمایش و همگام‌سازی'),
+        surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          child: Column(children: [
+            SwitchListTile.adaptive(
+              secondary: Icon(widget.dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined),
+              title: const Text('حالت تاریک'),
+              subtitle: const Text('تغییر رنگ‌بندی برنامه'),
+              value: widget.dark,
+              onChanged: (_) => widget.onToggleTheme(),
+            ),
+            Divider(height: 1, indent: 60, color: colors.outlineVariant.withValues(alpha: .55)),
+            ListTile(
+              leading: const Icon(Icons.sync_rounded),
+              title: const Text('تازه‌سازی خبرها'),
+              subtitle: const Text('دریافت آخرین پست‌های منابع انتخابی'),
+              trailing: const Icon(Icons.chevron_left_rounded),
+              onTap: () async {
+                await refreshNews();
+                if (mounted) message('درخواست تازه‌سازی انجام شد.');
+              },
+            ),
           ]),
-        ],
-      ]);
+        ),
+        const SizedBox(height: 24),
+        surfacePanel(child: Row(children: [
+          Icon(Icons.verified_user_outlined, color: colors.primary),
+          const SizedBox(width: 11),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('حساب تلگرام', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('متصل • اطلاعات ورود در همین گوشی نگهداری می‌شود',
+              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
+          ])),
+        ])),
+      ],
+    );
+  }
+
+  Future<void> refreshNews() async {
+    if (refreshing || widget.news.busy) return;
+    setState(() { refreshing = true; });
+    try {
+      await widget.news.refresh();
+    } finally {
+      if (mounted) setState(() { refreshing = false; });
+    }
+  }
 
   Widget postCard(NewsPost p) => Card(
         margin: const EdgeInsets.only(bottom: 12),
