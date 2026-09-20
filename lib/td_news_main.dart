@@ -676,14 +676,34 @@ class _TdHomeState extends State<TdHome> {
             )
           else if (post.mediaKind == 'file')
             Container(
-              padding: const EdgeInsets.all(18),
-              height: 100, color: colors.primaryContainer.withValues(alpha: .4),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              color: colors.primaryContainer.withValues(alpha: .34),
               child: Row(children: [
-                Icon(Icons.insert_drive_file_rounded, color: colors.primary, size: 39),
-                const SizedBox(width: 11),
-                Expanded(child: Text(post.fileName ?? 'فایل پیوست',
-                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700))),
+                Container(
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(
+                    color: colors.surface.withValues(alpha: .9),
+                    borderRadius: BorderRadius.circular(16)),
+                  child: Icon(
+                    (post.fileName ?? '').toLowerCase().endsWith('.apk')
+                        ? Icons.android_rounded : Icons.insert_drive_file_rounded,
+                    color: colors.primary, size: 29),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text((post.fileName ?? '').toLowerCase().endsWith('.apk')
+                        ? 'فایل APK' : 'فایل پیوست',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                        color: colors.primary)),
+                    const SizedBox(height: 3),
+                    Text(post.fileName ?? 'برای دانلود لمس کنید',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ],
+                )),
+                Icon(Icons.download_for_offline_outlined, color: colors.primary),
               ]),
             )
           else if (hasPhoto)
