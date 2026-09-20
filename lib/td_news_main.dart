@@ -125,9 +125,29 @@ class _TdHomeState extends State<TdHome> {
   int selectedTab = 0; // 0: news, 1: settings
   bool refreshing = false;
   String? inlineVideoKey;
+  bool autoConnectAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.news.addListener(_autoConnectWhenReady);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoConnectWhenReady());
+  }
+
+  void _autoConnectWhenReady() {
+    if (!mounted || autoConnectAttempted ||
+        widget.news.state != 'authorizationStateReady') return;
+    autoConnectAttempted = true;
+    // Users who switched WebSocket off explicitly keep direct Telegram.
+    if (widget.news.prefs.getBool('td_ws_auto') == false) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(proxy.connectOrOpen(automatic: true));
+    });
+  }
 
   @override
   void dispose() {
+    widget.news.removeListener(_autoConnectWhenReady);
     apiId.dispose();
     apiHash.dispose();
     login.dispose();
@@ -326,44 +346,40 @@ class _TdHomeState extends State<TdHome> {
           Row(children: [
             Icon(Icons.wifi_tethering_rounded, color: colors.primary),
             const SizedBox(width: 8),
-            const Expanded(child: Text('TG WS Proxy',
+            const Expanded(child: Text('WebSocket داخلی تلگرام',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
             Icon(proxy.connected ? Icons.check_circle : Icons.radio_button_unchecked,
               color: proxy.connected ? Colors.green : colors.onSurfaceVariant),
           ]),
           const SizedBox(height: 8),
-          Text('بدون حساب V2Ray؛ اگر برنامه TG WS Proxy روی گوشی روشن باشد، '
-            'با یک لمس ارتباط تلگرام به پراکسی محلی آن وصل می‌شود.',
+          Text('بدون نصب TG WS Proxy یا واردکردن حساب V2Ray. '
+            'هنگام ورود به تلگرام، اتصال داخلی به‌صورت خودکار آزمایش می‌شود؛ '
+            'در صورت ناموفق‌بودن، اتصال مستقیم حفظ می‌شود.',
             style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          Text('اولین بار TG WS Proxy را نصب و در خود آن Start را بزنید. '
-            'اندروید اجازه راه‌اندازی خودکار سرویس خصوصی برنامه دیگر را نمی‌دهد.',
-            style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: proxy.busy ? null : () async {
-              if (proxy.connected) { await proxy.disconnect(); }
-              else { await proxy.connectOrOpen(); }
+            onPressed: proxy.busy ? null : () {
+              if (proxy.connected) {
+                unawaited(proxy.disconnect());
+              } else {
+                unawaited(proxy.connectOrOpen());
+              }
             },
             icon: proxy.busy
                 ? const SizedBox(width: 17, height: 17,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : Icon(proxy.connected ? Icons.link_off_rounded : Icons.bolt_rounded),
             label: Text(proxy.busy ? 'در حال بررسی…'
-                : proxy.connected ? 'قطع اتصال تلگرام' : 'اتصال هوشمند'),
+                : proxy.connected ? 'بازگشت به اتصال مستقیم'
+                : 'اتصال خودکار WebSocket'),
           ),
           const SizedBox(height: 7),
           Text(proxy.status,
             style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-          const SizedBox(height: 6),
-          TextButton.icon(
-            onPressed: () => launchUrl(
-              Uri.parse('https://github.com/ihtfw/tg-ws-proxy-android/releases'),
-              mode: LaunchMode.externalApplication,
-            ),
-            icon: const Icon(Icons.download_outlined),
-            label: const Text('دریافت برنامه TG WS Proxy در صورت نیاز'),
-          ),
+          const SizedBox(height: 7),
+          Text('موتور WebSocket تنها برای اتصال تلگرام استفاده می‌شود. '
+            'سرعت به کیفیت شبکه و دسترسی به مراکز داده تلگرام بستگی دارد.',
+            style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
         ]),
       ),
     );
