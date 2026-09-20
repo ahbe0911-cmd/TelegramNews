@@ -737,135 +737,107 @@ class _TdHomeState extends State<TdHome> {
 
   Widget newsScreen(List<NewsPost> filtered) {
     final colors = Theme.of(context).colorScheme;
-    final allPosts = widget.news.feed;
+    final header = <Widget>[
+      const NewsClockCard(),
+      const SizedBox(height: 14),
+      TextField(
+        controller: search,
+        onChanged: (value) => setState(() { filter = value; }),
+        decoration: decoratedInput('جست‌وجو در میان خبرها', icon: Icons.search_rounded),
+      ),
+      const SizedBox(height: 15),
+      Row(children: [
+        Text('آخرین خبرها',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(50)),
+          child: Text(filtered.length.toString(),
+            style: TextStyle(color: colors.onPrimaryContainer,
+                fontSize: 12, fontWeight: FontWeight.w800)),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: refreshing ? null : refreshNews,
+          tooltip: 'تازه‌سازی اخبار',
+          icon: refreshing
+              ? const SizedBox(width: 19, height: 19,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.refresh_rounded),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      if (widget.news.sources.isEmpty)
+        surfacePanel(child: Column(children: [
+          Container(
+            width: 61, height: 61,
+            decoration: BoxDecoration(color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(18)),
+            child: Icon(Icons.newspaper_rounded, color: colors.primary, size: 31),
+          ),
+          const SizedBox(height: 12),
+          const Text('هنوز منبع خبری ندارید',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          Text('اولین کانال عمومی را از تنظیمات اضافه کنید.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
+          const SizedBox(height: 15),
+          FilledButton.icon(
+            onPressed: () => setState(() { selectedTab = 1; }),
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('مدیریت منابع خبری'),
+          ),
+        ]))
+      else if (filtered.isEmpty)
+        surfacePanel(child: Column(children: [
+          Icon(filter.trim().isEmpty
+              ? Icons.hourglass_empty_rounded : Icons.manage_search_rounded,
+              size: 38, color: colors.primary),
+          const SizedBox(height: 12),
+          Text(filter.trim().isEmpty
+              ? 'در حال دریافت تازه‌ترین خبرها…'
+              : 'خبری با این عبارت پیدا نشد',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text('برای تازه‌سازی، صفحه را پایین بکشید.',
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+        ])),
+      if (filtered.isNotEmpty) const SizedBox(height: 3),
+    ];
     return RefreshIndicator(
       onRefresh: refreshNews,
       child: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (notification is ScrollStartNotification && inlineVideoKey != null) {
+        onNotification: (event) {
+          if (event is ScrollStartNotification && inlineVideoKey != null) {
             setState(() { inlineVideoKey = null; });
           }
           return false;
         },
-        child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 9, 18, 24),
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
-                colors: [colors.primaryContainer, colors.primaryContainer.withValues(alpha: .55)],
-              ),
-              borderRadius: BorderRadius.circular(23),
-            ),
-            child: Row(children: [
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('خبرها، یک‌جا و ساده',
-                    style: TextStyle(
-                      fontSize: 19, height: 1.5,
-                      fontWeight: FontWeight.w800, color: colors.onPrimaryContainer,
-                    )),
-                  const SizedBox(height: 5),
-                  Text('تازه‌ترین مطالب کانال‌های انتخابی شما',
-                    style: TextStyle(fontSize: 12, color: colors.onPrimaryContainer)),
-                ],
-              )),
-              const SizedBox(width: 10),
-              Container(
-                width: 47, height: 47,
-                decoration: BoxDecoration(
-                  color: colors.surface.withValues(alpha: .68),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(Icons.auto_stories_outlined, color: colors.primary, size: 25),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 19),
-          TextField(
-            controller: search,
-            onChanged: (value) => setState(() { filter = value; }),
-            decoration: decoratedInput('جست‌وجو میان خبرها', icon: Icons.search_rounded),
-          ),
-          const SizedBox(height: 17),
-          Row(children: [
-            Text('آخرین خبرها',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              )),
-            const SizedBox(width: 9),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-              decoration: BoxDecoration(
-                color: colors.primaryContainer,
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: Text(filtered.length.toString(),
-                style: TextStyle(color: colors.onPrimaryContainer, fontSize: 12,
-                  fontWeight: FontWeight.w800)),
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: refreshing ? null : refreshNews,
-              tooltip: 'تازه‌سازی اخبار',
-              icon: refreshing
-                  ? const SizedBox(width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh_rounded),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          if (widget.news.sources.isEmpty)
-            surfacePanel(child: Column(children: [
-              Icon(Icons.newspaper_rounded, size: 49, color: colors.primary),
-              const SizedBox(height: 11),
-              const Text('هنوز منبع خبری ندارید',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 7),
-              Text('اولین کانال عمومی را از بخش تنظیمات اضافه کنید.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => setState(() { selectedTab = 1; }),
-                icon: const Icon(Icons.settings_outlined),
-                label: const Text('رفتن به تنظیمات'),
-              ),
-            ]))
-          else if (filtered.isEmpty)
-            surfacePanel(child: Column(children: [
-              Icon(filter.trim().isNotEmpty
-                  ? Icons.manage_search_rounded : Icons.hourglass_empty_rounded,
-                  color: colors.primary, size: 40),
-              const SizedBox(height: 10),
-              Text(filter.trim().isNotEmpty
-                  ? 'خبری با این عبارت پیدا نشد'
-                  : 'هنوز خبری برای نمایش دریافت نشده است',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text(filter.trim().isNotEmpty
-                  ? 'عبارت جست‌وجو را تغییر دهید.'
-                  : 'صفحه را به پایین بکشید تا تازه‌سازی شود.',
-                style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
-            ]))
-          else
-            for (final post in filtered) postCard(post),
-          if (allPosts.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Text('برای دریافت اخبار تازه، صفحه را به پایین بکشید.',
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // Only construct visible cards. Building every news card at once
+          // caused UI stalls when multiple channels were synchronized.
+          itemCount: header.length + filtered.length + 1,
+          itemBuilder: (context, index) {
+            if (index < header.length) return header[index];
+            final offset = index - header.length;
+            if (offset < filtered.length) {
+              final post = filtered[offset];
+              return KeyedSubtree(key: ValueKey(post.key), child: postCard(post));
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              child: Text('برای دریافت خبرهای تازه، صفحه را به پایین بکشید.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-            ),
-          const SizedBox(height: 22),
-        ],
-      ),
+            );
+          },
+        ),
       ),
     );
   }
