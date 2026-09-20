@@ -148,6 +148,7 @@ class TdNewsController extends ChangeNotifier {
   String status = 'API ID و API Hash را برای ورود وارد کنید';
   bool busy = false;
   bool disposed = false;
+  bool parametersSubmitted = false;
   int apiId = 0;
   String apiHash = '';
   String dbDirectory = '';
@@ -228,7 +229,8 @@ class TdNewsController extends ChangeNotifier {
       _ => 'در حال برقراری اتصال…',
     };
     changed();
-    if (state == 'authorizationStateWaitTdlibParameters') {
+    if (state == 'authorizationStateWaitTdlibParameters' && !parametersSubmitted) {
+      parametersSubmitted = true;
       try {
         await bridge.request({
           '@type': 'setTdlibParameters', 'use_test_dc': false,
@@ -243,6 +245,7 @@ class TdNewsController extends ChangeNotifier {
           'enable_storage_optimizer': true, 'ignore_file_names': false,
         });
       } catch (_) {
+        parametersSubmitted = false;
         status = 'API ID یا API Hash پذیرفته نشد؛ مقادیر را بررسی کنید.';
         changed();
       }
