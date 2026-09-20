@@ -582,53 +582,204 @@ class _TdHomeState extends State<TdHome> {
     );
   }
 
+  Widget newsScreen(List<NewsPost> filtered) {
+    final colors = Theme.of(context).colorScheme;
+    final allPosts = widget.news.feed;
+    return RefreshIndicator(
+      onRefresh: refreshNews,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 9, 18, 24),
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [colors.primaryContainer, colors.primaryContainer.withValues(alpha: .55)],
+              ),
+              borderRadius: BorderRadius.circular(23),
+            ),
+            child: Row(children: [
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('خبرها، یک‌جا و ساده',
+                    style: TextStyle(
+                      fontSize: 19, height: 1.5,
+                      fontWeight: FontWeight.w800, color: colors.onPrimaryContainer,
+                    )),
+                  const SizedBox(height: 5),
+                  Text('تازه‌ترین مطالب کانال‌های انتخابی شما',
+                    style: TextStyle(fontSize: 12, color: colors.onPrimaryContainer)),
+                ],
+              )),
+              const SizedBox(width: 10),
+              Container(
+                width: 47, height: 47,
+                decoration: BoxDecoration(
+                  color: colors.surface.withValues(alpha: .68),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(Icons.auto_stories_outlined, color: colors.primary, size: 25),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 19),
+          TextField(
+            controller: search,
+            onChanged: (value) => setState(() { filter = value; }),
+            decoration: decoratedInput('جست‌وجو میان خبرها', icon: Icons.search_rounded),
+          ),
+          const SizedBox(height: 17),
+          Row(children: [
+            Text('آخرین خبرها',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              )),
+            const SizedBox(width: 9),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: Text(filtered.length.toString(),
+                style: TextStyle(color: colors.onPrimaryContainer, fontSize: 12,
+                  fontWeight: FontWeight.w800)),
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: refreshing ? null : refreshNews,
+              tooltip: 'تازه‌سازی اخبار',
+              icon: refreshing
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.refresh_rounded),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          if (widget.news.sources.isEmpty)
+            surfacePanel(child: Column(children: [
+              Icon(Icons.newspaper_rounded, size: 49, color: colors.primary),
+              const SizedBox(height: 11),
+              const Text('هنوز منبع خبری ندارید',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 7),
+              Text('اولین کانال عمومی را از بخش تنظیمات اضافه کنید.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => setState(() { selectedTab = 1; }),
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('رفتن به تنظیمات'),
+              ),
+            ]))
+          else if (filtered.isEmpty)
+            surfacePanel(child: Column(children: [
+              Icon(filter.trim().isNotEmpty
+                  ? Icons.manage_search_rounded : Icons.hourglass_empty_rounded,
+                  color: colors.primary, size: 40),
+              const SizedBox(height: 10),
+              Text(filter.trim().isNotEmpty
+                  ? 'خبری با این عبارت پیدا نشد'
+                  : 'هنوز خبری برای نمایش دریافت نشده است',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(filter.trim().isNotEmpty
+                  ? 'عبارت جست‌وجو را تغییر دهید.'
+                  : 'صفحه را به پایین بکشید تا تازه‌سازی شود.',
+                style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+            ]))
+          else
+            for (final post in filtered) postCard(post),
+          if (allPosts.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text('برای دریافت اخبار تازه، صفحه را به پایین بکشید.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
+            ),
+          const SizedBox(height: 22),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: widget.news,
         builder: (context, _) {
           final ready = widget.news.state == 'authorizationStateReady';
-          final filtered = widget.news.feed.where((p) =>
-              (p.source + ' ' + p.body).toLowerCase().contains(filter.toLowerCase())).toList();
+          final filtered = widget.news.feed.where((post) =>
+              (post.source + ' ' + post.body)
+                  .toLowerCase().contains(filter.trim().toLowerCase())).toList();
+          final colors = Theme.of(context).colorScheme;
           return Scaffold(
             appBar: AppBar(
-              title: const Text('نبض خبر', style: TextStyle(fontFamily: 'Rooznameh')),
-              actions: [
-                IconButton(
-                  icon: Icon(widget.dark ? Icons.light_mode : Icons.dark_mode),
-                  tooltip: 'تغییر حالت شب و روز', onPressed: widget.onToggleTheme,
+              title: Row(children: [
+                Container(
+                  width: 37, height: 37,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.newspaper_rounded, size: 21,
+                    color: colors.onPrimaryContainer),
                 ),
+                const SizedBox(width: 10),
+                const Text('نبض خبر', style: TextStyle(
+                  fontFamily: 'Rooznameh', fontSize: 23,
+                  fontWeight: FontWeight.w800)),
+              ]),
+              actions: [
+                if (ready && selectedTab == 0)
+                  IconButton(
+                    tooltip: 'تنظیمات',
+                    icon: const Icon(Icons.tune_rounded),
+                    onPressed: () => setState(() { selectedTab = 1; }),
+                  ),
               ],
             ),
-            body: SafeArea(child: Center(child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: ListView(padding: const EdgeInsets.all(16), children: [
-                if (widget.news.state == 'setup') setup()
-                else if (!ready) authorization()
-                else ...[
-                  channelPicker(),
-                  const SizedBox(height: 10),
-                  sectionTitle('آخرین خبرها'),
-                  TextField(
-                    controller: search,
-                    onChanged: (v) => setState(() { filter = v; }),
-                    decoration: const InputDecoration(
-                      hintText: 'جست‌وجو در خبرهای دریافت‌شده',
-                      prefixIcon: Icon(Icons.search), border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  if (widget.news.sources.isEmpty)
-                    const Text('برای شروع، آدرس اولین کانال عمومی را اضافه کنید.')
-                  else if (filtered.isEmpty)
-                    const Text('هنوز خبری دریافت نشده است. گزینه تازه‌سازی را بزنید.')
-                  else
-                    for (final post in filtered) postCard(post),
-                ],
-                const SizedBox(height: 16),
-                Text(widget.news.status, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 20),
-              ]),
-            ))),
+            body: SafeArea(
+              child: Center(child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: !ready
+                    ? ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          if (widget.news.state == 'setup') setup()
+                          else authorization(),
+                        ],
+                      )
+                    : selectedTab == 0
+                        ? newsScreen(filtered)
+                        : settingsScreen(),
+              )),
+            ),
+            bottomNavigationBar: ready
+                ? NavigationBar(
+                    selectedIndex: selectedTab,
+                    onDestinationSelected: (index) => setState(() {
+                      selectedTab = index;
+                    }),
+                    destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home_rounded),
+                        label: 'خبرها',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.settings_outlined),
+                        selectedIcon: Icon(Icons.settings_rounded),
+                        label: 'تنظیمات',
+                      ),
+                    ],
+                  )
+                : null,
           );
         },
       );
