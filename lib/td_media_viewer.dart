@@ -28,7 +28,9 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
   @override
   void initState() {
     super.initState();
-    _openMedia();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openMedia();
+    });
   }
 
   Future<void> _openMedia() async {
