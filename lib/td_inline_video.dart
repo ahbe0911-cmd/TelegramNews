@@ -61,15 +61,46 @@ class _NewsInlineVideoState extends State<NewsInlineVideo> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return SizedBox(height: 188, child: Center(child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const CircularProgressIndicator(strokeWidth: 2),
-        const SizedBox(height: 10),
-        const Text('در حال دریافت ویدئو از تلگرام…'),
-        TextButton(onPressed: widget.onClose, child: const Text('انصراف')),
-      ],
-    )));
+    if (loading) {
+      final poster = widget.post.photoPath;
+      final small = widget.post.previewBytes;
+      return SizedBox(
+        height: 208,
+        child: Stack(fit: StackFit.expand, children: [
+          if (poster != null)
+            Image.file(File(poster), fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff152b42)))
+          else if (small != null)
+            Image.memory(small, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff152b42)))
+          else
+            const ColoredBox(color: Color(0xff152b42)),
+          const ColoredBox(color: Color(0x99000000)),
+          Center(child: AnimatedBuilder(
+            animation: widget.news,
+            builder: (context, _) {
+              final progress = widget.news.downloadProgress[widget.post.mediaFileId];
+              return Column(mainAxisSize: MainAxisSize.min, children: [
+                SizedBox(width: 50, height: 50,
+                  child: CircularProgressIndicator(
+                    value: progress, strokeWidth: 3, color: Colors.white)),
+                const SizedBox(height: 12),
+                const Text('در حال آماده‌سازی ویدئو…',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                if (progress != null)
+                  Text((progress * 100).toStringAsFixed(0) + '٪ دریافت شده',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                TextButton(
+                  onPressed: widget.onClose,
+                  child: const Text('بستن پخش',
+                    style: TextStyle(color: Colors.white)),
+                ),
+              ]);
+            },
+          )),
+        ]),
+      );
+    }
     if (error != null) return SizedBox(height: 176, child: Center(child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
