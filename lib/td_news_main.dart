@@ -294,15 +294,19 @@ class _TdHomeState extends State<TdHome> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(17)),
       );
 
-  Widget surfacePanel({required Widget child, EdgeInsets? padding}) => Container(
-        width: double.infinity,
-        padding: padding ?? const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+  Widget surfacePanel({required Widget child, EdgeInsets? padding}) => Material(
+        color: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .48)),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .48),
+          ),
         ),
-        child: child,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: padding ?? const EdgeInsets.all(18),
+          child: SizedBox(width: double.infinity, child: child),
+        ),
       );
 
   Widget settingsScreen() {
