@@ -128,7 +128,7 @@ class _TdHomeState extends State<TdHome> {
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
-  int selectedTab = 0; // 0: news, 1: saved, 2: settings
+  int selectedTab = 0; // 0: news, 1: Telegram Saved Messages, 2: settings
   bool refreshing = false;
   bool showSearch = false;
   String? inlineVideoKey;
@@ -425,19 +425,6 @@ class _TdHomeState extends State<TdHome> {
             ]),
           ),
         const SizedBox(height: 24),
-        sectionTitle('حساب تلگرام'),
-        surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: ListTile(
-            key: const ValueKey('telegram-saved-messages'),
-            leading: Icon(Icons.bookmark_rounded, color: colors.primary),
-            title: const Text('پیام‌های ذخیره‌شده تلگرام',
-              style: TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: const Text('نمایش Saved Messages همین حساب؛ جدا از خبرهای نشان‌دار برنامه'),
-            trailing: const Icon(Icons.chevron_left_rounded),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => TelegramSavedMessagesPage(news: widget.news))),
-          )),
-        const SizedBox(height: 24),
         sectionTitle('نمایش و همگام‌سازی'),
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           child: Column(children: [
@@ -486,6 +473,20 @@ class _TdHomeState extends State<TdHome> {
     }
   }
 
+
+  Future<void> forwardNews(NewsPost post) async {
+    if (widget.news.isForwardedToTelegram(post) ||
+        widget.news.isForwardingToTelegram(post)) return;
+    try {
+      await widget.news.forwardNewsToTelegramSaved(post);
+      if (!mounted) return;
+      message(widget.news.isForwardedToTelegram(post)
+          ? 'خبر در Saved Messages تلگرام ذخیره شد.'
+          : 'خبر در صف ارسال به Saved Messages قرار گرفت.');
+    } catch (_) {
+      if (mounted) message('ارسال خبر به Saved Messages انجام نشد؛ دوباره تلاش کنید.');
+    }
+  }
 
   Future<void> savePost(NewsPost post) async {
     if (!savingPosts.add(post.key)) return;
@@ -797,15 +798,21 @@ class _TdHomeState extends State<TdHome> {
               IntrinsicHeight(child: Row(children: [
                 Expanded(child: TextButton.icon(
                   key: ValueKey('bookmark-' + post.key),
-                  onPressed: () => unawaited(widget.news.toggleSaved(post)),
+                  onPressed: widget.news.isForwardedToTelegram(post) ||
+                      widget.news.isForwardingToTelegram(post)
+                      ? null : () => unawaited(forwardNews(post)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     minimumSize: const Size(44, 48),
-                    foregroundColor: widget.news.isSaved(post) ? colors.primary : colors.onSurface),
-                  icon: Icon(widget.news.isSaved(post) ? Icons.star_rounded : Icons.star_border_rounded,
-                    size: 22),
-                  label: Text(widget.news.isSaved(post) ? 'ذخیره شد' : 'ذخیره',
-                    style: const TextStyle(fontSize: 12)),
+                    foregroundColor: widget.news.isForwardedToTelegram(post)
+                        ? colors.primary : colors.onSurface),
+                  icon: Icon(widget.news.isForwardedToTelegram(post)
+                      ? Icons.star_rounded : Icons.star_border_rounded, size: 22),
+                  label: Text(widget.news.isForwardedToTelegram(post)
+                      ? 'در تلگرام ذخیره شد'
+                      : widget.news.isForwardingToTelegram(post)
+                          ? 'در حال ارسال…' : 'ذخیره در تلگرام',
+                    style: const TextStyle(fontSize: 11)),
                 )),
                 if (post.mediaFileId != null || post.photoId != null) ...[
                   VerticalDivider(width: 1, indent: 10, endIndent: 10,
@@ -935,65 +942,6 @@ class _TdHomeState extends State<TdHome> {
     );
   }
 
-  Widget savedScreen() {
-    final colors = Theme.of(context).colorScheme;
-    final savedPosts = widget.news.savedFeed;
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: savedPosts.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const SizedBox(height: 8),
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  color: const Color(0xffffedc3),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(Icons.star_rounded, color: Color(0xffbd8313), size: 25),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ذخیره‌شده‌ها',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800)),
-                  Text('${savedPosts.length} خبر نشان‌دار',
-                    style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-                ],
-              )),
-            ]),
-            const SizedBox(height: 18),
-            if (savedPosts.isEmpty)
-              surfacePanel(child: Column(children: [
-                Icon(Icons.star_border_rounded, size: 49, color: colors.primary),
-                const SizedBox(height: 10),
-                const Text('هنوز خبری ذخیره نشده است',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                const SizedBox(height: 7),
-                Text('ستاره کنار هر خبر را لمس کنید تا اینجا نمایش داده شود.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => setState(() { selectedTab = 0; }),
-                  child: const Text('رفتن به خبرها'),
-                ),
-              ])),
-          ]);
-        }
-        final post = savedPosts[index - 1];
-        return KeyedSubtree(
-          key: ValueKey('saved-' + post.key),
-          child: postCard(post),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: widget.news,
@@ -1033,7 +981,8 @@ class _TdHomeState extends State<TdHome> {
                     : selectedTab == 0
                         ? newsScreen(filtered)
                         : selectedTab == 1
-                            ? savedScreen()
+                            ? TelegramSavedMessagesPage(
+                                news: widget.news, embedded: true)
                             : settingsScreen(),
               )),
             ),
@@ -1063,9 +1012,9 @@ class _TdHomeState extends State<TdHome> {
                         label: 'خبرها',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.bookmark_border_rounded),
-                        selectedIcon: Icon(Icons.bookmark_rounded),
-                        label: 'ذخیره‌شده‌ها',
+                        icon: Icon(Icons.forum_outlined),
+                        selectedIcon: Icon(Icons.forum_rounded),
+                        label: 'پیام‌های من',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
@@ -1189,11 +1138,30 @@ class NewsArticlePage extends StatelessWidget {
             child: AnimatedBuilder(
               animation: news,
               builder: (context, _) => OutlinedButton.icon(
-                onPressed: () => unawaited(news.toggleSaved(post)),
-                icon: Icon(news.isSaved(post)
+                onPressed: news.isForwardedToTelegram(post) ||
+                        news.isForwardingToTelegram(post)
+                    ? null : () async {
+                      try {
+                        await news.forwardNewsToTelegramSaved(post);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(news.isForwardedToTelegram(post)
+                              ? 'خبر در Saved Messages تلگرام ذخیره شد.'
+                              : 'خبر در صف ارسال به تلگرام قرار گرفت.')));
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('ذخیره خبر در تلگرام ممکن نشد.')));
+                        }
+                      }
+                    },
+                icon: Icon(news.isForwardedToTelegram(post)
                     ? Icons.star_rounded : Icons.star_border_rounded),
-                label: Text(news.isSaved(post)
-                    ? 'خبر در ذخیره‌شده‌ها قرار دارد' : 'ذخیره این خبر'),
+                label: Text(news.isForwardedToTelegram(post)
+                    ? 'خبر در تلگرام ذخیره شد'
+                    : news.isForwardingToTelegram(post)
+                        ? 'در حال ارسال خبر…' : 'ذخیره خبر در تلگرام'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
               ),
