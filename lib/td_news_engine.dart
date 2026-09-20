@@ -307,8 +307,10 @@ class TdNewsController extends ChangeNotifier {
     // Does not leave the channel in the user's Telegram account.
   }
 
-  Future<void> persist() => prefs.setStringList('td_channels',
-      sources.values.map((v) => jsonEncode(v.toJson())).toList());
+  Future<void> persist() async {
+    await prefs.setStringList('td_channels',
+        sources.values.map((v) => jsonEncode(v.toJson())).toList());
+  }
 
   Future<void> refresh() async {
     if (state != 'authorizationStateReady') return;
