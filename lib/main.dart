@@ -71,6 +71,12 @@ class _NewsAppState extends ConsumerState<NewsApp> {
     ThemeData theme(Brightness brightness) => ThemeData(
           useMaterial3: true,
           fontFamily: 'CustomFont',
+          textTheme: const TextTheme(
+            headlineSmall: TextStyle(
+                fontFamily: 'Rooznameh', fontFamilyFallback: ['CustomFont']),
+            titleMedium: TextStyle(
+                fontFamily: 'Rooznameh', fontFamilyFallback: ['CustomFont']),
+          ),
           brightness: brightness,
           colorScheme:
               ColorScheme.fromSeed(seedColor: brand, brightness: brightness),
@@ -359,7 +365,10 @@ class Header extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(appTitle,
                     style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.bold))
+                        fontSize: 26,
+                        fontFamily: 'Rooznameh',
+                        fontFamilyFallback: ['CustomFont'],
+                        fontWeight: FontWeight.normal))
               ])),
               IconButton(
                   tooltip: 'تنظیمات',
@@ -453,7 +462,7 @@ class NewsCard extends StatelessWidget {
                                           .textTheme
                                           .titleMedium
                                           ?.copyWith(
-                                              fontWeight: FontWeight.bold,
+                                              fontWeight: FontWeight.normal,
                                               height: 1.7)),
                                   const SizedBox(height: 8),
                                   Text(post.text,
@@ -565,7 +574,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                               .textTheme
                               .headlineSmall
                               ?.copyWith(
-                                  fontWeight: FontWeight.bold, height: 1.6)),
+                                  fontWeight: FontWeight.normal, height: 1.6)),
                       const SizedBox(height: 12),
                       Text(persianDate(post.date, weekday: true),
                           style: const TextStyle(color: brand)),

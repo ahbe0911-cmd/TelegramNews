@@ -1,7 +1,7 @@
 name: telegram_news
 description: Persian Telegram channel news reader
 publish_to: none
-version: 1.0.0+1
+version: 1.1.0+2
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -36,3 +36,7 @@ flutter:
           weight: 700
         - asset: assets/fonts/CustomFont-Light.ttf
           weight: 300
+    - family: Rooznameh
+      fonts:
+        - asset: assets/fonts/Rooznameh.ttf
+          weight: 400

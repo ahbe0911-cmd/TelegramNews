@@ -2,7 +2,9 @@
 
 اپلیکیشن اندروید Flutter با رابط فارسی RTL، Riverpod و Material 3. این بسته **سورس پروژه** است؛ APK ساخته‌شده یا سرویس Firebase مستقرشده نیست.
 
-## کانال انتخاب‌شده
+## ربات و کانال انتخاب‌شده
+
+ربات معرفی‌شده توسط مالک: [@Ahbe1400_bot](https://t.me/Ahbe1400_bot). عضویت مدیریتی ربات، Secret Manager و راه‌اندازی Firebase هنوز باید تکمیل شوند. نام کاربری ربات جایگزین توکن نیست و توکن نباید در مخزن قرار بگیرد.
 
 کانال هدف [@ahbe1400](https://t.me/ahbe1400) است و لینک آن در تنظیمات برنامه نمایش داده می‌شود. این تنظیم به‌تنهایی اخبار زنده را فعال نمی‌کند؛ ربات، Firebase و وب‌هوک باید طبق مراحل زیر متصل شوند.
 
@@ -14,27 +16,20 @@
 - نمایش متن فارسی و فرمت‌های Bold/Italic/لینک، انتخاب و کپی متن، اشتراک‌گذاری و بازکردن پست در تلگرام.
 - Firebase Cloud Functions: وب‌هوک امن Telegram، ذخیره Firestore، ذخیره تصویر خصوصی در Storage و API عمومی فقط‌خواندنی.
 - FCM با payload داده‌ای؛ نمایش محلی با تصویر و صدای اختصاصی، بازکردن مستقیم خبر از اعلان حتی در شروع سرد، تنظیم روشن/خاموش، مهم و ساعات بی‌صدا.
-- فونت واقعی موقت DejaVu Sans با پوشش فارسی و مجوز همراه؛ فایل صفر بایتی یا فونت نامعتبر استفاده نشده است.
-- دو مسیر GitHub Actions برای APKهای arm64-v8a، armeabi-v7a و x86_64.
+- فونت‌های ارسالی Vazirmatn و A Rooznameh با پوشش فارسی.
+- یک خروجی GitHub Actions برای گوشی A54 با معماری arm64-v8a.
 
-## تصمیم سازگاری اندروید
+## خروجی اختصاصی Samsung Galaxy A54
 
-| مسیر | Flutter | Android | کاربرد |
-| --- | --- | --- | --- |
-| modern | جدیدترین stable در زمان اجرای Actions | API 24 به بالا | مسیر اصلی |
-| legacy | 3.24.0 | API 21 به بالا | حفظ درخواست Android 5 |
+طبق درخواست مالک، GitHub Actions فقط یک APK با معماری `arm64-v8a` و Flutter stable تولید می‌کند. دیگر خروجی‌های Android 5، ARM32 و شبیه‌ساز در Actions ساخته نمی‌شوند. فایل نصب `TelegramNews-A54.apk` داخل artifact با نام `TelegramNews-A54` است. این خروجی برای A54 مناسب است، ولی عمداً نصب روی دیگر گوشی‌های سازگار arm64 را مسدود نمی‌کند.
 
-Flutter جدید با API 21 سازگار نیست؛ بنابراین یک APK واحد با هر دو شرط تولید نمی‌شود. مسیر قدیمی از Firebase Core 2.32.0، Messaging 14.9.4 و Notifications 17.2.4 استفاده می‌کند. مسیر جدید از Core 4.x، Messaging 16.x و Notifications 19.5.0 استفاده می‌کند. این نسخه‌های وابستگی برای حفظ API کد انتخاب شده‌اند، نه به ادعای آخرین‌بودن همه پکیج‌ها. رفع وابستگی‌ها و سازگاری نهایی باید در CI تأیید شود. برای خروجی تکرارپذیر، پس از بیلد موفق `pubspec.lock` را از artifact بردارید و نسخه Flutter مسیر modern را نیز ثابت کنید.
+در تب **Actions → Build A54 APK** آخرین اجرای موفق را باز کنید و artifact را دانلود کنید. فایل ZIP فقط یک APK دارد. شماره بیلد با هر اجرای workflow افزایش پیدا می‌کند.
 
-## ساخت APK در GitHub — بدون Firebase هم ممکن است
+فونت **Vazirmatn** ارسالی برای متن‌ها، ساعت، تاریخ، دکمه‌ها و تنظیمات استفاده می‌شود؛ فونت **A Rooznameh** برای عنوان برنامه و تیتر خبرها استفاده می‌شود. وزن‌های Regular، Bold و Light وزیرمتن واقعی هستند. مجوز و اطلاعات همراه فونت‌ها در `assets/fonts` قرار دارند.
 
-۱. محتویات پوشه پروژه را در ریشه مخزن قرار دهید، به‌طوری که `pubspec.yaml` و `.github/workflows/build-apk.yml` در ریشه باشند. **پوشه مخفی `.github` را حتماً آپلود کنید.**
-۲. شاخه `main` را push کنید، یا در تب **Actions → Build APK → Run workflow** اجرا کنید.
-۳. پس از سبزشدن اجرا، از بخش **Artifacts** فایل `release-apk-modern` یا `release-apk-legacy` را دانلود و ZIP آن را باز کنید.
-۴. برای اغلب گوشی‌های جدید، `app-arm64-v8a-release.apk` مناسب است. برای Android 5 نسخه legacy و معماری مناسب گوشی را انتخاب کنید.
-۵. بدون تنظیمات سرویس، برنامه با برچسب «حالت نمایشی» و خبرهای نمونه باز می‌شود. هیچ خبر نمونه‌ای به‌عنوان خبر واقعی معرفی نمی‌شود.
+بدون اتصال Firebase، برنامه همچنان با برچسب حالت نمایشی اجرا می‌شود؛ تغییر فونت یا انتخاب کانال به‌تنهایی پست‌های واقعی را فعال نمی‌کند.
 
-پوشه Android توسط `scripts/prepare_android.py` از Flutter همان مسیر ساخته می‌شود. این کار Gradle Wrapper، Activity، آیکون لانچر و سایر فایل‌های میزبان را تولید می‌کند؛ پروژه به Wrapper جعلی متکی نیست. تنظیمات سفارشی Manifest، minSdk، desugaring، صدا و آیکون اعلان سپس اعمال می‌شوند. نماد مرکزی فعلاً Iconsax و آیکون لانچر پیش‌فرض Flutter است؛ لوگوی اختصاصی برند در این بسته طراحی نشده است.
+پوشه Android توسط `scripts/prepare_android.py --profile modern` تولید می‌شود. فایل پروفایل legacy برای مرجع در سورس باقی مانده، اما در CI اجرا نمی‌شود.
 
 ## امضای APK
 
@@ -140,7 +135,7 @@ assets/fonts/CustomFont-Bold.ttf     Bold 700
 assets/fonts/CustomFont-Light.ttf    Light 300
 ```
 
-نام خانواده در `pubspec.yaml` و Theme برابر `CustomFont` است. فعلاً Light از همان فونت Regular استفاده می‌کند؛ وزن Light واقعی را بعداً جایگزین کنید. برای فایل OTF پسوند و مسیر را در pubspec نیز تغییر دهید. مجوز DejaVu موقت در همین پوشه موجود است.
+نام خانواده وزیرمتن در `pubspec.yaml` و Theme برابر `CustomFont` است و هر سه وزن واقعی از فایل ارسالی استفاده می‌کنند. خانواده تیترها `Rooznameh` است. برای فایل OTF پسوند و مسیر را در pubspec نیز تغییر دهید.
 
 ## اجرای محلی
 
@@ -153,7 +148,7 @@ flutter pub get
 flutter analyze --no-fatal-infos
 flutter test
 flutter run --dart-define-from-file=config.json
-flutter build apk --release --split-per-abi --dart-define-from-file=config.json
+flutter build apk --release --target-platform android-arm64 --dart-define-from-file=config.json
 ```
 
 اسکریپت configure_build تنظیمات را از متغیرهای محیطی هم‌نام CI می‌گیرد؛ در نبود آن‌ها حالت نمایشی ایجاد می‌کند. برای کار محلی می‌توانید config.json را بر اساس config.example.json ویرایش کنید. اگر Firebase را دستی متصل می‌کنید google-services plugin نیز باید توسط همین اسکریپت اعمال شود. برای تغییر پروفایل از یک کپی تازه پروژه استفاده کنید؛ اسکریپت عمداً Android موجود را بازنویسی نمی‌کند.
