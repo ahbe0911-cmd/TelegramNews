@@ -670,8 +670,13 @@ class _TdHomeState extends State<TdHome> {
             Image.file(
               File(post.photoPath!), height: 192, width: double.infinity,
               fit: BoxFit.cover,
+              filterQuality: FilterQuality.low,
               errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
+            )
+          else if (post.mediaKind == 'photo' && hasPreview)
+            Image.memory(post.previewBytes!, height: 192, width: double.infinity,
+              fit: BoxFit.cover, filterQuality: FilterQuality.low,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
           Padding(
             padding: const EdgeInsets.fromLTRB(17, 17, 17, 18),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
