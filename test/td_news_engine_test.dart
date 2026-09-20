@@ -1,8 +1,30 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/td_news_engine.dart';
+import 'package:telegram_news/td_mtproto_proxy.dart';
 
 void main() {
+  test('MTProto deep links parse without accepting SOCKS or bad secrets', () {
+    const secret = '0123456789abcdef0123456789abcdef';
+    final one = parseMtprotoProxyLink(
+        'tg://proxy?server=proxy.example.org&port=443&secret=$secret');
+    expect(one.server, 'proxy.example.org');
+    expect(one.port, 443);
+    expect(one.secret, secret);
+    final two = parseMtprotoProxyLink(
+        'https://t.me/proxy?server=1.2.3.4&port=8443&secret=dd$secret');
+    expect(two.server, '1.2.3.4');
+    expect(two.port, 8443);
+    expect(two.secret, 'dd$secret');
+    expect(() => parseMtprotoProxyLink('tg://socks?server=x&port=80'),
+        throwsFormatException);
+    expect(() => parseMtprotoProxyLink(
+        'tg://proxy?server=host&port=0&secret=$secret'), throwsFormatException);
+    expect(() => parseMtprotoProxyLink(
+        'tg://proxy?server=host&port=443&secret=bad'), throwsFormatException);
+  });
+
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('public channel links are normalized without accepting invites', () {

@@ -5,15 +5,13 @@ on:
     branches: [main]
     paths:
       - 'lib/td_news_*.dart'
+      - 'lib/td_mtproto_proxy.dart'
       - 'lib/td_media_viewer.dart'
       - 'lib/td_inline_video.dart'
       - 'lib/td_clock_card.dart'
       - 'lib/td_downloads.dart'
       - 'pubspec.yaml'
       - 'scripts/prepare_android.py'
-      - 'scripts/embed_ws_proxy.py'
-      - 'native/EmbeddedProxyManager.kt'
-      - 'lib/td_embedded_proxy.dart'
       - 'scripts/configure_variant.py'
       - 'scripts/build_tdlib_a54.sh'
       - 'scripts/verify_apk_variant.py'
@@ -73,17 +71,8 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Checkout pinned MIT-licensed TG WS Proxy engine
-        uses: actions/checkout@v4
-        with:
-          repository: crim50n/tg-ws-proxy-android
-          ref: ee7669947090dd55da0f20663bc7a2abd3c5288e
-          path: third_party/tgwsproxy_src
-          persist-credentials: false
       - name: Prepare A54 Android host
         run: python3 scripts/prepare_android.py --profile modern
-      - name: Embed local-only proxy engine in Android host
-        run: python3 scripts/embed_ws_proxy.py
       - name: Configure independent app ID, label and launcher icon
         run: python3 scripts/configure_variant.py ${{ matrix.variant }}
       - name: Restore dependencies

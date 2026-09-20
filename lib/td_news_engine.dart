@@ -6,7 +6,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tdlib/tdlib.dart';
-import 'td_embedded_proxy.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'td_mtproto_proxy.dart';
 
 /// The blocking TDLib receive loop runs away from Flutter's UI isolate.
 Future<void> tdWorker(SendPort output) async {
@@ -168,9 +169,14 @@ class TdNewsController extends ChangeNotifier {
   int apiId = 0;
   String apiHash = '';
   String dbDirectory = '';
-  bool get embeddedProxyEnabled => prefs.getBool('embedded_proxy_enabled') ?? true;
-  bool embeddedProxyActive = false;
-  String embeddedProxyStatus = 'در انتظار اتصال';
+  // Proxy links (including their secrets) live in Android secure storage.
+  static const _proxyStorageKey = 'td_manual_mtproto_proxy';
+  static const _vault = FlutterSecureStorage();
+  bool get manualProxyEnabled => prefs.getBool('td_manual_mtproto_enabled') ?? false;
+  bool manualProxyBusy = false;
+  bool manualProxyActive = false; // TDLib accepted it; reachability is separate.
+  bool manualProxyConnected = false;
+  String manualProxyStatus = 'لینک MTProto را وارد کنید و اتصال را بزنید.';
 
   TdNewsController(this.prefs) {
     for (final raw in prefs.getStringList('td_channels') ?? <String>[]) {
@@ -238,45 +244,94 @@ class TdNewsController extends ChangeNotifier {
   List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
     ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id)));
 
-  /// A local listener does not guarantee Telegram is reachable over the network.
-  Future<void> configureEmbeddedProxy() async {
-    if (!embeddedProxyEnabled) {
-      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
-      try { await EmbeddedTelegramProxy.stop(); } catch (_) {}
-      embeddedProxyActive = false;
-      embeddedProxyStatus = 'غیرفعال؛ اتصال مستقیم';
-      changed();
-      return;
-    }
-    embeddedProxyStatus = 'در حال فعال‌سازی پروکسی داخلی…';
-    changed();
-    try {
-      final proxy = await EmbeddedTelegramProxy.start();
-      await bridge.request({
-        '@type': 'addProxy',
-        'server': proxy.host,
-        'port': proxy.port,
-        'enable': true,
-        'type': {'@type': 'proxyTypeMtproto', 'secret': proxy.secret},
-      });
-      embeddedProxyActive = true;
-      embeddedProxyStatus = 'پروکسی محلی فعال است؛ اتصال تلگرام در حال بررسی';
-    } catch (_) {
-      embeddedProxyActive = false;
-      embeddedProxyStatus = 'راه‌اندازی پروکسی داخلی ناموفق بود؛ اتصال مستقیم فعال است. برای تلاش دوباره کلید را خاموش و روشن کنید.';
-      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
-      try { await EmbeddedTelegramProxy.stop(); } catch (_) {}
-    }
+  Future<void> _applyManualProxy(MtprotoProxyConfig proxy) async {
+    await bridge.request({
+      '@type': 'addProxy',
+      'server': proxy.server,
+      'port': proxy.port,
+      'enable': true,
+      'type': {'@type': 'proxyTypeMtproto', 'secret': proxy.secret},
+    });
+    manualProxyActive = true;
+    manualProxyConnected = false;
+    manualProxyStatus = 'پروکسی انتخاب شد؛ در حال بررسی اتصال تلگرام…';
     changed();
   }
 
-  Future<void> setEmbeddedProxyEnabled(bool enabled) async {
-    await prefs.setBool('embedded_proxy_enabled', enabled);
-    if (bridge.sender != null) {
-      await configureEmbeddedProxy();
-    } else {
-      embeddedProxyActive = false;
-      embeddedProxyStatus = enabled ? 'با ورود به برنامه فعال می‌شود' : 'غیرفعال؛ اتصال مستقیم';
+  /// Save before starting TDLib so the proxy is available on the login screen.
+  /// Adding a proxy in TDLib does NOT establish that the remote server works.
+  Future<void> connectManualProxy(String link) async {
+    final proxy = parseMtprotoProxyLink(link);
+    if (manualProxyBusy) return;
+    manualProxyBusy = true;
+    changed();
+    try {
+      await _vault.write(key: _proxyStorageKey, value: link.trim());
+      await prefs.setBool('td_manual_mtproto_enabled', true);
+      if (bridge.sender == null || state == 'setup' || state == 'failed') {
+        manualProxyStatus = 'لینک ذخیره شد؛ هنگام راه‌اندازی تلگرام فعال می‌شود.';
+      } else {
+        if (parametersSetup != null) await parametersSetup;
+        await _applyManualProxy(proxy);
+      }
+    } catch (_) {
+      manualProxyActive = false;
+      manualProxyConnected = false;
+      manualProxyStatus = 'ثبت یا فعال‌سازی پروکسی ناموفق بود؛ دوباره تلاش کنید.';
+      rethrow;
+    } finally {
+      manualProxyBusy = false;
+      changed();
+    }
+  }
+
+  Future<void> disconnectManualProxy() async {
+    if (manualProxyBusy) return;
+    manualProxyBusy = true;
+    changed();
+    try {
+      if (bridge.sender != null) {
+        await bridge.request({'@type': 'disableProxy'});
+      }
+      await prefs.setBool('td_manual_mtproto_enabled', false);
+      await _vault.delete(key: _proxyStorageKey);
+      manualProxyActive = false;
+      manualProxyConnected = false;
+      manualProxyStatus = 'پروکسی غیرفعال شد؛ اتصال مستقیم.';
+    } catch (_) {
+      manualProxyStatus = 'قطع پروکسی انجام نشد؛ دوباره تلاش کنید.';
+      rethrow;
+    } finally {
+      manualProxyBusy = false;
+      changed();
+    }
+  }
+
+  Future<void> restoreManualProxy() async {
+    // A previously selected TDLib proxy may survive an app restart.
+    if (!manualProxyEnabled) {
+      await bridge.request({'@type': 'disableProxy'});
+      manualProxyActive = false;
+      manualProxyConnected = false;
+      manualProxyStatus = 'اتصال مستقیم؛ برای فعال‌سازی لینک MTProto وارد کنید.';
+      changed();
+      return;
+    }
+    try {
+      final link = await _vault.read(key: _proxyStorageKey);
+      if (link == null || link.isEmpty) {
+        manualProxyStatus = 'لینک ذخیره‌شده پیدا نشد؛ لینک MTProto جدید وارد کنید.';
+        await bridge.request({'@type': 'disableProxy'});
+        await prefs.setBool('td_manual_mtproto_enabled', false);
+        changed();
+        return;
+      }
+      await _applyManualProxy(parseMtprotoProxyLink(link));
+    } catch (_) {
+      manualProxyActive = false;
+      manualProxyConnected = false;
+      manualProxyStatus = 'فعال‌سازی لینک قبلی ناموفق بود؛ لینک جدید وارد کنید.';
+      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
       changed();
     }
   }
@@ -296,7 +351,7 @@ class TdNewsController extends ChangeNotifier {
       // TDLib rejects proxy commands while its database/API parameters are
       // still being initialized. Do not stop the local relay prematurely.
       if (parametersSetup != null) await parametersSetup;
-      await configureEmbeddedProxy();
+      await restoreManualProxy();
     } catch (_) {
       state = 'failed';
       status = 'راه‌اندازی TDLib ناموفق بود؛ تنظیمات یا کتابخانه بومی را بررسی کنید.';
@@ -336,6 +391,18 @@ class TdNewsController extends ChangeNotifier {
           final file = Map<String, dynamic>.from(event['file'] as Map);
           updatePhoto(file);
           completeAttachment(file);
+        }
+      case 'updateConnectionState':
+        if (manualProxyEnabled && manualProxyActive) {
+          final connection = event['state'];
+          final connectionType = connection is Map ? connection['@type'] : null;
+          manualProxyConnected = connectionType == 'connectionStateReady';
+          manualProxyStatus = manualProxyConnected
+              ? 'تلگرام از طریق پروکسی متصل شد.'
+              : connectionType == 'connectionStateWaitingForNetwork'
+                  ? 'شبکه در دسترس نیست؛ اتصال پروکسی برقرار نشد.'
+                  : 'پروکسی انتخاب شده؛ در انتظار اتصال تلگرام…';
+          changed();
         }
       case 'engineFailure':
         state = 'failed';
