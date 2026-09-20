@@ -502,13 +502,13 @@ class _TdHomeState extends State<TdHome> {
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: colors.outlineVariant.withValues(alpha: .46)),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: .38)),
         boxShadow: [
           BoxShadow(
-            color: colors.shadow.withValues(alpha: .035),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
+            color: colors.shadow.withValues(alpha: .055),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -621,36 +621,56 @@ class _TdHomeState extends State<TdHome> {
             )
           else if (post.mediaKind == 'video')
             SizedBox(
-              height: 192,
+              height: 205,
               width: double.infinity,
               child: Stack(fit: StackFit.expand, children: [
                 if (hasPhoto)
                   Image.file(
                     File(post.photoPath!), fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    filterQuality: FilterQuality.low,
+                    errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff14283b)),
                   )
                 else if (hasPreview)
                   Image.memory(
                     post.previewBytes!, fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => ColoredBox(
-                      color: colors.primaryContainer.withValues(alpha: .45)),
+                    gaplessPlayback: true, filterQuality: FilterQuality.low,
+                    errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff14283b)),
                   )
                 else
-                  ColoredBox(color: colors.primaryContainer.withValues(alpha: .45)),
-                Center(child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: Color(0xbf000000), shape: BoxShape.circle),
-                  child: const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Icon(Icons.play_arrow_rounded,
-                      size: 36, color: Colors.white),
+                  const ColoredBox(color: Color(0xff14283b)),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                      colors: [Color(0x16000000), Color(0xa6000000)],
+                    ),
                   ),
+                ),
+                Center(child: Container(
+                  width: 66, height: 66,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .94),
+                    shape: BoxShape.circle,
+                    boxShadow: const [BoxShadow(
+                      color: Color(0x45000000), blurRadius: 18, offset: Offset(0, 6))],
+                  ),
+                  child: Icon(Icons.play_arrow_rounded,
+                    size: 40, color: colors.primary),
                 )),
-                const Positioned(
-                  right: 12, bottom: 11,
-                  child: Text('ویدئو', style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                Positioned(
+                  right: 13, bottom: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xc7000000),
+                      borderRadius: BorderRadius.circular(20)),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 16),
+                      SizedBox(width: 5),
+                      Text('پخش در همین صفحه', style: TextStyle(
+                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
                 ),
               ]),
             )
@@ -725,11 +745,18 @@ class _TdHomeState extends State<TdHome> {
                   savingPosts.contains(post.key)
                       ? const SizedBox(width: 22, height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                          key: ValueKey('download-' + post.key),
-                          tooltip: 'دانلود و ذخیره در گوشی',
-                          onPressed: () => savePost(post),
-                          icon: Icon(Icons.download_rounded, color: colors.primary),
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: colors.primaryContainer.withValues(alpha: .72),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            key: ValueKey('download-' + post.key),
+                            tooltip: 'دانلود و ذخیره در گوشی',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => savePost(post),
+                            icon: Icon(Icons.download_rounded, color: colors.onPrimaryContainer),
+                          ),
                         ),
                 Icon(Icons.open_in_new_rounded, size: 15, color: colors.onSurfaceVariant),
               ]),
