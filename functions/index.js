@@ -11,7 +11,7 @@ initializeApp();
 const db = getFirestore();
 const BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const WEBHOOK_SECRET = defineSecret('TELEGRAM_WEBHOOK_SECRET');
-const CHANNEL_ID = defineString('TELEGRAM_CHANNEL_ID');
+const CHANNEL_ID = defineString('TELEGRAM_CHANNEL_ID', {default:'@ahbe1400'});
 const API_BASE = defineString('PUBLIC_API_BASE_URL');
 const region = 'europe-west1';
 const posts = () => db.collection('posts');
@@ -42,7 +42,16 @@ exports.telegramWebhook = onRequest({region, secrets:[BOT_TOKEN, WEBHOOK_SECRET]
   if (req.method !== 'POST') return res.status(405).end();
   if (!authorized(req.get('X-Telegram-Bot-Api-Secret-Token'), WEBHOOK_SECRET.value())) return res.status(403).end();
   try {
-    const post = normalize(req.body, CHANNEL_ID.value());
+    if (!req.body?.channel_post && !req.body?.edited_channel_post) return res.status(200).send('ignored');
+    // Resolve a public username through Telegram; authorization still compares numeric IDs.
+    const configured = CHANNEL_ID.value();
+    let channelId = configured;
+    if (configured.startsWith('@')) {
+      const channel = await telegram('getChat', {chat_id:configured});
+      if (channel.type !== 'channel') throw new Error('Configured source is not a channel');
+      channelId = channel.id;
+    }
+    const post = normalize(req.body, channelId);
     if (!post) return res.status(200).send('ignored');
     const ref = posts().doc(post.id);
     const existing = await ref.get();

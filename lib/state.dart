@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 
+const channelUsername = 'ahbe1400';
+const channelUrl = 'https://t.me/$channelUsername';
 const apiBase = String.fromEnvironment('API_BASE_URL');
 const firebaseEnabled = bool.fromEnvironment('FIREBASE_ENABLED');
 const appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'نبض خبر');

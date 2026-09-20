@@ -628,6 +628,19 @@ class SettingsScreen extends ConsumerWidget {
         appBar: AppBar(title: const Text('تنظیمات')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           ListTile(
+              leading: const Icon(Iconsax.send_2, color: brand),
+              title: const Text('کانال اخبار'),
+              subtitle: const Text('@$channelUsername'),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () async {
+                final opened = await openExternal(channelUrl);
+                if (!opened && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('باز کردن کانال ممکن نشد')),
+                  );
+                }
+              }),
+          ListTile(
               leading: const Icon(Iconsax.notification, color: brand),
               title: const Text('وضعیت اتصال'),
               subtitle: Text(ref.watch(pushStatusProvider))),
