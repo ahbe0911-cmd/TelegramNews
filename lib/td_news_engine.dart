@@ -226,6 +226,7 @@ class TdNewsController extends ChangeNotifier {
           for (final id in event['message_ids'] as List) {
             posts.remove(event['chat_id'].toString() + ':' + id.toString());
           }
+          _sortedFeed = null;
           changed();
         }
       case 'updateFile':
@@ -331,6 +332,7 @@ class TdNewsController extends ChangeNotifier {
   Future<void> removeChannel(int id) async {
     sources.remove(id);
     posts.removeWhere((_, value) => value.chatId == id);
+    _sortedFeed = null;
     await persist();
     changed();
     // Does not leave the channel in the user's Telegram account.
@@ -355,8 +357,10 @@ class TdNewsController extends ChangeNotifier {
       });
       if (response['messages'] is List) {
         for (final m in response['messages'] as List) {
-          if (m is Map) record(Map<String, dynamic>.from(m));
+          if (m is Map) record(Map<String, dynamic>.from(m), notify: false);
         }
+        _sortedFeed = null;
+        changed();
       }
     } catch (_) {
       status = 'دریافت تاریخچه یکی از کانال‌ها موفق نبود؛ دوباره تلاش کنید.';
@@ -384,7 +388,7 @@ class TdNewsController extends ChangeNotifier {
     return 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
   }
 
-  void record(Map<String, dynamic> message) {
+  void record(Map<String, dynamic> message, {bool notify = true}) {
     final chatId = message['chat_id'];
     final messageId = message['id'];
     if (chatId is! int || messageId is! int || !sources.containsKey(chatId) ||
@@ -480,11 +484,17 @@ class TdNewsController extends ChangeNotifier {
         mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
         fileName: fileName,
         previewBytes: previewBytes ?? prior?.previewBytes);
-    changed();
-    if (fileId != null && prior?.photoPath == null) {
-      photoTargets.putIfAbsent(fileId, () => <String>{}).add(key);
-      unawaited(downloadPhoto(fileId));
-    }
+    _sortedFeed = null;
+    if (notify) changed();
+    // Thumbnails are requested by visible cards only, never for an entire
+    // channel history. This prevents network storms when channels are added.
+  }
+
+  void requestThumbnail(NewsPost post) {
+    final id = post.photoId;
+    if (id == null || post.photoPath != null) return;
+    photoTargets.putIfAbsent(id, () => <String>{}).add(post.key);
+    if (_thumbnailStarted.add(id)) unawaited(downloadPhoto(id));
   }
 
   /// Downloads an attachment only when the reader opens it. The TDLib file
