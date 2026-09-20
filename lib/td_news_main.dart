@@ -250,7 +250,7 @@ class _TdHomeState extends State<TdHome> {
           minLines: 1, maxLines: 3,
           autocorrect: false,
           enableSuggestions: false,
-          decoration: decoratedInput('لینک vless:// یا trojan:// یا JSON کامل Xray',
+          decoration: decoratedInput('لینک vmess://، vless://، trojan:// یا JSON Xray',
               icon: Icons.link_rounded)),
         const SizedBox(height: 11),
         Row(children: [
