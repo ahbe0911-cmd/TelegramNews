@@ -276,6 +276,10 @@ class TdNewsController extends ChangeNotifier {
         changed();
       }
     } else if (state == 'authorizationStateReady') {
+      // Render TDLib's on-device cache before waiting for a remote round trip.
+      for (final source in sources.values) {
+        unawaited(loadHistory(source.id, limit: 12, onlyLocal: true));
+      }
       unawaited(refresh());
     }
   }
@@ -349,11 +353,11 @@ class TdNewsController extends ChangeNotifier {
     await Future.wait(sources.values.map((source) => loadHistory(source.id, limit: 25)));
   }
 
-  Future<void> loadHistory(int id, {int limit = 25}) async {
+  Future<void> loadHistory(int id, {int limit = 25, bool onlyLocal = false}) async {
     try {
       final response = await bridge.request({
         '@type': 'getChatHistory', 'chat_id': id, 'from_message_id': 0,
-        'offset': 0, 'limit': limit, 'only_local': false,
+        'offset': 0, 'limit': limit, 'only_local': onlyLocal,
       });
       if (response['messages'] is List) {
         for (final m in response['messages'] as List) {
@@ -506,7 +510,8 @@ class TdNewsController extends ChangeNotifier {
     final key = chatId.toString() + ':' + messageId.toString();
     final prior = posts[key];
     posts[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
-        source.title, source.username, messageText(content), fileId, prior?.photoPath,
+        source.title, source.username, messageText(content), fileId,
+        prior?.photoId == fileId ? prior?.photoPath : null,
         mediaKind: mediaKind,
         mediaFileId: mediaFileId,
         mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
