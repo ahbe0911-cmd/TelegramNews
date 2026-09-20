@@ -36,11 +36,11 @@ void main() {
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('حالت تاریک'), findsOneWidget);
-    expect(find.byKey(const ValueKey('embedded-proxy-toggle')), findsNothing);
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('mtproto-proxy-link')),
+    expect(find.byKey(const ValueKey('mtproto-connect')), findsNothing);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('telegram-saved-messages')),
         180, scrollable: find.byType(Scrollable).first);
-    expect(find.text('پروکسی MTProto'), findsOneWidget);
-    expect(find.byKey(const ValueKey('mtproto-connect')), findsOneWidget);
+    expect(find.text('پیام‌های ذخیره‌شده تلگرام'), findsOneWidget);
 
     await tester.tap(find.text('خبرها'));
     await tester.pumpAndSettle();

@@ -6,8 +6,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tdlib/tdlib.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'td_mtproto_proxy.dart';
 
 /// The blocking TDLib receive loop runs away from Flutter's UI isolate.
 Future<void> tdWorker(SendPort output) async {
@@ -169,14 +167,16 @@ class TdNewsController extends ChangeNotifier {
   int apiId = 0;
   String apiHash = '';
   String dbDirectory = '';
-  // Proxy links (including their secrets) live in Android secure storage.
-  static const _proxyStorageKey = 'td_manual_mtproto_proxy';
-  static const _vault = FlutterSecureStorage();
-  bool get manualProxyEnabled => prefs.getBool('td_manual_mtproto_enabled') ?? false;
-  bool manualProxyBusy = false;
-  bool manualProxyActive = false; // TDLib accepted it; reachability is separate.
-  bool manualProxyConnected = false;
-  String manualProxyStatus = 'لینک MTProto را وارد کنید و اتصال را بزنید.';
+  /// Messages in the current Telegram account's Saved Messages chat.
+  /// Separate from the news bookmarks, and never inserted into the news feed.
+  final telegramSavedMessages = <String, NewsPost>{};
+  int? telegramSavedChatId;
+  bool telegramSavedBusy = false;
+  bool telegramSavedHasMore = true;
+  String? telegramSavedError;
+
+  List<NewsPost> get telegramSavedFeed => telegramSavedMessages.values.toList()
+    ..sort((a, b) => b.id.compareTo(a.id));
 
   TdNewsController(this.prefs) {
     for (final raw in prefs.getStringList('td_channels') ?? <String>[]) {
@@ -244,94 +244,56 @@ class TdNewsController extends ChangeNotifier {
   List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
     ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id)));
 
-  Future<void> _applyManualProxy(MtprotoProxyConfig proxy) async {
-    await bridge.request({
-      '@type': 'addProxy',
-      'server': proxy.server,
-      'port': proxy.port,
-      'enable': true,
-      'type': {'@type': 'proxyTypeMtproto', 'secret': proxy.secret},
-    });
-    manualProxyActive = true;
-    manualProxyConnected = false;
-    manualProxyStatus = 'پروکسی انتخاب شد؛ در حال بررسی اتصال تلگرام…';
-    changed();
-  }
-
-  /// Save before starting TDLib so the proxy is available on the login screen.
-  /// Adding a proxy in TDLib does NOT establish that the remote server works.
-  Future<void> connectManualProxy(String link) async {
-    final proxy = parseMtprotoProxyLink(link);
-    if (manualProxyBusy) return;
-    manualProxyBusy = true;
+  /// Opens the Telegram account's actual self-chat through TDLib.
+  /// The phone must already be signed in and able to reach Telegram.
+  Future<void> loadTelegramSavedMessages({bool older = false}) async {
+    if (state != 'authorizationStateReady') {
+      throw StateError('ابتدا وارد حساب تلگرام شوید.');
+    }
+    if (telegramSavedBusy || (older && !telegramSavedHasMore)) return;
+    telegramSavedBusy = true;
+    telegramSavedError = null;
     changed();
     try {
-      await _vault.write(key: _proxyStorageKey, value: link.trim());
-      await prefs.setBool('td_manual_mtproto_enabled', true);
-      if (bridge.sender == null || state == 'setup' || state == 'failed') {
-        manualProxyStatus = 'لینک ذخیره شد؛ هنگام راه‌اندازی تلگرام فعال می‌شود.';
-      } else {
-        if (parametersSetup != null) await parametersSetup;
-        await _applyManualProxy(proxy);
+      if (telegramSavedChatId == null) {
+        final me = await bridge.request({'@type': 'getMe'});
+        final myId = me['id'];
+        if (myId is! int || myId <= 0) {
+          throw StateError('شناسه حساب تلگرام دریافت نشد.');
+        }
+        final chat = await bridge.request({
+          '@type': 'createPrivateChat', 'user_id': myId, 'force': true,
+        });
+        final chatId = chat['id'];
+        if (chatId is! int) throw StateError('پیام‌های ذخیره‌شده در دسترس نیست.');
+        telegramSavedChatId = chatId;
       }
+      final current = telegramSavedFeed;
+      final response = await bridge.request({
+        '@type': 'getChatHistory',
+        'chat_id': telegramSavedChatId,
+        'from_message_id': older && current.isNotEmpty ? current.last.id : 0,
+        'offset': 0, 'limit': 30, 'only_local': false,
+      });
+      final messages = response['messages'];
+      if (messages is! List) {
+        throw StateError('پاسخ تاریخچه پیام‌ها معتبر نیست.');
+      }
+      final before = telegramSavedMessages.length;
+      for (final raw in messages) {
+        if (raw is Map) {
+          record(Map<String, dynamic>.from(raw),
+            fromTelegramSaved: true, notify: false);
+        }
+      }
+      telegramSavedHasMore = messages.length >= 30 &&
+          (!older || telegramSavedMessages.length > before);
+      changed();
     } catch (_) {
-      manualProxyActive = false;
-      manualProxyConnected = false;
-      manualProxyStatus = 'ثبت یا فعال‌سازی پروکسی ناموفق بود؛ دوباره تلاش کنید.';
-      rethrow;
+      telegramSavedError = 'دریافت پیام‌های ذخیره‌شده ممکن نشد؛ اتصال تلگرام را بررسی کنید و دوباره تلاش کنید.';
+      changed();
     } finally {
-      manualProxyBusy = false;
-      changed();
-    }
-  }
-
-  Future<void> disconnectManualProxy() async {
-    if (manualProxyBusy) return;
-    manualProxyBusy = true;
-    changed();
-    try {
-      if (bridge.sender != null) {
-        await bridge.request({'@type': 'disableProxy'});
-      }
-      await prefs.setBool('td_manual_mtproto_enabled', false);
-      await _vault.delete(key: _proxyStorageKey);
-      manualProxyActive = false;
-      manualProxyConnected = false;
-      manualProxyStatus = 'پروکسی غیرفعال شد؛ اتصال مستقیم.';
-    } catch (_) {
-      manualProxyStatus = 'قطع پروکسی انجام نشد؛ دوباره تلاش کنید.';
-      rethrow;
-    } finally {
-      manualProxyBusy = false;
-      changed();
-    }
-  }
-
-  Future<void> restoreManualProxy() async {
-    // A previously selected TDLib proxy may survive an app restart.
-    if (!manualProxyEnabled) {
-      await bridge.request({'@type': 'disableProxy'});
-      manualProxyActive = false;
-      manualProxyConnected = false;
-      manualProxyStatus = 'اتصال مستقیم؛ برای فعال‌سازی لینک MTProto وارد کنید.';
-      changed();
-      return;
-    }
-    try {
-      final link = await _vault.read(key: _proxyStorageKey);
-      if (link == null || link.isEmpty) {
-        manualProxyStatus = 'لینک ذخیره‌شده پیدا نشد؛ لینک MTProto جدید وارد کنید.';
-        await bridge.request({'@type': 'disableProxy'});
-        await prefs.setBool('td_manual_mtproto_enabled', false);
-        changed();
-        return;
-      }
-      await _applyManualProxy(parseMtprotoProxyLink(link));
-    } catch (_) {
-      manualProxyActive = false;
-      manualProxyConnected = false;
-      manualProxyStatus = 'فعال‌سازی لینک قبلی ناموفق بود؛ لینک جدید وارد کنید.';
-      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+      telegramSavedBusy = false;
       changed();
     }
   }
@@ -348,10 +310,10 @@ class TdNewsController extends ChangeNotifier {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
       await onAuthorization(await bridge.request({'@type': 'getAuthorizationState'}));
-      // TDLib rejects proxy commands while its database/API parameters are
-      // still being initialized. Do not stop the local relay prematurely.
+      // Remove any proxy left configured by an older application version.
+      // A direct connection should not depend on the deleted proxy settings.
       if (parametersSetup != null) await parametersSetup;
-      await restoreManualProxy();
+      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
     } catch (_) {
       state = 'failed';
       status = 'راه‌اندازی TDLib ناموفق بود؛ تنظیمات یا کتابخانه بومی را بررسی کنید.';
@@ -366,22 +328,29 @@ class TdNewsController extends ChangeNotifier {
           unawaited(onAuthorization(Map<String, dynamic>.from(event['authorization_state'] as Map)));
         }
       case 'updateNewMessage':
-        if (event['message'] is Map) record(Map<String, dynamic>.from(event['message'] as Map));
+        if (event['message'] is Map) {
+          final message = Map<String, dynamic>.from(event['message'] as Map);
+          record(message, fromTelegramSaved:
+              telegramSavedChatId != null && message['chat_id'] == telegramSavedChatId);
+        }
       case 'updateMessageContent':
         final key = event['chat_id'].toString() + ':' + event['message_id'].toString();
-        final previous = posts[key];
+        final savedMessage = telegramSavedMessages[key];
+        final previous = posts[key] ?? savedMessage;
         if (previous != null && event['new_content'] is Map) {
           record({
             'chat_id': previous.chatId,
             'id': previous.id,
             'date': previous.date,
             'content': event['new_content'],
-          });
+          }, fromTelegramSaved: savedMessage != null);
         }
       case 'updateDeleteMessages':
         if (event['is_permanent'] == true && event['message_ids'] is List) {
           for (final id in event['message_ids'] as List) {
-            posts.remove(event['chat_id'].toString() + ':' + id.toString());
+            final key = event['chat_id'].toString() + ':' + id.toString();
+            posts.remove(key);
+            telegramSavedMessages.remove(key);
           }
           _sortedFeed = null;
           changed();
@@ -391,18 +360,6 @@ class TdNewsController extends ChangeNotifier {
           final file = Map<String, dynamic>.from(event['file'] as Map);
           updatePhoto(file);
           completeAttachment(file);
-        }
-      case 'updateConnectionState':
-        if (manualProxyEnabled && manualProxyActive) {
-          final connection = event['state'];
-          final connectionType = connection is Map ? connection['@type'] : null;
-          manualProxyConnected = connectionType == 'connectionStateReady';
-          manualProxyStatus = manualProxyConnected
-              ? 'تلگرام از طریق پروکسی متصل شد.'
-              : connectionType == 'connectionStateWaitingForNetwork'
-                  ? 'شبکه در دسترس نیست؛ اتصال پروکسی برقرار نشد.'
-                  : 'پروکسی انتخاب شده؛ در انتظار اتصال تلگرام…';
-          changed();
         }
       case 'engineFailure':
         state = 'failed';
@@ -446,7 +403,6 @@ class TdNewsController extends ChangeNotifier {
         changed();
       }
     } else if (state == 'authorizationStateReady') {
-      // Keep the configured in-app proxy after authentication completes.
       // Render TDLib's on-device cache before waiting for a remote round trip.
       for (final source in sources.values) {
         unawaited(loadHistory(source.id, limit: 12, onlyLocal: true));
@@ -607,12 +563,17 @@ class TdNewsController extends ChangeNotifier {
     }
   }
 
-  void record(Map<String, dynamic> message, {bool notify = true}) {
+  void record(Map<String, dynamic> message,
+      {bool notify = true, bool fromTelegramSaved = false}) {
     final chatId = message['chat_id'];
     final messageId = message['id'];
-    if (chatId is! int || messageId is! int || !sources.containsKey(chatId) ||
+    if (chatId is! int || messageId is! int ||
+        (!fromTelegramSaved && !sources.containsKey(chatId)) ||
+        (fromTelegramSaved && chatId != telegramSavedChatId) ||
         message['content'] is! Map) return;
-    final source = sources[chatId]!;
+    final source = fromTelegramSaved
+        ? NewsSource(chatId, '', 'پیام‌های ذخیره‌شده تلگرام')
+        : sources[chatId]!;
     final content = mediaContent(Map<String, dynamic>.from(message['content'] as Map));
     int? fileId;
     int? mediaFileId;
@@ -726,8 +687,9 @@ class TdNewsController extends ChangeNotifier {
       try { previewBytes = base64Decode(encoded); } catch (_) {}
     }
     final key = chatId.toString() + ':' + messageId.toString();
-    final prior = posts[key];
-    posts[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
+    final target = fromTelegramSaved ? telegramSavedMessages : posts;
+    final prior = target[key];
+    target[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
         source.title, source.username, messageText(content), fileId,
         prior?.photoId == fileId ? prior?.photoPath : null,
         mediaKind: mediaKind,
@@ -735,7 +697,7 @@ class TdNewsController extends ChangeNotifier {
         mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
         fileName: fileName,
         previewBytes: previewBytes ?? prior?.previewBytes);
-    _sortedFeed = null;
+    if (!fromTelegramSaved) _sortedFeed = null;
     if (notify) changed();
     // Thumbnails are requested by visible cards only, never for an entire
     // channel history. This prevents network storms when channels are added.
@@ -825,7 +787,10 @@ class TdNewsController extends ChangeNotifier {
     final local = file['local'] as Map;
     final path = local['path'];
     if (local['is_downloading_completed'] != true || path is! String || path.isEmpty) return;
-    for (final key in photoTargets[id] ?? <String>{}) { posts[key]?.photoPath = path; }
+    for (final key in photoTargets[id] ?? <String>{}) {
+      posts[key]?.photoPath = path;
+      telegramSavedMessages[key]?.photoPath = path;
+    }
     photoTargets.remove(id);
     changed();
   }

@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'lib/td_news_*.dart'
-      - 'lib/td_mtproto_proxy.dart'
+      - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_media_viewer.dart'
       - 'lib/td_inline_video.dart'
       - 'lib/td_clock_card.dart'

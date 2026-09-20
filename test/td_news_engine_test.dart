@@ -1,29 +1,29 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/td_news_engine.dart';
-import 'package:telegram_news/td_mtproto_proxy.dart';
 
 void main() {
-  test('MTProto deep links parse without accepting SOCKS or bad secrets', () {
-    const secret = '0123456789abcdef0123456789abcdef';
-    final one = parseMtprotoProxyLink(
-        'tg://proxy?server=proxy.example.org&port=443&secret=$secret');
-    expect(one.server, 'proxy.example.org');
-    expect(one.port, 443);
-    expect(one.secret, secret);
-    final two = parseMtprotoProxyLink(
-        'https://t.me/proxy?server=1.2.3.4&port=8443&secret=dd$secret');
-    expect(two.server, '1.2.3.4');
-    expect(two.port, 8443);
-    expect(two.secret, 'dd$secret');
-    expect(() => parseMtprotoProxyLink('tg://socks?server=x&port=80'),
-        throwsFormatException);
-    expect(() => parseMtprotoProxyLink(
-        'tg://proxy?server=host&port=0&secret=$secret'), throwsFormatException);
-    expect(() => parseMtprotoProxyLink(
-        'tg://proxy?server=host&port=443&secret=bad'), throwsFormatException);
+  test('Telegram Saved Messages remain separate from in-app bookmarks and news', () async {
+    SharedPreferences.setMockInitialValues({});
+    final news = TdNewsController(await SharedPreferences.getInstance());
+    news.telegramSavedChatId = 555;
+    news.record({
+      'chat_id': 555, 'id': 1234, 'date': 1700000000,
+      'content': {'@type': 'messageDocument', 'document': {
+        'file_name': 'saved.pdf', 'mime_type': 'application/pdf',
+        'document': {'id': 800},
+      }, 'caption': {'text': 'پیام شخصی'}},
+    }, fromTelegramSaved: true);
+    expect(news.telegramSavedFeed, hasLength(1));
+    expect(news.telegramSavedFeed.single.body, 'پیام شخصی');
+    expect(news.telegramSavedFeed.single.mediaKind, 'pdf');
+    expect(news.feed, isEmpty);
+    expect(news.savedFeed, isEmpty);
+    news.onEvent({'@type': 'updateDeleteMessages', 'chat_id': 555,
+      'is_permanent': true, 'message_ids': [1234]});
+    expect(news.telegramSavedFeed, isEmpty);
+    news.dispose();
   });
-
 
   TestWidgetsFlutterBinding.ensureInitialized();
 

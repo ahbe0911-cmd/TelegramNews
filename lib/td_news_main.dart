@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +11,7 @@ import 'package:shamsi_date/shamsi_date.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
+import 'td_telegram_saved_page.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
 import 'td_clock_card.dart';
@@ -44,8 +44,11 @@ class _TdNewsAppState extends State<TdNewsApp> {
   Future<void> restoreSession() async {
     const vault = FlutterSecureStorage();
     try {
-      // Delete credentials belonging to the removed V2Ray feature.
+      // Clear credentials left by removed network features, without touching
+      // the Telegram login, news bookmarks or user's saved messages.
       try { await vault.delete(key: 'td_v2ray_link'); } catch (_) {}
+      try { await vault.delete(key: 'td_manual_mtproto_proxy'); } catch (_) {}
+      try { await widget.preferences.remove('td_manual_mtproto_enabled'); } catch (_) {}
       final id = int.tryParse(await vault.read(key: 'td_api_id') ?? '');
       final hash = await vault.read(key: 'td_api_hash');
       if (id == null || id <= 0 || hash == null || hash.isEmpty) return;
@@ -122,8 +125,6 @@ class _TdHomeState extends State<TdHome> {
   final apiHash = TextEditingController();
   final login = TextEditingController();
   final channel = TextEditingController();
-  final proxyLink = TextEditingController();
-  bool proxyWorking = false;
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
@@ -133,25 +134,11 @@ class _TdHomeState extends State<TdHome> {
   String? inlineVideoKey;
   final savingPosts = <String>{};
   @override
-  void initState() {
-    super.initState();
-    unawaited(loadProxyLink());
-  }
-
-  Future<void> loadProxyLink() async {
-    try {
-      final value = await const FlutterSecureStorage().read(key: 'td_manual_mtproto_proxy');
-      if (mounted && proxyLink.text.isEmpty && value != null) proxyLink.text = value;
-    } catch (_) { /* Secure storage can be unavailable in widget tests. */ }
-  }
-
-  @override
   void dispose() {
     apiId.dispose();
     apiHash.dispose();
     login.dispose();
     channel.dispose();
-    proxyLink.dispose();
     search.dispose();
     super.dispose();
   }
@@ -336,101 +323,6 @@ class _TdHomeState extends State<TdHome> {
         ),
       );
 
-  Future<void> connectProxy() async {
-    setState(() { proxyWorking = true; });
-    try {
-      await widget.news.connectManualProxy(proxyLink.text);
-      message(widget.news.manualProxyStatus);
-    } on FormatException catch (error) {
-      message(error.message.toString());
-    } catch (_) {
-      message('اتصال پروکسی انجام نشد؛ لینک و وضعیت شبکه را بررسی کنید.');
-    } finally {
-      if (mounted) setState(() { proxyWorking = false; });
-    }
-  }
-
-  Future<void> disconnectProxy() async {
-    setState(() { proxyWorking = true; });
-    try {
-      await widget.news.disconnectManualProxy();
-      message(widget.news.manualProxyStatus);
-    } catch (_) {
-      message('قطع پروکسی انجام نشد؛ دوباره تلاش کنید.');
-    } finally {
-      if (mounted) setState(() { proxyWorking = false; });
-    }
-  }
-
-  Widget manualProxyPanel() {
-    final colors = Theme.of(context).colorScheme;
-    return surfacePanel(child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(children: [
-          Icon(Icons.shield_outlined, color: colors.primary),
-          const SizedBox(width: 10),
-          const Expanded(child: Text('پروکسی MTProto',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
-        ]),
-        const SizedBox(height: 8),
-        Text('لینک پروکسی MTProto را اینجا بچسبانید و «اتصال» را بزنید.',
-            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
-        const SizedBox(height: 12),
-        TextField(
-          key: const ValueKey('mtproto-proxy-link'),
-          controller: proxyLink,
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.left,
-          keyboardType: TextInputType.url,
-          autocorrect: false,
-          enableSuggestions: false,
-          maxLines: 2,
-          minLines: 1,
-          decoration: decoratedInput('tg://proxy?server=...&port=...&secret=...',
-            icon: Icons.link_rounded).copyWith(
-              suffixIcon: IconButton(
-                key: const ValueKey('mtproto-paste'),
-                tooltip: 'چسباندن لینک پروکسی',
-                icon: const Icon(Icons.content_paste_rounded),
-                onPressed: () async {
-                  final data = await Clipboard.getData(Clipboard.kTextPlain);
-                  if (data?.text != null && mounted) proxyLink.text = data!.text!;
-                },
-              ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: FilledButton.icon(
-            key: const ValueKey('mtproto-connect'),
-            onPressed: proxyWorking || widget.news.manualProxyBusy
-                ? null : connectProxy,
-            icon: const Icon(Icons.link_rounded),
-            label: const Text('اتصال'),
-          )),
-          if (widget.news.manualProxyEnabled) ...[
-            const SizedBox(width: 8),
-            OutlinedButton(
-              key: const ValueKey('mtproto-disconnect'),
-              onPressed: proxyWorking || widget.news.manualProxyBusy
-                  ? null : disconnectProxy,
-              child: const Text('قطع اتصال'),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 10),
-        Text(widget.news.manualProxyStatus,
-          key: const ValueKey('mtproto-status'),
-          style: TextStyle(color: widget.news.manualProxyConnected
-              ? colors.primary : colors.onSurfaceVariant, fontSize: 12)),
-        const SizedBox(height: 3),
-        Text('فعال‌سازی لینک به معنی اتصال قطعی نیست؛ پروکسی باید در شبکه شما در دسترس باشد.',
-          style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11)),
-      ],
-    ));
-  }
-
   Widget settingsScreen() {
     final colors = Theme.of(context).colorScheme;
     return ListView(
@@ -533,8 +425,18 @@ class _TdHomeState extends State<TdHome> {
             ]),
           ),
         const SizedBox(height: 24),
-        sectionTitle('اتصال تلگرام'),
-        manualProxyPanel(),
+        sectionTitle('حساب تلگرام'),
+        surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: ListTile(
+            key: const ValueKey('telegram-saved-messages'),
+            leading: Icon(Icons.bookmark_rounded, color: colors.primary),
+            title: const Text('پیام‌های ذخیره‌شده تلگرام',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('نمایش Saved Messages همین حساب؛ جدا از خبرهای نشان‌دار برنامه'),
+            trailing: const Icon(Icons.chevron_left_rounded),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => TelegramSavedMessagesPage(news: widget.news))),
+          )),
         const SizedBox(height: 24),
         sectionTitle('نمایش و همگام‌سازی'),
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -1124,8 +1026,6 @@ class _TdHomeState extends State<TdHome> {
                     ? ListView(
                         padding: const EdgeInsets.all(20),
                         children: [
-                          manualProxyPanel(),
-                          const SizedBox(height: 16),
                           if (widget.news.state == 'setup') setup()
                           else authorization(),
                         ],
