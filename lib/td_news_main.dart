@@ -12,7 +12,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'td_news_engine.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
-import 'td_ws_proxy.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -119,41 +118,18 @@ class _TdHomeState extends State<TdHome> {
   final login = TextEditingController();
   final channel = TextEditingController();
   final search = TextEditingController();
-  late final TdWsProxyController proxy = TdWsProxyController(widget.news);
   String filter = '';
   bool submitting = false;
   int selectedTab = 0; // 0: news, 1: settings
   bool refreshing = false;
   String? inlineVideoKey;
-  bool autoConnectAttempted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.news.addListener(_autoConnectWhenReady);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoConnectWhenReady());
-  }
-
-  void _autoConnectWhenReady() {
-    if (!mounted || autoConnectAttempted ||
-        widget.news.state != 'authorizationStateReady') return;
-    autoConnectAttempted = true;
-    // Users who switched WebSocket off explicitly keep direct Telegram.
-    if (widget.news.prefs.getBool('td_ws_auto') == false) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(proxy.connectOrOpen(automatic: true));
-    });
-  }
-
   @override
   void dispose() {
-    widget.news.removeListener(_autoConnectWhenReady);
     apiId.dispose();
     apiHash.dispose();
     login.dispose();
     channel.dispose();
     search.dispose();
-    proxy.dispose();
     super.dispose();
   }
 
@@ -337,54 +313,6 @@ class _TdHomeState extends State<TdHome> {
         ),
       );
 
-  Widget proxySettingsPanel() {
-    final colors = Theme.of(context).colorScheme;
-    return AnimatedBuilder(
-      animation: proxy,
-      builder: (context, _) => surfacePanel(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Icon(Icons.wifi_tethering_rounded, color: colors.primary),
-            const SizedBox(width: 8),
-            const Expanded(child: Text('WebSocket داخلی تلگرام',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
-            Icon(proxy.connected ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: proxy.connected ? Colors.green : colors.onSurfaceVariant),
-          ]),
-          const SizedBox(height: 8),
-          Text('بدون نصب TG WS Proxy یا واردکردن حساب V2Ray. '
-            'هنگام ورود به تلگرام، اتصال داخلی به‌صورت خودکار آزمایش می‌شود؛ '
-            'در صورت ناموفق‌بودن، اتصال مستقیم حفظ می‌شود.',
-            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: proxy.busy ? null : () {
-              if (proxy.connected) {
-                unawaited(proxy.disconnect());
-              } else {
-                unawaited(proxy.connectOrOpen());
-              }
-            },
-            icon: proxy.busy
-                ? const SizedBox(width: 17, height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(proxy.connected ? Icons.link_off_rounded : Icons.bolt_rounded),
-            label: Text(proxy.busy ? 'در حال بررسی…'
-                : proxy.connected ? 'بازگشت به اتصال مستقیم'
-                : 'اتصال خودکار WebSocket'),
-          ),
-          const SizedBox(height: 7),
-          Text(proxy.status,
-            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
-          const SizedBox(height: 7),
-          Text('موتور WebSocket تنها برای اتصال تلگرام استفاده می‌شود. '
-            'سرعت به کیفیت شبکه و دسترسی به مراکز داده تلگرام بستگی دارد.',
-            style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-        ]),
-      ),
-    );
-  }
-
   Widget settingsScreen() {
     final colors = Theme.of(context).colorScheme;
     return ListView(
@@ -486,9 +414,6 @@ class _TdHomeState extends State<TdHome> {
               ],
             ]),
           ),
-        const SizedBox(height: 24),
-        sectionTitle('اتصال داخلی تلگرام'),
-        proxySettingsPanel(),
         const SizedBox(height: 24),
         sectionTitle('نمایش و همگام‌سازی'),
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
