@@ -10,6 +10,7 @@ on:
       - 'lib/td_ws_proxy.dart'
       - 'pubspec.yaml'
       - 'scripts/prepare_android.py'
+      - 'ws_bridge/vendor/**'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
       - 'test/td_inline_video_test.dart'
@@ -35,6 +36,12 @@ jobs:
           cache: true
       - name: Prepare A54 Android host
         run: python3 scripts/prepare_android.py --profile modern
+      - name: Embed audited WebSocket proxy source in this APK
+        run: |
+          mkdir -p android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy
+          cp ws_bridge/vendor/*.kt android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/
+          grep -F 'SSLContext.getDefault()' android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/RawWebSocket.kt
+          grep -F 'endpointIdentificationAlgorithm = "HTTPS"' android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/RawWebSocket.kt
       - name: Install alongside the previous app
         run: |
           python3 - <<'PY'
