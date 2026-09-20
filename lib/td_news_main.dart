@@ -530,6 +530,7 @@ class _TdHomeState extends State<TdHome> {
   Widget postCard(NewsPost post) {
     final colors = Theme.of(context).colorScheme;
     final hasPhoto = post.photoPath != null && post.photoPath!.isNotEmpty;
+    final hasPreview = post.previewBytes != null && post.previewBytes!.isNotEmpty;
     final headline = post.body.trim().split('\n').first;
     final playingInline = inlineVideoKey == post.key;
     return Container(
@@ -659,6 +660,13 @@ class _TdHomeState extends State<TdHome> {
                   Image.file(
                     File(post.photoPath!), fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  )
+                else if (hasPreview)
+                  Image.memory(
+                    post.previewBytes!, fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => ColoredBox(
+                      color: colors.primaryContainer.withValues(alpha: .45)),
                   )
                 else
                   ColoredBox(color: colors.primaryContainer.withValues(alpha: .45)),
