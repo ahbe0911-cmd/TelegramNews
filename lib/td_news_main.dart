@@ -487,7 +487,12 @@ class _TdHomeState extends State<TdHome> {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
+        onTap: () {
+          if (post.mediaKind == 'pdf' || post.mediaKind == 'video') {
+            openAttachment(post);
+            return;
+          }
+          showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
@@ -553,7 +558,8 @@ class _TdHomeState extends State<TdHome> {
               ),
             ),
           ),
-        ),
+          );
+        },
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (post.mediaKind == 'pdf')
             Container(
