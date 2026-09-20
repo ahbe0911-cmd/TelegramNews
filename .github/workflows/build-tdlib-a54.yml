@@ -7,11 +7,14 @@ on:
       - 'lib/td_news_*.dart'
       - 'lib/td_media_viewer.dart'
       - 'lib/td_inline_video.dart'
+      - 'lib/td_clock_card.dart'
+      - 'lib/td_downloads.dart'
       - 'pubspec.yaml'
       - 'scripts/prepare_android.py'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
       - 'test/td_inline_video_test.dart'
+      - 'test/td_downloads_test.dart'
       - '.github/workflows/build-tdlib-a54.yml'
 permissions:
   contents: read
@@ -71,6 +74,8 @@ jobs:
         run: flutter test test/td_news_ui_test.dart
       - name: Verify lazy inline video and justified Persian text
         run: flutter test test/td_inline_video_test.dart
+      - name: Verify full-resolution photo and document downloads
+        run: flutter test test/td_downloads_test.dart
       - name: Configure optional release signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
