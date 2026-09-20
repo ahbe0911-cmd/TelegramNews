@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
 import 'td_media_viewer.dart';
+import 'td_inline_video.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -119,6 +120,7 @@ class _TdHomeState extends State<TdHome> {
   bool submitting = false;
   int selectedTab = 0; // 0: news, 1: settings
   bool refreshing = false;
+  String? inlineVideoKey;
 
   @override
   void dispose() {
@@ -471,6 +473,7 @@ class _TdHomeState extends State<TdHome> {
     final colors = Theme.of(context).colorScheme;
     final hasPhoto = post.photoPath != null && post.photoPath!.isNotEmpty;
     final headline = post.body.trim().split('\n').first;
+    final playingInline = inlineVideoKey == post.key;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -488,8 +491,9 @@ class _TdHomeState extends State<TdHome> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          if (post.mediaKind == 'pdf' || post.mediaKind == 'video') {
-            openAttachment(post);
+          if (post.mediaKind == 'pdf') { openAttachment(post); return; }
+          if (post.mediaKind == 'video') {
+            setState(() { inlineVideoKey = playingInline ? null : post.key; });
             return;
           }
           showModalBottomSheet<void>(
@@ -523,6 +527,8 @@ class _TdHomeState extends State<TdHome> {
                           const SizedBox(height: 14),
                         ],
                         SelectableText(post.body,
+                          textAlign: TextAlign.justify,
+                          textDirection: TextDirection.rtl,
                           style: const TextStyle(fontSize: 16, height: 1.9)),
                       ]),
                     )),
@@ -581,6 +587,11 @@ class _TdHomeState extends State<TdHome> {
                 )),
               ]),
             )
+          else if (post.mediaKind == 'video' && playingInline)
+            NewsInlineVideo(
+              key: ValueKey(post.key), news: widget.news, post: post,
+              onClose: () => setState(() { inlineVideoKey = null; }),
+            )
           else if (post.mediaKind == 'video')
             SizedBox(
               height: 192,
@@ -635,12 +646,16 @@ class _TdHomeState extends State<TdHome> {
               ]),
               const SizedBox(height: 14),
               Text(headline,
+                textAlign: TextAlign.justify,
+                textDirection: TextDirection.rtl,
                 maxLines: 3, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 19, height: 1.6,
                   fontFamily: 'Rooznameh', fontWeight: FontWeight.w700)),
               if (post.body.trim().contains('\n')) ...[
                 const SizedBox(height: 7),
                 Text(post.body.trim().split('\n').skip(1).join('\n'),
+                  textAlign: TextAlign.justify,
+                  textDirection: TextDirection.rtl,
                   maxLines: 3, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 13, height: 1.65,
                     color: colors.onSurfaceVariant)),
@@ -667,7 +682,14 @@ class _TdHomeState extends State<TdHome> {
     final allPosts = widget.news.feed;
     return RefreshIndicator(
       onRefresh: refreshNews,
-      child: ListView(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollStartNotification && inlineVideoKey != null) {
+            setState(() { inlineVideoKey = null; });
+          }
+          return false;
+        },
+        child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 9, 18, 24),
         children: [
@@ -786,6 +808,7 @@ class _TdHomeState extends State<TdHome> {
           const SizedBox(height: 22),
         ],
       ),
+      ),
     );
   }
 
@@ -844,6 +867,7 @@ class _TdHomeState extends State<TdHome> {
                 ? NavigationBar(
                     selectedIndex: selectedTab,
                     onDestinationSelected: (index) => setState(() {
+                      inlineVideoKey = null;
                       selectedTab = index;
                     }),
                     destinations: const [
