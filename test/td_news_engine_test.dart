@@ -13,6 +13,48 @@ void main() {
     expect(parsePublicUsername('1234'), isNull);
   });
 
+  test('new and legacy text previews retain playable video and caption', () async {
+    SharedPreferences.setMockInitialValues({});
+    final news = TdNewsController(await SharedPreferences.getInstance());
+    news.sources[1] = NewsSource(1, 'ExampleNews', 'News');
+    for (final modern in [true, false]) {
+      news.record({
+        'chat_id': 1, 'id': modern ? 2 : 1, 'date': 1700000000,
+        'content': {
+          '@type': 'messageText', 'text': {'text': 'فیلم خبر'},
+          if (modern) 'link_preview': {'type': {
+            '@type': 'linkPreviewTypeVideo',
+            'video': {'video': {'id': 42}},
+          }} else 'web_page': {'video': {'video': {'id': 42}}},
+        },
+      });
+    }
+    expect(news.feed.length, 2);
+    for (final post in news.feed) {
+      expect(post.body, 'فیلم خبر');
+      expect(post.mediaKind, 'video');
+      expect(post.mediaFileId, 42);
+    }
+    news.dispose();
+  });
+
+  test('unsupported cached post is replaced when native engine resolves its video', () async {
+    SharedPreferences.setMockInitialValues({});
+    final news = TdNewsController(await SharedPreferences.getInstance());
+    news.sources[1] = NewsSource(1, 'ExampleNews', 'News');
+    news.record({'chat_id': 1, 'id': 1, 'date': 1700000000,
+      'content': {'@type': 'messageUnsupported'}});
+    expect(news.feed.single.mediaKind, 'unsupported');
+    expect(news.feed.single.body, isNot(contains('تلگرام باز کنید')));
+    news.onEvent({'@type': 'updateMessageContent', 'chat_id': 1, 'message_id': 1,
+      'new_content': {'@type': 'messageVideo', 'video': {'video': {'id': 43}},
+        'caption': {'text': 'فیلم بازیابی‌شده'}}});
+    expect(news.feed.single.mediaKind, 'video');
+    expect(news.feed.single.mediaFileId, 43);
+    expect(news.feed.single.body, 'فیلم بازیابی‌شده');
+    news.dispose();
+  });
+
   test('stored sources restore after a controller restart', () async {
     SharedPreferences.setMockInitialValues({
       'td_channels': [

@@ -444,10 +444,7 @@ class TdNewsController extends ChangeNotifier {
 
   String messageText(Map<String, dynamic> content) {
     final type = content['@type'];
-    final formatted = type == 'messageText' ? content['text']
-        : (type == 'messagePhoto' || type == 'messageVideo' ||
-           type == 'messageDocument' || type == 'messageAnimation')
-            ? content['caption'] : null;
+    final formatted = content['caption'] ?? content['text'];
     if (formatted is Map && formatted['text'] is String &&
         (formatted['text'] as String).trim().isNotEmpty) {
       return formatted['text'] as String;
@@ -461,7 +458,39 @@ class TdNewsController extends ChangeNotifier {
       final name = doc is Map ? doc['file_name']?.toString() : null;
       return name == null || name.isEmpty ? 'سند پیوست' : name;
     }
-    return 'خبر جدید؛ برای مشاهده در تلگرام باز کنید';
+    if (type == 'messageUnsupported') return 'دریافت رسانه کامل نشده؛ برای تلاش دوباره لمس کنید';
+    return 'پیام کانال';
+  }
+
+  /// Link previews may carry a native Telegram video even though the enclosing
+  /// post is messageText. Keep the original text while exposing its attachment.
+  Map<String, dynamic> mediaContent(Map<String, dynamic> content) {
+    if (content['@type'] != 'messageText') return content;
+    final preview = content['link_preview'] ?? content['web_page'];
+    if (preview is! Map) return content;
+    final type = preview['type'];
+    final media = type is Map ? type : preview;
+    for (final pair in const {'video': 'messageVideo', 'animation': 'messageAnimation',
+      'document': 'messageDocument', 'photo': 'messagePhoto'}.entries) {
+      if (media[pair.key] is Map) {
+        return {...content, '@type': pair.value, pair.key: media[pair.key],
+          'caption': content['text']};
+      }
+    }
+    return content;
+  }
+
+  Future<bool> reloadPost(NewsPost post) async {
+    try {
+      final response = await bridge.request({
+        '@type': 'getMessage', 'chat_id': post.chatId, 'message_id': post.id,
+      });
+      if (disposed) return false;
+      record(response);
+      return posts[post.key]?.mediaKind != 'unsupported';
+    } catch (_) {
+      return false;
+    }
   }
 
   void record(Map<String, dynamic> message, {bool notify = true}) {
@@ -470,11 +499,11 @@ class TdNewsController extends ChangeNotifier {
     if (chatId is! int || messageId is! int || !sources.containsKey(chatId) ||
         message['content'] is! Map) return;
     final source = sources[chatId]!;
-    final content = Map<String, dynamic>.from(message['content'] as Map);
+    final content = mediaContent(Map<String, dynamic>.from(message['content'] as Map));
     int? fileId;
     int? mediaFileId;
     String? fileName;
-    String mediaKind = 'none';
+    String mediaKind = content['@type'] == 'messageUnsupported' ? 'unsupported' : 'none';
     if (content['@type'] == 'messagePhoto' && content['photo'] is Map) {
       mediaKind = 'photo';
       final sizes = (content['photo'] as Map)['sizes'];

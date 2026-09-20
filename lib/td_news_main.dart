@@ -1,3 +1,4 @@
+import 'td_news_brand.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -61,15 +62,15 @@ class _TdNewsAppState extends State<TdNewsApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'نبض خبر',
+        title: AppBrand.title,
         locale: const Locale('fa'),
         supportedLocales: const [Locale('fa')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xff0866dc),
-            primary: const Color(0xff0866dc),
+            seedColor: const Color(AppBrand.isCafenet ? 0xff7043c6 : 0xff0866dc),
+            primary: const Color(AppBrand.isCafenet ? 0xff7043c6 : 0xff0866dc),
             surface: const Color(0xffffffff),
           ),
           fontFamily: 'CustomFont',
@@ -474,7 +475,7 @@ class _TdHomeState extends State<TdHome> {
     setState(() {});
     try {
       await NewsDownloadService.save(widget.news, post);
-      message('فایل در پوشه Downloads/NabzKhabar ذخیره شد.');
+      message('فایل در پوشه Downloads/${AppBrand.downloadFolder} ذخیره شد.');
     } catch (_) {
       message('ذخیره فایل انجام نشد؛ اینترنت و فضای گوشی را بررسی کنید.');
     } finally {
@@ -555,7 +556,12 @@ class _TdHomeState extends State<TdHome> {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
+        onTap: () async {
+          if (post.mediaKind == 'unsupported') {
+            final recovered = await widget.news.reloadPost(post);
+            if (!recovered) message('رسانه هنوز در دسترس نیست؛ اتصال را بررسی و دوباره تلاش کنید.');
+            return;
+          }
           if (post.mediaKind == 'pdf' || post.mediaKind == 'photo') {
             openAttachment(post); return;
           }
@@ -787,7 +793,8 @@ class _TdHomeState extends State<TdHome> {
                           foregroundColor: colors.onSurface),
                         icon: const Icon(Icons.file_download_outlined, size: 25),
                         label: const Text('دانلود'))
-                  : const Center(child: Text('ادامه خبر', style: TextStyle(fontSize: 12)))),
+                  : Center(child: Text(post.mediaKind == 'unsupported'
+                      ? 'دریافت دوباره' : 'ادامه خبر', style: const TextStyle(fontSize: 12)))),
               ])),
             ]),
           ),
@@ -1022,4 +1029,3 @@ class _TdHomeState extends State<TdHome> {
         },
       );
 }
-

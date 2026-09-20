@@ -1,3 +1,4 @@
+import 'td_news_brand.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -53,12 +54,12 @@ class _NewsClockCardState extends State<NewsClockCard> {
           const Icon(Icons.calendar_month_outlined, size: 23),
         ])),
         Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Text('نبض خبر', style: TextStyle(fontFamily: 'Rooznameh',
+          const Text(AppBrand.title, style: TextStyle(fontFamily: 'Rooznameh',
             fontSize: 25, fontWeight: FontWeight.w800)),
           SizedBox(width: 65, height: 10,
             child: CustomPaint(painter: _PulsePainter(color.primary))),
           const SizedBox(height: 3),
-          FittedBox(fit: BoxFit.scaleDown, child: Text('اخبار سریع، مطمئن، به‌روز',
+          FittedBox(fit: BoxFit.scaleDown, child: Text(AppBrand.tagline,
             style: TextStyle(fontSize: 10, color: color.onSurfaceVariant))),
         ])),
         SizedBox(width: 64, child: Row(children: [
