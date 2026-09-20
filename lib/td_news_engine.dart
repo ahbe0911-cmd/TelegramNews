@@ -525,39 +525,39 @@ class TdNewsController extends ChangeNotifier {
     if (_thumbnailStarted.add(id)) unawaited(downloadPhoto(id));
   }
 
-  /// Downloads an attachment only when the reader opens it. The TDLib file
-  /// remains in the app-private directory, not in an unauthenticated URL.
+  /// TDLib caches completed media in app-private storage. Download on demand:
+  /// previews and news updates never request full-length video or PDF files.
   Future<String> ensureMedia(NewsPost post) async {
-    final id = post.mediaFileId;
-    if (id == null || (post.mediaKind != 'video' && post.mediaKind != 'pdf')) {
-      throw StateError('فایل قابل پخش یا PDF در این پیام پیدا نشد.');
-    }
-    if (post.mediaPath != null && post.mediaPath!.isNotEmpty) {
-      return post.mediaPath!;
-    }
-    final existing = downloadWaiters[id];
-    if (existing != null) return existing.future;
+    final id = post.mediaFileId ?? (post.mediaKind == 'photo' ? post.photoId : null);
+    if (id == null) throw StateError('فایل قابل دانلودی در این پیام پیدا نشد.');
+    final cached = post.mediaPath;
+    if (cached != null && cached.isNotEmpty) return cached;
+    final pending = downloadWaiters[id];
+    if (pending != null) return pending.future;
     final waiter = Completer<String>();
     downloadWaiters[id] = waiter;
+    downloadProgress[id] = 0;
+    changed();
     try {
       final result = await bridge.request({
-        '@type': 'downloadFile',
-        'file_id': id,
-        'priority': 24,
-        'offset': 0,
-        'limit': 0,
-        'synchronous': false,
+        '@type': 'downloadFile', 'file_id': id, 'priority': 32,
+        'offset': 0, 'limit': 0, 'synchronous': false,
       });
       completeAttachment(result);
-      final path = await waiter.future.timeout(const Duration(minutes: 3));
+      final path = await waiter.future.timeout(const Duration(minutes: 12));
       post.mediaPath = path;
+      downloadProgress[id] = 1;
       changed();
       return path;
     } finally {
       downloadWaiters.remove(id);
+      downloadProgress.remove(id);
+      changed();
     }
   }
 
+  /// Exposes coarse-grained progress; the native engine updates it in
+  /// response to TDLib events without rebuilding every card for every chunk.
   void completeAttachment(Map<String, dynamic> file) {
     final id = file['id'];
     if (id is! int) return;
@@ -567,18 +567,34 @@ class TdNewsController extends ChangeNotifier {
     if (local is! Map) return;
     final path = local['path'];
     if (local['is_downloading_completed'] == true && path is String && path.isNotEmpty) {
+      downloadProgress[id] = 1;
       waiter.complete(path);
+      changed();
+      return;
+    }
+    final expected = file['expected_size'] is int && (file['expected_size'] as int) > 0
+        ? file['expected_size'] as int
+        : file['size'] is int ? file['size'] as int : 0;
+    final downloaded = local['downloaded_size'];
+    if (expected > 0 && downloaded is int) {
+      final next = (downloaded / expected).clamp(0.0, 0.99);
+      final old = downloadProgress[id] ?? 0;
+      if (next - old >= .035) {
+        downloadProgress[id] = next;
+        changed();
+      }
     }
   }
 
   Future<void> downloadPhoto(int id) async {
     try {
       final file = await bridge.request({
-        '@type': 'downloadFile', 'file_id': id, 'priority': 1,
+        '@type': 'downloadFile', 'file_id': id, 'priority': 16,
         'offset': 0, 'limit': 0, 'synchronous': false,
       });
       updatePhoto(file);
     } catch (_) { /* The text post remains readable. */ }
+    finally { _thumbnailStarted.remove(id); }
   }
 
   void updatePhoto(Map<String, dynamic> file) {
