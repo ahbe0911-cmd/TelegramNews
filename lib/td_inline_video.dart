@@ -108,7 +108,7 @@ class _NewsInlineVideoState extends State<NewsInlineVideo> with WidgetsBindingOb
               ),
               Expanded(child: Slider(
                 min: 0, max: max,
-                value: position.inMilliseconds.toDouble().clamp(0.0, max),
+                value: position.inMilliseconds.toDouble().clamp(0.0, max).toDouble(),
                 onChanged: (next) => controller.seekTo(Duration(milliseconds: next.round())),
               )),
               Text(_time(position), style: const TextStyle(color: Colors.white, fontSize: 11)),
