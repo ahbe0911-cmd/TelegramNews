@@ -6,33 +6,30 @@ import 'package:flutter/services.dart';
 
 import 'td_news_engine.dart';
 
-/// TG WS Proxy's native service belongs to its own Android app.
-/// The service is private, so only its UI may start it. This adapter does
-/// not claim to start an unexported service from another application.
+/// All WebSocket and SOCKS5 networking happens in this app's own Android
+/// process. No external proxy app, VPN permission or user-supplied server.
 class TdWsProxyController extends ChangeNotifier {
-  static const int port = 1080;
-  static const MethodChannel _launcher =
-      MethodChannel('ir.channel.telegram_tdnews/tgws');
+  static const int port = 17881;
+  static const MethodChannel _native =
+      MethodChannel('ir.channel.telegram_tdnews/ws_internal');
   final TdNewsController news;
   bool connected = false;
   bool busy = false;
-  String status = 'اتصال مستقیم تلگرام؛ پراکسی اختیاری است.';
   bool disposed = false;
-  TdWsProxyController(this.news);
+  String status = 'اتصال مستقیم؛ WebSocket در صورت نیاز فعال می‌شود.';
 
+  TdWsProxyController(this.news);
   void _notify() { if (!disposed) notifyListeners(); }
 
-  /// Probe a SOCKS5 handshake rather than confusing an unrelated open port
-  /// with a usable local proxy.
+  /// Check an actual SOCKS5 greeting, not just an open unrelated socket.
   Future<bool> _ready() async {
     Socket? socket;
     try {
       socket = await Socket.connect(
-        InternetAddress.loopbackIPv4, port,
-        timeout: const Duration(milliseconds: 450),
-      );
+          InternetAddress.loopbackIPv4, port,
+          timeout: const Duration(milliseconds: 350));
       socket.add([5, 1, 0]);
-      final reply = await socket.first.timeout(const Duration(milliseconds: 600));
+      final reply = await socket.first.timeout(const Duration(milliseconds: 450));
       return reply.length >= 2 && reply[0] == 5 && reply[1] == 0;
     } catch (_) {
       return false;
@@ -41,35 +38,41 @@ class TdWsProxyController extends ChangeNotifier {
     }
   }
 
-  Future<void> connectOrOpen() async {
-    if (busy) return;
+  /// The explicit button and the stored auto-connect preference share one path.
+  Future<void> connectOrOpen({bool automatic = false}) async {
+    if (busy || connected) return;
     busy = true;
+    status = 'در حال آماده‌سازی WebSocket داخلی…';
     _notify();
+    var nativeStarted = false;
     try {
       if (news.state != 'authorizationStateReady') {
         status = 'ابتدا وارد حساب تلگرام شوید.';
         return;
       }
-      if (await _ready()) {
-        await news.enableLocalProxy(port: port);
-        connected = true;
-        status = 'متصل به TG WS Proxy؛ اخبار را تازه‌سازی کنید.';
-        return;
+      final started = await _native.invokeMethod<bool>('start');
+      if (started != true) throw StateError('Embedded proxy unavailable');
+      nativeStarted = true;
+      var listening = false;
+      for (var attempt = 0; attempt < 24; attempt++) {
+        if (await _ready()) { listening = true; break; }
+        await Future<void>.delayed(const Duration(milliseconds: 170));
       }
-      // A separately installed TG WS Proxy has an unexported service. Android
-      // does not permit another application to start it without user action.
-      connected = false;
-      status = 'TG WS Proxy را باز کنید و Start را بزنید؛ سپس به نبض خبر برگردید.';
-      try {
-        await _launcher.invokeMethod<void>('open');
-      } on PlatformException {
-        status = 'برنامه TG WS Proxy روی گوشی نصب نیست یا نسخه متفاوتی دارد.';
-      } on MissingPluginException {
-        status = 'نسخه فعلی اندروید امکان بازکردن TG WS Proxy را ندارد.';
-      }
+      if (!listening) throw StateError('SOCKS5 listener not ready');
+      await news.enableLocalProxy(port: port);
+      connected = true;
+      await news.prefs.setBool('td_ws_auto', true);
+      status = 'WebSocket داخلی فعال شد؛ تلگرام از مسیر محلی وصل می‌شود.';
     } catch (_) {
+      // Do not strand TDLib behind a failed, restarted or unavailable proxy.
+      try { await news.disableLocalProxy(); } catch (_) {}
+      if (nativeStarted) {
+        try { await _native.invokeMethod<void>('stop'); } catch (_) {}
+      }
       connected = false;
-      status = 'اتصال برقرار نشد؛ تنظیمات پراکسی را بررسی کنید.';
+      status = automatic
+          ? 'WebSocket آماده نشد؛ اتصال مستقیم حفظ شد.'
+          : 'اتصال داخلی برقرار نشد؛ دوباره تلاش کنید.';
     } finally {
       busy = false;
       _notify();
@@ -81,11 +84,15 @@ class TdWsProxyController extends ChangeNotifier {
     busy = true;
     _notify();
     try {
-      await news.disableLocalProxy();
+      // Set the preference first: subsequent app launches must stay direct.
+      await news.prefs.setBool('td_ws_auto', false);
+      try { await news.disableLocalProxy(); } finally {
+        await _native.invokeMethod<void>('stop');
+      }
       connected = false;
-      status = 'اتصال مستقیم تلگرام فعال شد.';
+      status = 'WebSocket غیرفعال شد؛ اتصال مستقیم تلگرام برقرار است.';
     } catch (_) {
-      status = 'قطع پراکسی انجام نشد؛ دوباره تلاش کنید.';
+      status = 'قطع خودکار انجام نشد؛ وضعیت اتصال را بررسی کنید.';
     } finally {
       busy = false;
       _notify();
