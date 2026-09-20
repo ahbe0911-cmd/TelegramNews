@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'lib/td_news_*.dart'
+      - 'lib/td_media_viewer.dart'
       - 'pubspec.yaml'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
