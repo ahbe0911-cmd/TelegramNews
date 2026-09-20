@@ -10,6 +10,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_riverpod: 2.6.1
+  tdlib: 1.6.0
+  path_provider: ^2.1.5
+  flutter_secure_storage: ^9.2.4
   http: ^1.2.2
   shared_preferences: 2.3.2
   shamsi_date: ^1.0.4
