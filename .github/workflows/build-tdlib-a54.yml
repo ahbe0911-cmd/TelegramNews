@@ -6,6 +6,8 @@ on:
     paths:
       - 'lib/td_news_*.dart'
       - 'lib/td_media_viewer.dart'
+      - 'lib/td_inline_video.dart'
+      - 'lib/td_v2ray.dart'
       - 'pubspec.yaml'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
