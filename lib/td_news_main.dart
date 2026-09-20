@@ -201,7 +201,8 @@ class _TdHomeState extends State<TdHome> {
     final d = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
     final j = Jalali.fromDateTime(d).formatter;
     return ' ' + j.yyyy.toString() + '/' + j.mm + '/' + j.dd +
-        ' • ' + d.hour.toString().padLeft(2, '0') + ':' + d.minute.toString().padLeft(2, '0');
+        ' • ' + (d.hour % 12 == 0 ? 12 : d.hour % 12).toString() +
+        ':' + d.minute.toString().padLeft(2, '0');
   }
 
   Widget sectionTitle(String title, {Widget? trailing}) => Padding(

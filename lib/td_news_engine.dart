@@ -129,11 +129,13 @@ class NewsPost {
   String? mediaPath;
   String? fileName;
   Uint8List? previewBytes;
+  /// Original photo dimensions for an uncropped Telegram-like chat preview.
+  double? photoAspectRatio;
 
   NewsPost(this.chatId, this.id, this.date, this.source, this.username, this.body,
       this.photoId, this.photoPath,
       {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName,
-       this.previewBytes});
+       this.previewBytes, this.photoAspectRatio});
 
   String get key => chatId.toString() + ':' + id.toString();
   String get link => 'https://t.me/' + username + '/' + (id >> 20).toString();
@@ -679,6 +681,8 @@ class TdNewsController extends ChangeNotifier {
     int? fileId;
     int? mediaFileId;
     String? fileName;
+    String? cachedPreviewPath;
+    double? photoAspectRatio;
     String mediaKind = content['@type'] == 'messageUnsupported' ? 'unsupported' : 'none';
     if (content['@type'] == 'messagePhoto' && content['photo'] is Map) {
       mediaKind = 'photo';
@@ -696,7 +700,19 @@ class TdNewsController extends ChangeNotifier {
           final area = width * height;
           if (area >= largest) { largest = area; mediaFileId = id; }
           final rank = (width - 640).abs() + (height - 640).abs();
-          if (rank < previewRank) { previewRank = rank; fileId = id; }
+          if (rank < previewRank) {
+            previewRank = rank;
+            fileId = id;
+            final local = photo['local'];
+            cachedPreviewPath = local is Map &&
+                    local['is_downloading_completed'] == true &&
+                    local['path'] is String &&
+                    (local['path'] as String).isNotEmpty
+                ? local['path'] as String : null;
+            if (width > 0 && height > 0) {
+              photoAspectRatio = width / height;
+            }
+          }
         }
       }
       fileId ??= mediaFileId;
@@ -780,8 +796,8 @@ class TdNewsController extends ChangeNotifier {
     // TDLib mini_thumbnail is embedded in message metadata: display it
     // immediately without downloading the full video or an extra image.
     Uint8List? previewBytes;
-    final media = content['video'] ?? content['video_note'] ??
-        content['animation'] ?? content['document'];
+    final media = content['photo'] ?? content['video'] ??
+        content['video_note'] ?? content['animation'] ?? content['document'];
     final miniature = media is Map ? media['minithumbnail'] : null;
     final encoded = miniature is Map ? miniature['data'] : null;
     if (encoded is String && encoded.isNotEmpty && encoded.length < 120000) {
@@ -792,12 +808,13 @@ class TdNewsController extends ChangeNotifier {
     final prior = target[key];
     target[key] = NewsPost(chatId, messageId, message['date'] as int? ?? 0,
         source.title, source.username, messageText(content), fileId,
-        prior?.photoId == fileId ? prior?.photoPath : null,
+        cachedPreviewPath ?? (prior?.photoId == fileId ? prior?.photoPath : null),
         mediaKind: mediaKind,
         mediaFileId: mediaFileId,
         mediaPath: prior?.mediaFileId == mediaFileId ? prior?.mediaPath : null,
         fileName: fileName,
-        previewBytes: previewBytes ?? prior?.previewBytes);
+        previewBytes: previewBytes ?? prior?.previewBytes,
+        photoAspectRatio: photoAspectRatio ?? prior?.photoAspectRatio);
     if (!fromTelegramSaved) _sortedFeed = null;
     if (notify) changed();
     // Thumbnails are requested by visible cards only, never for an entire

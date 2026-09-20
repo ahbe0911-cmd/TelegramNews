@@ -82,17 +82,20 @@ class _TelegramSavedMessagesPageState extends State<TelegramSavedMessagesPage> {
     final viewable = post.mediaKind == 'photo' ||
         post.mediaKind == 'video' || post.mediaKind == 'pdf';
     if (post.photoId != null && post.photoPath == null) {
-      widget.news.requestThumbnail(post);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.news.requestThumbnail(post);
+      });
     }
     final preview = post.photoPath != null && post.photoPath!.isNotEmpty
-        ? Image.file(File(post.photoPath!), fit: BoxFit.cover,
+        ? Image.file(File(post.photoPath!), fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined))
         : post.previewBytes != null
-            ? Image.memory(post.previewBytes!, fit: BoxFit.cover)
+            ? Image.memory(post.previewBytes!, fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined))
             : null;
     final date = DateTime.fromMillisecondsSinceEpoch(post.date * 1000).toLocal();
-    final time = date.hour.toString().padLeft(2, '0') + ':' +
-        date.minute.toString().padLeft(2, '0');
+    final time = (date.hour % 12 == 0 ? 12 : date.hour % 12).toString() +
+        ':' + date.minute.toString().padLeft(2, '0');
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
@@ -109,7 +112,11 @@ class _TelegramSavedMessagesPageState extends State<TelegramSavedMessagesPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (preview != null) ...[
               ClipRRect(borderRadius: BorderRadius.circular(12),
-                child: SizedBox(height: 170, child: preview)),
+                child: post.mediaKind == 'photo'
+                    ? AspectRatio(
+                        aspectRatio: (post.photoAspectRatio ?? 1.0).clamp(.35, 2.5),
+                        child: preview)
+                    : SizedBox(height: 170, child: preview)),
               const SizedBox(height: 8),
             ],
             if (post.body.trim().isNotEmpty)

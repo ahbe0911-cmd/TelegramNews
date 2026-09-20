@@ -27,6 +27,38 @@ void main() {
 
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('Telegram photo Saved Messages keep their cached or embedded preview', () async {
+    SharedPreferences.setMockInitialValues({});
+    final news = TdNewsController(await SharedPreferences.getInstance());
+    news.telegramSavedChatId = 555;
+    news.record({
+      'chat_id': 555, 'id': 135, 'date': 1700000000,
+      'content': {
+        '@type': 'messagePhoto',
+        'photo': {
+          'minithumbnail': {'width': 2, 'height': 2, 'data': '/9j/AA=='},
+          'sizes': [{
+            'width': 480, 'height': 800,
+            'photo': {'id': 801, 'local': {
+              'is_downloading_completed': true, 'path': '/cached/preview.jpg'
+            }},
+          }],
+        },
+        'caption': {'text': 'عکس و توضیح'}
+      },
+    }, fromTelegramSaved: true);
+    final photo = news.telegramSavedFeed.single;
+    expect(photo.mediaKind, 'photo');
+    expect(photo.body, 'عکس و توضیح');
+    expect(photo.photoId, 801);
+    expect(photo.photoPath, '/cached/preview.jpg');
+    expect(photo.previewBytes, isNotEmpty);
+    expect(photo.photoAspectRatio, closeTo(0.6, .001));
+    expect(news.feed, isEmpty);
+    news.dispose();
+  });
+
+
   test('public channel links are normalized without accepting invites', () {
     expect(parsePublicUsername('@ExampleNews'), 'ExampleNews');
     expect(parsePublicUsername('https://t.me/ExampleNews/123'), 'ExampleNews');
