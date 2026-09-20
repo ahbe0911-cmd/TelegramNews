@@ -2,10 +2,14 @@ name: Build TDLib A54 APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, vpn-development]
     paths:
       - 'lib/td_news_*.dart'
       - 'lib/td_telegram_saved_page.dart'
+      - 'lib/td_system_vpn.dart'
+      - 'native/SystemVpnBridge.kt'
+      - 'native/SystemVpnService.kt'
+      - 'scripts/enable_full_vpn.py'
       - 'lib/td_media_viewer.dart'
       - 'lib/td_inline_video.dart'
       - 'lib/td_clock_card.dart'
@@ -75,6 +79,15 @@ jobs:
         run: python3 scripts/prepare_android.py --profile modern
       - name: Configure independent app ID, label and launcher icon
         run: python3 scripts/configure_variant.py ${{ matrix.variant }}
+      - name: Add Android platform VPN service and native bridge
+        run: python3 scripts/enable_full_vpn.py
+      - name: Install verified Xray TUN engine for arm64 Android
+        run: |
+          mkdir -p android/app/libs
+          curl -fL --retry 3 --retry-delay 3 \
+            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
+            -o android/app/libs/libv2ray.aar
+          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
       - name: Restore dependencies
         run: flutter pub get
       - name: Adapt older TDLib plugin for Android Gradle namespace

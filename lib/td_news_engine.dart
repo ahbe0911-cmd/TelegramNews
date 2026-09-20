@@ -281,6 +281,31 @@ class TdNewsController extends ChangeNotifier {
     return id;
   }
 
+  bool vpnSocksInstalled = false;
+
+  /// The VPN service excludes its own package to prevent Xray outbound loops.
+  /// Route the same package's TDLib through Xray's loopback SOCKS listener.
+  Future<void> enableSystemVpnForTelegram() async {
+    if (vpnSocksInstalled || bridge.sender == null ||
+        state != 'authorizationStateReady') return;
+    await bridge.request({
+      '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
+      'enable': true, 'type': {
+        '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
+      },
+    });
+    vpnSocksInstalled = true;
+    changed();
+  }
+
+  Future<void> disableSystemVpnForTelegram() async {
+    if (bridge.sender != null) {
+      await bridge.request({'@type': 'disableProxy'});
+    }
+    vpnSocksInstalled = false;
+    changed();
+  }
+
   /// Sends text to the actual Telegram self-chat.
   Future<void> sendTelegramSavedText(String text) async {
     final body = text.trim();
@@ -420,6 +445,7 @@ class TdNewsController extends ChangeNotifier {
       // A direct connection should not depend on the deleted proxy settings.
       if (parametersSetup != null) await parametersSetup;
       try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+      vpnSocksInstalled = false;
     } catch (_) {
       state = 'failed';
       status = 'راه‌اندازی TDLib ناموفق بود؛ تنظیمات یا کتابخانه بومی را بررسی کنید.';

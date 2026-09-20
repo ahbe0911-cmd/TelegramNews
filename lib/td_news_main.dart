@@ -1,4 +1,5 @@
 import 'td_news_brand.dart';
+import 'td_system_vpn.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -125,6 +126,10 @@ class _TdHomeState extends State<TdHome> {
   final apiHash = TextEditingController();
   final login = TextEditingController();
   final channel = TextEditingController();
+  final vpnProfile = TextEditingController();
+  bool vpnBusy = false;
+  String vpnStage = 'off';
+  String vpnStatus = 'VPN خاموش است.';
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
@@ -134,7 +139,152 @@ class _TdHomeState extends State<TdHome> {
   String? inlineVideoKey;
   final savingPosts = <String>{};
   @override
+  void initState() {
+    super.initState();
+    unawaited(loadVpnState());
+  }
+
+  Future<void> loadVpnState() async {
+    try {
+      final saved = await const FlutterSecureStorage()
+          .read(key: 'device_xray_config');
+      if (mounted && saved != null && vpnProfile.text.isEmpty) {
+        vpnProfile.text = saved;
+      }
+    } catch (_) { /* Private secure storage may not be available. */ }
+    await refreshVpnStatus();
+  }
+
+  Future<void> refreshVpnStatus() async {
+    try {
+      final state = await SystemVpnBridge.status();
+      if (!mounted) return;
+      final stage = state['stage']?.toString() ?? 'off';
+      setState(() {
+        vpnStage = stage;
+        vpnStatus = stage == 'running'
+            ? 'VPN اندروید و موتور Xray فعال‌اند؛ اتصال سرور را با اینترنت آزمایش کنید.'
+            : stage == 'starting'
+                ? 'موتور Xray و تونل اندروید در حال راه‌اندازی هستند…'
+                : stage == 'consent'
+                    ? 'مجوز VPN اندروید را در پنجره سیستم تأیید کنید.'
+                    : stage == 'error'
+                        ? 'راه‌اندازی موتور VPN ناموفق بود؛ کانفیگ یا نسخه موتور را بررسی کنید.'
+                        : 'VPN خاموش است.';
+      });
+      if (stage == 'running') {
+        try {
+          await widget.news.enableSystemVpnForTelegram();
+        } catch (_) {
+          if (mounted) message('VPN فعال است اما اتصال داخلی تلگرام به SOCKS برقرار نشد.');
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() { vpnStatus = 'موتور VPN هنوز نصب یا در دسترس نیست.'; });
+    }
+  }
+
+  Future<void> connectSystemVpn() async {
+    if (vpnBusy) return;
+    setState(() { vpnBusy = true; });
+    try {
+      final raw = vpnProfile.text.trim();
+      final config = buildFullDeviceXrayConfig(raw);
+      await const FlutterSecureStorage().write(
+          key: 'device_xray_config', value: raw);
+      await SystemVpnBridge.start(config);
+      await refreshVpnStatus();
+      // The system consent dialog is asynchronous; never report running until
+      // the native Xray service has established Android's TUN descriptor.
+      for (var i = 0; i < 16 && mounted; i++) {
+        if (vpnStage == 'running' || vpnStage == 'error' ||
+            vpnStage == 'off') break;
+        await Future<void>.delayed(const Duration(milliseconds: 850));
+        await refreshVpnStatus();
+      }
+    } on FormatException catch (error) {
+      message(error.message.toString());
+    } catch (_) {
+      message('درخواست VPN انجام نشد؛ مجوز و کانفیگ را بررسی کنید.');
+      await refreshVpnStatus();
+    } finally {
+      if (mounted) setState(() { vpnBusy = false; });
+    }
+  }
+
+  Future<void> disconnectSystemVpn() async {
+    if (vpnBusy) return;
+    setState(() { vpnBusy = true; });
+    try {
+      await SystemVpnBridge.stop();
+      await widget.news.disableSystemVpnForTelegram();
+    } catch (_) {
+      message('قطع اتصال VPN کامل نشد؛ دوباره تلاش کنید.');
+    } finally {
+      await refreshVpnStatus();
+      if (mounted) setState(() { vpnBusy = false; });
+    }
+  }
+
+  Widget vpnPanel() {
+    final colors = Theme.of(context).colorScheme;
+    final running = vpnStage == 'running';
+    return surfacePanel(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          Icon(Icons.vpn_lock_rounded, color: colors.primary),
+          const SizedBox(width: 10),
+          const Expanded(child: Text('VPN سراسری گوشی',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
+        ]),
+        const SizedBox(height: 7),
+        Text('موتور Xray؛ با مجوز VPN اندروید، برای اینترنت برنامه‌های گوشی.',
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('xray-vpn-config'),
+          controller: vpnProfile,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+          minLines: 1, maxLines: 3,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: decoratedInput('لینک vless:// یا trojan:// یا JSON کامل Xray',
+              icon: Icons.link_rounded)),
+        const SizedBox(height: 11),
+        Row(children: [
+          Expanded(child: FilledButton.icon(
+            key: const ValueKey('xray-vpn-connect'),
+            onPressed: vpnBusy || running ? null : connectSystemVpn,
+            icon: const Icon(Icons.power_settings_new_rounded),
+            label: const Text('اتصال VPN')),
+          const SizedBox(width: 9),
+          OutlinedButton(
+            key: const ValueKey('xray-vpn-disconnect'),
+            onPressed: vpnBusy || vpnStage == 'off'
+                ? null : disconnectSystemVpn,
+            child: const Text('قطع اتصال')),
+        ]),
+        const SizedBox(height: 10),
+        Text(vpnStatus, key: const ValueKey('xray-vpn-status'),
+            style: TextStyle(color: running ? colors.primary
+                : colors.onSurfaceVariant, fontSize: 12)),
+        TextButton.icon(
+          onPressed: vpnBusy ? null : refreshVpnStatus,
+          icon: const Icon(Icons.refresh_rounded, size: 17),
+          label: const Text('بررسی وضعیت VPN')),
+        const Text(
+          'این موتور بدون کانفیگ فعال کار نمی‌کند. فقط یک VPN سراسری اندروید '
+          'می‌تواند هم‌زمان فعال باشد؛ روشن بودن موتور، موفقیت اتصال سرور را تضمین نمی‌کند.',
+          style: TextStyle(fontSize: 11)),
+      ],
+    ));
+  }
+
+  @override
   void dispose() {
+    vpnProfile.dispose();
     apiId.dispose();
     apiHash.dispose();
     login.dispose();
@@ -447,6 +597,9 @@ class _TdHomeState extends State<TdHome> {
               ],
             ]),
           ),
+        const SizedBox(height: 24),
+        sectionTitle('اتصال اینترنت'),
+        vpnPanel(),
         const SizedBox(height: 24),
         sectionTitle('نمایش و همگام‌سازی'),
         surfacePanel(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
