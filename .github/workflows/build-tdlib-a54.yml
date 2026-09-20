@@ -9,6 +9,7 @@ on:
       - 'lib/td_inline_video.dart'
       - 'lib/td_ws_proxy.dart'
       - 'pubspec.yaml'
+      - 'scripts/prepare_android.py'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
       - 'test/td_inline_video_test.dart'
