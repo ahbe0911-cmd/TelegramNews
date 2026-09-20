@@ -204,8 +204,12 @@ class TdNewsController extends ChangeNotifier {
         final key = event['chat_id'].toString() + ':' + event['message_id'].toString();
         final previous = posts[key];
         if (previous != null && event['new_content'] is Map) {
-          previous.body = messageText(Map<String, dynamic>.from(event['new_content'] as Map));
-          changed();
+          record({
+            'chat_id': previous.chatId,
+            'id': previous.id,
+            'date': previous.date,
+            'content': event['new_content'],
+          });
         }
       case 'updateDeleteMessages':
         if (event['is_permanent'] == true && event['message_ids'] is List) {
