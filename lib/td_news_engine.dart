@@ -400,7 +400,8 @@ class TdNewsController extends ChangeNotifier {
       final document = content['document'] as Map;
       fileName = document['file_name']?.toString();
       final file = document['document'];
-      if ((fileName?.toLowerCase().endsWith('.pdf') ?? false) &&
+      if (((fileName?.toLowerCase().endsWith('.pdf') ?? false) ||
+           document['mime_type'] == 'application/pdf') &&
           file is Map && file['id'] is int) {
         mediaKind = 'pdf';
         mediaFileId = file['id'] as int;
