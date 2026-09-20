@@ -37,10 +37,8 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('حالت تاریک'), findsOneWidget);
     expect(find.byKey(const ValueKey('mtproto-connect')), findsNothing);
-    await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('telegram-saved-messages')),
-        180, scrollable: find.byType(Scrollable).first);
-    expect(find.text('پیام‌های ذخیره‌شده تلگرام'), findsOneWidget);
+    expect(find.byKey(const ValueKey('telegram-saved-messages')), findsNothing);
+    expect(find.byKey(const ValueKey('mtproto-proxy-link')), findsNothing);
 
     await tester.tap(find.text('خبرها'));
     await tester.pumpAndSettle();
@@ -50,7 +48,8 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     news.dispose();
   });
-  testWidgets('star saves a news card and saved tab shows and removes it', (tester) async {
+  testWidgets('news star sends to Telegram and Saved Messages tab is a chat',
+      (tester) async {
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -60,50 +59,33 @@ void main() {
         '{"id":-100123456,"username":"ExampleNews","title":"Example News"}',
       ],
     });
-    final preferences = await SharedPreferences.getInstance();
-    final news = TdNewsController(preferences);
+    final news = TdNewsController(await SharedPreferences.getInstance());
     news.state = 'authorizationStateReady';
     news.record({
       'chat_id': -100123456,
       'id': 125 * 1048576,
       'date': 1700000010,
       'content': {
-        '@type': 'messageText',
-        'text': {'text': 'خبر قابل ذخیره'},
+        '@type': 'messageText', 'text': {'text': 'خبر قابل ذخیره'},
       },
     });
     final post = news.feed.single;
-
-    await tester.pumpWidget(MaterialApp(
-      home: Directionality(
-        textDirection: TextDirection.rtl,
-        child: TdHome(news: news, onToggleTheme: () {}, dark: false),
-      ),
-    ));
-
+    await tester.pumpWidget(MaterialApp(home: Directionality(
+      textDirection: TextDirection.rtl,
+      child: TdHome(news: news, onToggleTheme: () {}, dark: false),
+    )));
     expect(find.byKey(ValueKey('bookmark-' + post.key)), findsOneWidget);
-    expect(find.byType(TextField), findsNothing);
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.byTooltip('جست‌وجوی خبر'));
-    await tester.pump();
-    await tester.enterText(find.byType(TextField), 'عبارت ناموجود');
-    await tester.pump();
-    expect(find.text('خبری با این عبارت پیدا نشد'), findsOneWidget);
-    await tester.tap(find.byTooltip('جست‌وجوی خبر'));
-    await tester.pump();
-    expect(find.text('خبر قابل ذخیره'), findsOneWidget);
-    await tester.tap(find.byKey(ValueKey('bookmark-' + post.key)));
-    await tester.pump();
-    expect(news.isSaved(post), isTrue);
+    expect(find.text('ذخیره در تلگرام'), findsOneWidget);
+    expect(news.isForwardedToTelegram(post), isFalse);
 
-    await tester.tap(find.text('ذخیره‌شده‌ها').last);
-    await tester.pump();
-    expect(find.text('خبر قابل ذخیره'), findsOneWidget);
-
-    await tester.tap(find.byKey(ValueKey('bookmark-' + post.key)));
-    await tester.pump();
-    expect(news.savedFeed, isEmpty);
-    expect(find.text('هنوز خبری ذخیره نشده است'), findsOneWidget);
+    await tester.tap(find.text('پیام‌های من').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('telegram-saved-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('saved-chat-composer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('saved-chat-send')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const ValueKey('saved-chat-composer')), 'یادداشت آزمایشی');
+    expect(find.text('یادداشت آزمایشی'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     news.dispose();
