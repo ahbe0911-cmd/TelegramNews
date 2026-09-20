@@ -25,3 +25,16 @@ test('edit and photo are supported',()=>{
   const result=normalize({update_id:8,edited_channel_post:{message_id:3,date:20,caption:'عکس',photo:[{file_id:'a'},{file_id:'b'}],chat:{id:-1002,type:'channel',username:'ahbe1400'}}},'@ahbe1400');
   assert.equal(result.photoId,'b');
 });
+
+test('private channel post is accepted only by its numeric chat ID',()=>{
+  const message={update_id:22,channel_post:{
+    message_id:18,date:1700000,text:'خبر کانال خصوصی',
+    chat:{id:-1001234567890,type:'channel',title:'Private channel'}
+  }};
+  assert.equal(normalize(message,'@ahbe1400'),null);
+  assert.equal(normalize(message,'-1001111111111'),null);
+  const post=normalize(message,'-1001234567890');
+  assert.equal(post.id,'18');
+  assert.equal(post.url,'https://t.me/c/1234567890/18');
+  assert.equal(post.text,'خبر کانال خصوصی');
+});
