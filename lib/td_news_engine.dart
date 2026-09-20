@@ -417,6 +417,52 @@ class TdNewsController extends ChangeNotifier {
     }
   }
 
+  /// Downloads an attachment only when the reader opens it. The TDLib file
+  /// remains in the app-private directory, not in an unauthenticated URL.
+  Future<String> ensureMedia(NewsPost post) async {
+    final id = post.mediaFileId;
+    if (id == null || (post.mediaKind != 'video' && post.mediaKind != 'pdf')) {
+      throw StateError('فایل قابل پخش یا PDF در این پیام پیدا نشد.');
+    }
+    if (post.mediaPath != null && post.mediaPath!.isNotEmpty) {
+      return post.mediaPath!;
+    }
+    final existing = downloadWaiters[id];
+    if (existing != null) return existing.future;
+    final waiter = Completer<String>();
+    downloadWaiters[id] = waiter;
+    try {
+      final result = await bridge.request({
+        '@type': 'downloadFile',
+        'file_id': id,
+        'priority': 24,
+        'offset': 0,
+        'limit': 0,
+        'synchronous': false,
+      });
+      completeAttachment(result);
+      final path = await waiter.future.timeout(const Duration(minutes: 3));
+      post.mediaPath = path;
+      changed();
+      return path;
+    } finally {
+      downloadWaiters.remove(id);
+    }
+  }
+
+  void completeAttachment(Map<String, dynamic> file) {
+    final id = file['id'];
+    if (id is! int) return;
+    final waiter = downloadWaiters[id];
+    if (waiter == null || waiter.isCompleted) return;
+    final local = file['local'];
+    if (local is! Map) return;
+    final path = local['path'];
+    if (local['is_downloading_completed'] == true && path is String && path.isNotEmpty) {
+      waiter.complete(path);
+    }
+  }
+
   Future<void> downloadPhoto(int id) async {
     try {
       final file = await bridge.request({
@@ -442,6 +488,10 @@ class TdNewsController extends ChangeNotifier {
   void dispose() {
     disposed = true;
     unawaited(listener?.cancel());
+    for (final waiter in downloadWaiters.values) {
+      if (!waiter.isCompleted) waiter.completeError(StateError('نمایشگر بسته شد.'));
+    }
+    downloadWaiters.clear();
     bridge.stop();
     super.dispose();
   }
