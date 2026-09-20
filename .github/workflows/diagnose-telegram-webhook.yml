@@ -1,0 +1,37 @@
+name: Diagnose Telegram Webhook
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Telegram webhook delivery safely
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.request
+          token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+          if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
+              sys.exit("Bot token missing or invalid in GitHub Secrets")
+          endpoint = "https://api.telegram.org/bot" + token + "/getWebhookInfo"
+          try:
+              with urllib.request.urlopen(
+                  urllib.request.Request(endpoint, data=b"", method="POST"),
+                  timeout=20,
+              ) as resp:
+                  info = json.load(resp)
+          except Exception:
+              sys.exit("Could not contact Telegram or read webhook status")
+          if not info.get("ok") or not isinstance(info.get("result"), dict):
+              sys.exit("Telegram did not provide webhook information")
+          webhook = info["result"]
+          expected = "https://still-morning-ed74.ahbe0911.workers.dev/telegram/webhook"
+          print("Correct webhook URL:", webhook.get("url") == expected)
+          print("Pending Telegram updates:", webhook.get("pending_update_count", "unknown"))
+          print("Allowed updates:", ", ".join(webhook.get("allowed_updates", [])))
+          print("Last delivery error (if any):", str(webhook.get("last_error_message") or "none")[:400])
+          print("Last delivery error timestamp:", webhook.get("last_error_date") or "none")
+          PY
