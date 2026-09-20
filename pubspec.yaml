@@ -15,6 +15,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   pdfx: ^2.11.0
   video_player: ^2.10.0
+  flutter_v2ray: 1.0.10
   http: ^1.2.2
   shared_preferences: 2.3.2
   shamsi_date: ^1.0.4
