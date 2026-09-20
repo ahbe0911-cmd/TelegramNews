@@ -29,6 +29,17 @@ jobs:
           cache: true
       - name: Prepare A54 Android host
         run: python3 scripts/prepare_android.py --profile modern
+      - name: Install alongside the previous app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          target = Path('android/app/build.gradle.kts')
+          source = target.read_text()
+          old = 'applicationId = "ir.channel.telegram_news"'
+          if old not in source:
+              raise SystemExit('Flutter generated an unexpected application ID')
+          target.write_text(source.replace(old, 'applicationId = "ir.channel.telegram_tdnews"'))
+          PY
       - name: Restore dependencies
         run: flutter pub get
       - name: Adapt older TDLib plugin for Android Gradle namespace
