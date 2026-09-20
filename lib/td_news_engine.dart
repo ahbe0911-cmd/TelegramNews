@@ -400,6 +400,17 @@ class TdNewsController extends ChangeNotifier {
         final image = thumb['file'] as Map;
         if (image['id'] is int) fileId = image['id'] as int;
       }
+    } else if (content['@type'] == 'messageVideoNote' &&
+        content['video_note'] is Map) {
+      mediaKind = 'video';
+      final note = content['video_note'] as Map;
+      final file = note['video'];
+      if (file is Map && file['id'] is int) mediaFileId = file['id'] as int;
+      final thumb = note['thumbnail'];
+      if (thumb is Map && thumb['file'] is Map) {
+        final image = thumb['file'] as Map;
+        if (image['id'] is int) fileId = image['id'] as int;
+      }
     } else if (content['@type'] == 'messageDocument' && content['document'] is Map) {
       final document = content['document'] as Map;
       fileName = document['file_name']?.toString();
