@@ -13,6 +13,7 @@ on:
       - 'scripts/prepare_android.py'
       - 'scripts/configure_variant.py'
       - 'scripts/build_tdlib_a54.sh'
+      - 'scripts/verify_apk_variant.py'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
       - 'test/td_inline_video_test.dart'
@@ -127,6 +128,8 @@ jobs:
       - name: Compile new TDLib A54 application
         run: flutter build apk --release --target lib/td_news_main.dart --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=APP_VARIANT=${{ matrix.variant }}
       - name: Give artifact a distinct name
+        run: python3 scripts/verify_apk_variant.py ${{ matrix.variant }}
+      - name: Name the installable APK
         run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/${{ matrix.artifact }}.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -134,4 +137,3 @@ jobs:
           path: build/app/outputs/flutter-apk/${{ matrix.artifact }}.apk
           if-no-files-found: error
           retention-days: 14
-

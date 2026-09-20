@@ -6,7 +6,7 @@ TD_REV=d1085f9cebc5a62379991ae1652673954f229c1f
 NDK_VERSION=27.0.12077973
 OUTPUT="$PWD/native-tdlib"
 mkdir -p "$OUTPUT"
-sdkmanager "ndk;$NDK_VERSION" "cmake;3.22.1"
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" "cmake;3.22.1"
 sudo apt-get update -qq
 sudo apt-get install -y ninja-build gperf libssl-dev zlib1g-dev php-cli
 git init tdlib-source
