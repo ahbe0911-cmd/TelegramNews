@@ -82,7 +82,7 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
         final position = player.value.position;
         final max = duration.inMilliseconds > 0
             ? duration.inMilliseconds.toDouble() : 1.0;
-        final value = position.inMilliseconds.toDouble().clamp(0, max);
+        final double value = position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
         return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           AspectRatio(
             aspectRatio: player.value.aspectRatio > 0
