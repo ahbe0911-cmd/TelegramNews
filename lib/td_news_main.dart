@@ -41,6 +41,8 @@ class _TdNewsAppState extends State<TdNewsApp> {
   Future<void> restoreSession() async {
     const vault = FlutterSecureStorage();
     try {
+      // Delete credentials belonging to the removed V2Ray feature.
+      try { await vault.delete(key: 'td_v2ray_link'); } catch (_) {}
       final id = int.tryParse(await vault.read(key: 'td_api_id') ?? '');
       final hash = await vault.read(key: 'td_api_hash');
       if (id == null || id <= 0 || hash == null || hash.isEmpty) return;
