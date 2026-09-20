@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
+import 'td_downloads.dart';
 
 class NewsMediaViewer extends StatefulWidget {
   final TdNewsController news;
@@ -19,7 +20,9 @@ class NewsMediaViewer extends StatefulWidget {
 class _NewsMediaViewerState extends State<NewsMediaViewer> {
   VideoPlayerController? video;
   PdfControllerPinch? pdf;
+  String? photoPath;
   String? error;
+  bool saving = false;
   bool loading = true;
 
   @override
@@ -32,7 +35,9 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
     try {
       final path = await widget.news.ensureMedia(widget.post);
       if (!mounted) return;
-      if (widget.post.mediaKind == 'pdf') {
+      if (widget.post.mediaKind == 'photo') {
+        setState(() { photoPath = path; loading = false; });
+      } else if (widget.post.mediaKind == 'pdf') {
         final controller = PdfControllerPinch(
           document: PdfDocument.openFile(path),
         );
@@ -127,17 +132,51 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
   @override
   Widget build(BuildContext context) {
     final isPdf = widget.post.mediaKind == 'pdf';
+    final isPhoto = widget.post.mediaKind == 'photo';
     return Scaffold(
-      appBar: AppBar(title: Text(isPdf ? 'نمایش سند PDF' : 'پخش ویدئو')),
+      appBar: AppBar(
+        title: Text(isPdf ? 'نمایش سند PDF'
+            : isPhoto ? 'نمایش تصویر' : 'پخش ویدئو'),
+        actions: [
+          IconButton(
+            tooltip: 'دانلود و ذخیره فایل',
+            onPressed: saving ? null : () async {
+              setState(() { saving = true; });
+              try {
+                await NewsDownloadService.save(widget.news, widget.post);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('در Downloads/NabzKhabar ذخیره شد.')));
+              } catch (_) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('ذخیره فایل انجام نشد.')));
+              } finally {
+                if (mounted) setState(() { saving = false; });
+              }
+            },
+            icon: saving ? const SizedBox(width: 19, height: 19,
+                child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.download_rounded),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: loading
-            ? const Center(child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 17),
-                  Text('در حال دریافت فایل از تلگرام…'),
-                ],
+            ? Center(child: AnimatedBuilder(
+                animation: widget.news,
+                builder: (context, _) {
+                  final id = widget.post.mediaFileId ?? widget.post.photoId;
+                  final progress = widget.news.downloadProgress[id];
+                  return Column(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(width: 52, height: 52,
+                      child: CircularProgressIndicator(value: progress)),
+                    const SizedBox(height: 15),
+                    const Text('در حال دریافت فایل از تلگرام…'),
+                    if (progress != null) Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text((progress * 100).toStringAsFixed(0) + '٪'),
+                    ),
+                  ]);
+                },
               ))
             : error != null
                 ? Center(child: Padding(
@@ -171,6 +210,11 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
                   ))
                 : isPdf
                     ? PdfViewPinch(controller: pdf!)
+                    : isPhoto
+                        ? InteractiveViewer(
+                            minScale: 1, maxScale: 5,
+                            child: Center(child: Image.file(File(photoPath!),
+                              fit: BoxFit.contain)))
                     : Center(child: SingleChildScrollView(
                         padding: const EdgeInsets.all(12),
                         child: _videoPlayer(),
