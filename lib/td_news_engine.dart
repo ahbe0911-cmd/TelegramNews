@@ -151,6 +151,7 @@ class TdNewsController extends ChangeNotifier {
   final bridge = TdBridge();
   final sources = <int, NewsSource>{};
   final posts = <String, NewsPost>{};
+  final saved = <String, NewsPost>{};
   final photoTargets = <int, Set<String>>{};
   final downloadWaiters = <int, Completer<String>>{};
   final downloadProgress = <int, double>{};
@@ -173,6 +174,59 @@ class TdNewsController extends ChangeNotifier {
         sources[source.id] = source;
       } catch (_) { /* Invalid local preference is ignored. */ }
     }
+    for (final raw in prefs.getStringList('td_saved_posts') ?? <String>[]) {
+      try {
+        final item = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final savedPost = NewsPost(
+          item['chat_id'] as int,
+          item['message_id'] as int,
+          item['date'] as int,
+          item['source'] as String,
+          item['username'] as String,
+          item['body'] as String,
+          item['photo_id'] as int?,
+          null,
+          mediaKind: item['media_kind'] as String? ?? 'none',
+          mediaFileId: item['media_file_id'] as int?,
+          fileName: item['file_name'] as String?,
+        );
+        saved[savedPost.key] = savedPost;
+      } catch (_) { /* One invalid bookmark must not hide other bookmarks. */ }
+    }
+  }
+
+  bool isSaved(NewsPost post) => saved.containsKey(post.key);
+
+  List<NewsPost> get savedFeed {
+    final result = saved.entries.map((entry) => posts[entry.key] ?? entry.value).toList();
+    result.sort((a, b) => b.date != a.date
+        ? b.date.compareTo(a.date) : b.id.compareTo(a.id));
+    return result;
+  }
+
+  Future<void> toggleSaved(NewsPost post) async {
+    if (saved.containsKey(post.key)) {
+      saved.remove(post.key);
+    } else {
+      saved[post.key] = post;
+    }
+    changed();
+    // Persist a compact text-and-attachment snapshot: saved posts remain
+    // readable even when they leave the 25-message live history window.
+    await prefs.setStringList('td_saved_posts', saved.values.map((post) {
+      return jsonEncode({
+        'chat_id': post.chatId,
+        'message_id': post.id,
+        'date': post.date,
+        'source': post.source,
+        'username': post.username,
+        'body': post.body,
+        'photo_id': post.photoId,
+        'media_kind': post.mediaKind,
+        'media_file_id': post.mediaFileId,
+        'file_name': post.fileName,
+      });
+    }).toList());
   }
 
   void changed() { if (!disposed) notifyListeners(); }
