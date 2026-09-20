@@ -24,6 +24,7 @@ void main() {
       ),
     ));
     expect(find.text('آخرین خبرها'), findsOneWidget);
+    expect(find.text('آخرین اخبار کانال‌های شما'), findsOneWidget);
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     expect(find.text('هنوز منبع خبری ندارید'), findsOneWidget);
 
@@ -31,9 +32,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('افزودن کانال عمومی'), findsOneWidget);
     expect(find.text('کانال‌های من'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('WebSocket داخلی تلگرام'), 170,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('WebSocket داخلی تلگرام'), findsOneWidget);
+    expect(find.textContaining('WebSocket'), findsNothing);
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('حالت تاریک'), findsOneWidget);
