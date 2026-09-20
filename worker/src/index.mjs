@@ -1,5 +1,5 @@
 /*
- * Free Cloudflare Workers + D1 backend for one public Telegram channel.
+ * Cloudflare Workers + D1 backend for one configured public or private Telegram channel.
  * No bot token is included in the Android app or public repository.
  */
 const jsonHeaders = {'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cache-control':'public, max-age=10'};
@@ -43,7 +43,7 @@ function normalize(update,channel){
     editedAt:m.edit_date||m.date,
     title:Array.from(body.split('\n').find(line=>line.trim())||'خبر جدید').slice(0,100).join(''),
     text:body,html:renderHtml(body,m.entities||m.caption_entities||[]),
-    url:m.chat.username?'https://t.me/'+m.chat.username+'/'+id:'',
+    url:m.chat.username?'https://t.me/'+m.chat.username+'/'+id:(String(m.chat.id).startsWith('-100')?'https://t.me/c/'+String(m.chat.id).slice(4)+'/'+id:''),
     important:/#(?:مهم|فوری)(?:\s|$|[.,،!])/u.test(body),
     photoId:m.photo?.at(-1)?.file_id||null};
 }
@@ -86,8 +86,23 @@ async function webhook(request,env){
   if(!ct.includes('application/json'))return textResponse('Bad request',400);
   const body=await request.text();
   if(body.length>256000)return textResponse('Payload too large',413);
-  const post=normalize(JSON.parse(body),env.TELEGRAM_CHANNEL_ID||'@ahbe1400');
-  if(!post)return textResponse('ignored');
+  const update=JSON.parse(body);
+  const received=update.channel_post||update.edited_channel_post;
+  if(received?.chat?.type==='channel'){
+    // Authorized request only: log the numeric chat ID, never post text or the bot token.
+    // Use this ID as TELEGRAM_CHANNEL_ID when the public username is removed.
+    console.info('Channel ID for setup:',String(received.chat.id));
+  }
+  const configuredChannel=String(env.TELEGRAM_CHANNEL_ID||'').trim();
+  if(!configuredChannel){
+    console.warn('TELEGRAM_CHANNEL_ID is not configured; no post stored');
+    return textResponse('channel_not_configured');
+  }
+  const post=normalize(update,configuredChannel);
+  if(!post){
+    if(received?.chat?.type==='channel')console.info('Post ignored: configured channel differs from incoming channel');
+    return textResponse('ignored');
+  }
   const row=await env.DB.prepare('SELECT edited_at,update_id FROM posts WHERE id=?').bind(Number(post.id)).first();
   if(row&&(row.edited_at>post.editedAt||(row.edited_at===post.editedAt&&row.update_id>=post.updateId)))
     return textResponse('duplicate');
