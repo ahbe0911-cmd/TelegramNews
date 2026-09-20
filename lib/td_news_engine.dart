@@ -13,7 +13,7 @@ Future<void> tdWorker(SendPort output) async {
   var running = true;
   int client = 0;
   try {
-    await TdNativePlugin.initialize('libtdjson.so');
+    await TdPlugin.initialize('libtdjson.so');
     client = TdPlugin.instance.tdJsonClientCreate();
     input.listen((dynamic command) {
       if (command is! Map) return;
