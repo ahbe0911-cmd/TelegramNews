@@ -11,6 +11,7 @@ on:
       - 'pubspec.yaml'
       - 'test/td_news_engine_test.dart'
       - 'test/td_news_ui_test.dart'
+      - 'test/td_inline_video_test.dart'
       - '.github/workflows/build-tdlib-a54.yml'
 permissions:
   contents: read
@@ -68,6 +69,8 @@ jobs:
         run: flutter test test/td_news_engine_test.dart
       - name: Verify home and settings layout
         run: flutter test test/td_news_ui_test.dart
+      - name: Verify lazy inline video and justified Persian text
+        run: flutter test test/td_inline_video_test.dart
       - name: Configure optional release signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
