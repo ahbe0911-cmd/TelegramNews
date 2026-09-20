@@ -53,7 +53,10 @@ jobs:
           source = gradle.read_text()
           if "namespace 'org.naji.td.tdlib'" not in source:
               source = source.replace('android {', "android {\n    namespace 'org.naji.td.tdlib'", 1)
-              gradle.write_text(source)
+          if 'compileSdkVersion 31' not in source:
+              raise SystemExit('Unexpected TDLib compileSdk: check plugin Gradle setup')
+          source = source.replace('compileSdkVersion 31', 'compileSdkVersion 36', 1)
+          gradle.write_text(source)
           PY
       - name: Validate TDLib application source
         run: flutter analyze --no-fatal-infos lib
