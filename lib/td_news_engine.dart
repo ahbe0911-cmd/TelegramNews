@@ -164,6 +164,7 @@ class TdNewsController extends ChangeNotifier {
   bool busy = false;
   bool disposed = false;
   bool parametersSubmitted = false;
+  Future<void>? parametersSetup;
   int apiId = 0;
   String apiHash = '';
   String dbDirectory = '';
@@ -262,7 +263,7 @@ class TdNewsController extends ChangeNotifier {
       embeddedProxyStatus = 'پروکسی محلی فعال است؛ اتصال تلگرام در حال بررسی';
     } catch (_) {
       embeddedProxyActive = false;
-      embeddedProxyStatus = 'پروکسی داخلی در دسترس نیست؛ اتصال مستقیم';
+      embeddedProxyStatus = 'راه‌اندازی پروکسی داخلی ناموفق بود؛ اتصال مستقیم فعال است. برای تلاش دوباره کلید را خاموش و روشن کنید.';
       try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
       try { await EmbeddedTelegramProxy.stop(); } catch (_) {}
     }
@@ -291,8 +292,11 @@ class TdNewsController extends ChangeNotifier {
     try {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
-      await configureEmbeddedProxy();
       await onAuthorization(await bridge.request({'@type': 'getAuthorizationState'}));
+      // TDLib rejects proxy commands while its database/API parameters are
+      // still being initialized. Do not stop the local relay prematurely.
+      if (parametersSetup != null) await parametersSetup;
+      await configureEmbeddedProxy();
     } catch (_) {
       state = 'failed';
       status = 'راه‌اندازی TDLib ناموفق بود؛ تنظیمات یا کتابخانه بومی را بررسی کنید.';
@@ -356,7 +360,7 @@ class TdNewsController extends ChangeNotifier {
     if (state == 'authorizationStateWaitTdlibParameters' && !parametersSubmitted) {
       parametersSubmitted = true;
       try {
-        await bridge.request({
+        parametersSetup = bridge.request({
           '@type': 'setTdlibParameters', 'use_test_dc': false,
           'database_directory': dbDirectory + '/tdlib',
           'files_directory': dbDirectory + '/media',
@@ -367,7 +371,8 @@ class TdNewsController extends ChangeNotifier {
           'system_language_code': 'fa', 'device_model': 'Samsung Galaxy A54',
           'system_version': 'Android', 'application_version': '1.0',
           'enable_storage_optimizer': true, 'ignore_file_names': false,
-        });
+        }).then((_) {});
+        await parametersSetup;
       } catch (_) {
         parametersSubmitted = false;
         status = 'API ID یا API Hash پذیرفته نشد؛ مقادیر را بررسی کنید.';
