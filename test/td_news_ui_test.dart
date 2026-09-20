@@ -104,4 +104,58 @@ void main() {
     news.dispose();
   });
 
+  testWidgets('photo news has download and a full-page continuation', (tester) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({
+      'td_channels': [
+        '{"id":-100123456,"username":"ExampleNews","title":"Example News"}',
+      ],
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final news = TdNewsController(preferences);
+    news.state = 'authorizationStateReady';
+    final fullCaption = 'عنوان خبر\\n' +
+        List.filled(14, 'متن طولانی خبر برای خواندن کامل.').join(' ') +
+        '\\nپایان خبر بدون حذف یا کوتاه‌سازی.';
+    news.record({
+      'chat_id': -100123456,
+      'id': 126 * 1048576,
+      'date': 1700000010,
+      'content': {
+        '@type': 'messagePhoto',
+        'caption': {'text': fullCaption},
+        'photo': {'sizes': [
+          {'width': 640, 'height': 400, 'photo': {'id': 701}},
+        ]},
+      },
+    });
+    final post = news.feed.single;
+
+    await tester.pumpWidget(MaterialApp(home: Directionality(
+      textDirection: TextDirection.rtl,
+      child: TdHome(news: news, onToggleTheme: () {}, dark: false),
+    )));
+    expect(find.byKey(ValueKey('bookmark-' + post.key)), findsOneWidget);
+    expect(find.byKey(ValueKey('download-' + post.key)), findsOneWidget);
+    final more = find.byKey(ValueKey('read-more-' + post.key));
+    await tester.ensureVisible(more);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+
+    expect(find.text('متن کامل خبر'), findsOneWidget);
+    final fullText = tester.widget<SelectableText>(
+        find.byKey(ValueKey('article-full-text-' + post.key)));
+    expect(fullText.data, fullCaption);
+    expect(find.text('مشاهده عکس با اندازه کامل'), findsOneWidget);
+    expect(find.text('ذخیره این خبر'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('download-' + post.key)), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    news.dispose();
+  });
 }

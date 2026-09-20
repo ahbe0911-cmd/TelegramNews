@@ -484,6 +484,14 @@ class _TdHomeState extends State<TdHome> {
     }
   }
 
+  void openArticle(NewsPost post) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => NewsArticlePage(
+        news: widget.news, post: post, date: dateLabel(post.date),
+      ),
+    ));
+  }
+
   void openAttachment(NewsPost post) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => NewsMediaViewer(news: widget.news, post: post),
@@ -774,27 +782,52 @@ class _TdHomeState extends State<TdHome> {
                   key: ValueKey('bookmark-' + post.key),
                   onPressed: () => unawaited(widget.news.toggleSaved(post)),
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    minimumSize: const Size(44, 48),
                     foregroundColor: widget.news.isSaved(post) ? colors.primary : colors.onSurface),
                   icon: Icon(widget.news.isSaved(post) ? Icons.star_rounded : Icons.star_border_rounded,
-                    size: 26),
-                  label: Text(widget.news.isSaved(post) ? 'ذخیره شد' : 'ذخیره'),
+                    size: 22),
+                  label: Text(widget.news.isSaved(post) ? 'ذخیره شد' : 'ذخیره',
+                    style: const TextStyle(fontSize: 12)),
                 )),
-                VerticalDivider(width: 1, indent: 10, endIndent: 10,
-                  color: colors.outlineVariant.withValues(alpha: .4)),
-                Expanded(child: (post.mediaFileId != null || post.photoId != null)
-                  ? savingPosts.contains(post.key)
+                if (post.mediaFileId != null || post.photoId != null) ...[
+                  VerticalDivider(width: 1, indent: 10, endIndent: 10,
+                    color: colors.outlineVariant.withValues(alpha: .4)),
+                  Expanded(child: savingPosts.contains(post.key)
                     ? const Center(child: SizedBox(width: 22, height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2)))
                     : TextButton.icon(
                         key: ValueKey('download-' + post.key),
                         onPressed: () => savePost(post),
-                        style: TextButton.styleFrom(minimumSize: const Size(48, 48),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          minimumSize: const Size(44, 48),
                           foregroundColor: colors.onSurface),
-                        icon: const Icon(Icons.file_download_outlined, size: 25),
-                        label: const Text('دانلود'))
-                  : Center(child: Text(post.mediaKind == 'unsupported'
-                      ? 'دریافت دوباره' : 'ادامه خبر', style: const TextStyle(fontSize: 12)))),
+                        icon: const Icon(Icons.file_download_outlined, size: 21),
+                        label: const Text('دانلود', style: TextStyle(fontSize: 12)))),
+                ],
+                if (post.body.trim().isNotEmpty) ...[
+                  VerticalDivider(width: 1, indent: 10, endIndent: 10,
+                    color: colors.outlineVariant.withValues(alpha: .4)),
+                  Expanded(child: TextButton.icon(
+                    key: ValueKey('read-more-' + post.key),
+                    onPressed: () => openArticle(post),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      minimumSize: const Size(44, 48),
+                      foregroundColor: colors.primary),
+                    icon: const Icon(Icons.article_outlined, size: 19),
+                    label: const Text('ادامه مطلب', maxLines: 1,
+                      softWrap: false, style: TextStyle(fontSize: 11.5)),
+                  )),
+                ] else if (post.mediaKind == 'unsupported') ...[
+                  VerticalDivider(width: 1, indent: 10, endIndent: 10,
+                    color: colors.outlineVariant.withValues(alpha: .4)),
+                  Expanded(child: TextButton(
+                    onPressed: () => unawaited(widget.news.reloadPost(post)),
+                    child: const Text('دریافت دوباره', style: TextStyle(fontSize: 11)),
+                  )),
+                ],
               ])),
             ]),
           ),
@@ -1028,4 +1061,129 @@ class _TdHomeState extends State<TdHome> {
           );
         },
       );
+}
+
+
+/// A dedicated, vertically scrollable reading view; feed cards stay compact.
+/// Displays the original caption in full without opening Telegram or cropping it.
+class NewsArticlePage extends StatelessWidget {
+  final TdNewsController news;
+  final NewsPost post;
+  final String date;
+
+  const NewsArticlePage({
+    super.key, required this.news, required this.post, required this.date,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final photoPath = post.photoPath;
+    final preview = post.previewBytes;
+    final Widget? cover = photoPath != null && photoPath.isNotEmpty
+        ? Image.file(File(photoPath), fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, size: 44))
+        : preview != null && preview.isNotEmpty
+            ? Image.memory(preview, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, size: 44))
+            : null;
+    final hasAttachment = post.mediaKind == 'photo' ||
+        post.mediaKind == 'video' || post.mediaKind == 'pdf';
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('متن کامل خبر',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          centerTitle: true,
+        ),
+        body: SafeArea(child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: .07),
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(post.source,
+                    style: TextStyle(color: colors.primary,
+                      fontWeight: FontWeight.w800, fontSize: 15)),
+                  const SizedBox(height: 5),
+                  Text(date, textDirection: TextDirection.ltr,
+                    style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+                ]),
+              ),
+              if (cover != null) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: SizedBox(height: 215, width: double.infinity, child: cover),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: colors.outlineVariant.withValues(alpha: .25)),
+                ),
+                child: SelectableText(
+                  post.body.trim(),
+                  key: ValueKey('article-full-text-' + post.key),
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.start,
+                  style: TextStyle(
+                    fontFamily: 'CustomFont',
+                    fontSize: 17, height: 1.95, color: colors.onSurface),
+                ),
+              ),
+              if (hasAttachment) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) =>
+                        NewsMediaViewer(news: news, post: post))),
+                  icon: Icon(post.mediaKind == 'video'
+                      ? Icons.play_circle_outline_rounded
+                      : post.mediaKind == 'pdf'
+                          ? Icons.picture_as_pdf_outlined
+                          : Icons.image_outlined),
+                  label: Text(post.mediaKind == 'video' ? 'مشاهده ویدئو'
+                      : post.mediaKind == 'pdf' ? 'خواندن PDF'
+                          : 'مشاهده عکس با اندازه کامل'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48)),
+                ),
+              ],
+            ],
+          ),
+        ))),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+            child: AnimatedBuilder(
+              animation: news,
+              builder: (context, _) => OutlinedButton.icon(
+                onPressed: () => unawaited(news.toggleSaved(post)),
+                icon: Icon(news.isSaved(post)
+                    ? Icons.star_rounded : Icons.star_border_rounded),
+                label: Text(news.isSaved(post)
+                    ? 'خبر در ذخیره‌شده‌ها قرار دارد' : 'ذخیره این خبر'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
