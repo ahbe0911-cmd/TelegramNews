@@ -118,11 +118,6 @@ if args.profile == 'modern':
     )
     if activity_match is None:
         raise SystemExit('Unexpected Flutter activity template')
-    source = source.replace('import io.flutter.embedding.android.FlutterActivity',
-'''import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
-import android.content.Intent''')
     source = source[:activity_match.start()] + '''class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -145,5 +140,10 @@ import android.content.Intent''')
         }
     }
 }''' + source[activity_match.end():]
+    source = source.replace('import io.flutter.embedding.android.FlutterActivity',
+'''import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import android.content.Intent''')
     activity.write_text(source)
 print('Android host prepared:', args.profile)
