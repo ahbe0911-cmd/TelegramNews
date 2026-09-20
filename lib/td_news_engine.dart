@@ -184,6 +184,11 @@ class TdNewsController extends ChangeNotifier {
     try {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
+      // Clear any persisted localhost proxy from a prior process that was
+      // killed while its opt-in native V2Ray service was running.
+      try {
+        await bridge.request({'@type': 'disableProxy'});
+      } catch (_) { /* First-launch auth can still proceed without a proxy. */ }
       await onAuthorization(await bridge.request({'@type': 'getAuthorizationState'}));
     } catch (_) {
       state = 'failed';
