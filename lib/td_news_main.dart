@@ -61,15 +61,26 @@ class _TdNewsAppState extends State<TdNewsApp> {
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: ThemeData(
           useMaterial3: true,
-          colorSchemeSeed: const Color(0xff3768be),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xff255f9a),
+            surface: const Color(0xffffffff),
+          ),
           fontFamily: 'CustomFont',
-          scaffoldBackgroundColor: const Color(0xfff6f8fc),
+          scaffoldBackgroundColor: const Color(0xfff5f7fb),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xfff5f7fb),
+            elevation: 0,
+            scrolledUnderElevation: 0,
+          ),
         ),
         darkTheme: ThemeData(
           useMaterial3: true,
-          colorSchemeSeed: const Color(0xff7aa8ff),
-          brightness: Brightness.dark,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xff91baff),
+            brightness: Brightness.dark,
+          ),
           fontFamily: 'CustomFont',
+          appBarTheme: const AppBarTheme(elevation: 0, scrolledUnderElevation: 0),
         ),
         themeMode: dark ? ThemeMode.dark : ThemeMode.light,
         home: Directionality(
@@ -105,6 +116,8 @@ class _TdHomeState extends State<TdHome> {
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
+  int selectedTab = 0; // 0: news, 1: settings
+  bool refreshing = false;
 
   @override
   void dispose() {
