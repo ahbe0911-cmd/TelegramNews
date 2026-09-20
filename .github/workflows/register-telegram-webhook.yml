@@ -1,0 +1,40 @@
+name: Register Telegram Webhook
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Register webhook without printing credentials
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.parse, urllib.request
+          token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+          secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+          destination = "https://still-morning-ed74.ahbe0911.workers.dev/telegram/webhook"
+          if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
+              sys.exit("TELEGRAM_BOT_TOKEN secret is missing or malformed.")
+          if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", secret):
+              sys.exit("TELEGRAM_WEBHOOK_SECRET must contain 32-256 allowed characters.")
+          endpoint = "https://api.telegram.org/bot" + token + "/setWebhook"
+          payload = urllib.parse.urlencode({
+              "url": destination,
+              "secret_token": secret,
+              "allowed_updates": json.dumps(["channel_post", "edited_channel_post"]),
+              "drop_pending_updates": "false",
+          }).encode()
+          try:
+              request = urllib.request.Request(endpoint, data=payload, method="POST")
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  result = json.load(response)
+          except Exception:
+              sys.exit("Telegram webhook request failed. Check bot token and rerun.")
+          if result.get("ok") is not True or result.get("result") is not True:
+              sys.exit("Telegram did not accept webhook. Check bot token and retry.")
+          print("Webhook registered successfully:", destination)
+          PY
