@@ -258,7 +258,7 @@ class _TdHomeState extends State<TdHome> {
             key: const ValueKey('xray-vpn-connect'),
             onPressed: vpnBusy || running ? null : connectSystemVpn,
             icon: const Icon(Icons.power_settings_new_rounded),
-            label: const Text('اتصال VPN')),
+            label: const Text('اتصال VPN'))),
           const SizedBox(width: 9),
           OutlinedButton(
             key: const ValueKey('xray-vpn-disconnect'),
