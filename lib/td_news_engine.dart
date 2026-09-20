@@ -322,18 +322,31 @@ class TdNewsController extends ChangeNotifier {
         throw StateError('آدرس مربوط به یک کانال عمومی نیست.');
       }
       final id = chat['id'] as int;
-      // The Add + Join UI explicitly tells the user this joins the channel.
-      try {
-        await bridge.request({'@type': 'joinChat', 'chat_id': id});
-      } catch (error) {
-        if (!error.toString().toLowerCase().contains('already')) rethrow;
-      }
+      // Make the source visible immediately after Telegram resolves it.
+      // Joining and history loading are network work and must not keep the
+      // Add button blocked for several seconds.
       sources[id] = NewsSource(id, name, chat['title']?.toString() ?? name);
       await persist();
-      // Never make the add button wait for media or history download.
-      unawaited(loadHistory(id, limit: 12));
-      status = 'کانال افزوده شد؛ آخرین خبرها در حال بارگذاری‌اند.';
+      _sortedFeed = null;
+      status = 'کانال اضافه شد؛ خبرهای ذخیره‌شده فوراً نمایش داده می‌شوند.';
+      changed();
+      unawaited(loadHistory(id, limit: 12, onlyLocal: true));
+      unawaited(_joinAndWarm(id));
     } finally { busy = false; changed(); }
+  }
+
+  Future<void> _joinAndWarm(int id) async {
+    try {
+      await bridge.request({'@type': 'joinChat', 'chat_id': id});
+    } catch (error) {
+      // Public channels may already be joined. History can still be attempted
+      // and the UI should stay responsive either way.
+      if (!error.toString().toLowerCase().contains('already')) {
+        status = 'کانال اضافه شد؛ عضویت خودکار کامل نشد.';
+        changed();
+      }
+    }
+    await loadHistory(id, limit: 18);
   }
 
   Future<void> removeChannel(int id) async {
@@ -602,7 +615,7 @@ class TdNewsController extends ChangeNotifier {
   Future<void> downloadPhoto(int id) async {
     try {
       final file = await bridge.request({
-        '@type': 'downloadFile', 'file_id': id, 'priority': 16,
+        '@type': 'downloadFile', 'file_id': id, 'priority': 32,
         'offset': 0, 'limit': 0, 'synchronous': false,
       });
       updatePhoto(file);
