@@ -149,6 +149,10 @@ void main() {
     final fullText = tester.widget<SelectableText>(
         find.byKey(ValueKey('article-full-text-' + post.key)));
     expect(fullText.data, fullCaption);
+    // The full caption is deliberately long: the attachment action starts
+    // below the viewport in the lazy, scrollable article page.
+    await tester.scrollUntilVisible(find.text('مشاهده عکس با اندازه کامل'),
+        220, scrollable: find.byType(Scrollable).last);
     expect(find.text('مشاهده عکس با اندازه کامل'), findsOneWidget);
     expect(find.text('ذخیره این خبر'), findsOneWidget);
     await tester.pageBack();
