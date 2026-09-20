@@ -177,7 +177,7 @@ class TdNewsController extends ChangeNotifier {
 
   void changed() { if (!disposed) notifyListeners(); }
   List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
-    ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id));
+    ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id)));
 
   Future<void> start(int id, String hash, String path) async {
     if (state != 'setup' && state != 'failed') return;
