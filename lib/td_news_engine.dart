@@ -187,8 +187,7 @@ class TdNewsController extends ChangeNotifier {
     try {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
-      // Clear any persisted localhost proxy from a prior process that was
-      // killed while its opt-in native V2Ray service was running.
+      // Clear any old proxy left by earlier app versions before connecting directly.
       try {
         await bridge.request({'@type': 'disableProxy'});
       } catch (_) { /* First-launch auth can still proceed without a proxy. */ }
@@ -298,30 +297,6 @@ class TdNewsController extends ChangeNotifier {
     } catch (_) {
       status = 'اطلاعات ورود تأیید نشد؛ مقدار را بررسی کنید.';
     } finally { busy = false; changed(); }
-  }
-
-  /// Only the Telegram TDLib connection uses this loopback proxy.
-  /// It does not change Android's system-wide VPN or proxy settings.
-  Future<void> enableLocalProxy({int port = 1080}) async {
-    if (state != 'authorizationStateReady') {
-      throw StateError('ابتدا وارد حساب تلگرام شوید.');
-    }
-    await bridge.request({
-      '@type': 'addProxy',
-      'server': '127.0.0.1',
-      'port': port,
-      'enable': true,
-      'type': {'@type': 'proxyTypeSocks5', 'username': '', 'password': ''},
-    });
-    status = 'اتصال تلگرام از پراکسی داخلی برقرار شد.';
-    changed();
-  }
-
-  Future<void> disableLocalProxy() async {
-    if (bridge.sender == null) return;
-    await bridge.request({'@type': 'disableProxy'});
-    status = 'اتصال مستقیم تلگرام فعال شد.';
-    changed();
   }
 
   Future<void> addChannel(String raw) async {
