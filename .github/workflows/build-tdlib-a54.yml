@@ -56,7 +56,7 @@ jobs:
               gradle.write_text(source)
           PY
       - name: Validate TDLib application source
-        run: dart analyze lib/td_news_engine.dart lib/td_news_main.dart
+        run: flutter analyze --no-fatal-infos lib/td_news_engine.dart lib/td_news_main.dart
       - name: Test channel parsing and local sources
         run: flutter test test/td_news_engine_test.dart
       - name: Configure optional release signing
