@@ -153,6 +153,9 @@ class TdNewsController extends ChangeNotifier {
   final posts = <String, NewsPost>{};
   final photoTargets = <int, Set<String>>{};
   final downloadWaiters = <int, Completer<String>>{};
+  final downloadProgress = <int, double>{};
+  final _thumbnailStarted = <int>{};
+  List<NewsPost>? _sortedFeed;
   StreamSubscription<Map<String, dynamic>>? listener;
   String state = 'setup';
   String status = 'API ID و API Hash را برای ورود وارد کنید';
@@ -173,7 +176,7 @@ class TdNewsController extends ChangeNotifier {
   }
 
   void changed() { if (!disposed) notifyListeners(); }
-  List<NewsPost> get feed => posts.values.toList()
+  List<NewsPost> get feed => _sortedFeed ??= (posts.values.toList()
     ..sort((a, b) => b.date != a.date ? b.date.compareTo(a.date) : b.id.compareTo(a.id));
 
   Future<void> start(int id, String hash, String path) async {
