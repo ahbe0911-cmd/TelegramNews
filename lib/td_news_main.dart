@@ -10,6 +10,7 @@ import 'package:shamsi_date/shamsi_date.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
+import 'td_media_viewer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -460,6 +461,12 @@ class _TdHomeState extends State<TdHome> {
   }
 
 
+  void openAttachment(NewsPost post) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => NewsMediaViewer(news: widget.news, post: post),
+    ));
+  }
+
   Widget postCard(NewsPost post) {
     final colors = Theme.of(context).colorScheme;
     final hasPhoto = post.photoPath != null && post.photoPath!.isNotEmpty;
@@ -515,6 +522,21 @@ class _TdHomeState extends State<TdHome> {
                       ]),
                     )),
                     const SizedBox(height: 12),
+                    if (post.mediaKind == 'video' || post.mediaKind == 'pdf') ...[
+                      FilledButton.icon(
+                        onPressed: () => openAttachment(post),
+                        icon: Icon(post.mediaKind == 'pdf'
+                            ? Icons.picture_as_pdf_rounded : Icons.play_circle_rounded),
+                        label: Text(post.mediaKind == 'pdf'
+                            ? 'خواندن PDF در برنامه' : 'پخش ویدئو در برنامه'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     FilledButton.icon(
                       onPressed: () => launchUrl(Uri.parse(post.link),
                           mode: LaunchMode.externalApplication),
@@ -533,13 +555,60 @@ class _TdHomeState extends State<TdHome> {
           ),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (hasPhoto) Image.file(
-            File(post.photoPath!),
-            height: 192,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          ),
+          if (post.mediaKind == 'pdf')
+            Container(
+              height: 122,
+              width: double.infinity,
+              color: colors.primaryContainer.withValues(alpha: .47),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.picture_as_pdf_rounded, size: 48, color: colors.primary),
+                const SizedBox(width: 12),
+                Flexible(child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('سند PDF', style: TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(post.fileName ?? 'برای نمایش لمس کنید',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                )),
+              ]),
+            )
+          else if (post.mediaKind == 'video')
+            SizedBox(
+              height: 192,
+              width: double.infinity,
+              child: Stack(fit: StackFit.expand, children: [
+                if (hasPhoto)
+                  Image.file(
+                    File(post.photoPath!), fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  )
+                else
+                  ColoredBox(color: colors.primaryContainer.withValues(alpha: .45)),
+                Center(child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: Color(0xbf000000), shape: BoxShape.circle),
+                  child: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Icon(Icons.play_arrow_rounded,
+                      size: 36, color: Colors.white),
+                  ),
+                )),
+                const Positioned(
+                  right: 12, bottom: 11,
+                  child: Text('ویدئو', style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ]),
+            )
+          else if (hasPhoto)
+            Image.file(
+              File(post.photoPath!), height: 192, width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(17, 17, 17, 18),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -572,7 +641,8 @@ class _TdHomeState extends State<TdHome> {
               ],
               const SizedBox(height: 12),
               Row(children: [
-                Text('ادامه خبر', style: TextStyle(
+                Text(post.mediaKind == 'pdf' ? 'خواندن PDF'
+                    : post.mediaKind == 'video' ? 'پخش ویدئو' : 'ادامه خبر', style: TextStyle(
                   color: colors.primary, fontWeight: FontWeight.w700, fontSize: 12)),
                 const SizedBox(width: 3),
                 Icon(Icons.arrow_back_rounded, size: 16, color: colors.primary),
