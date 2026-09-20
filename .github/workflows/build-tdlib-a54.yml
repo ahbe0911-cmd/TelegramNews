@@ -40,6 +40,8 @@ jobs:
         run: |
           mkdir -p android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy
           cp ws_bridge/vendor/*.kt android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/
+          mkdir -p android/app/src/main/assets
+          cp ws_bridge/LICENSE.MIT android/app/src/main/assets/ws_bridge_license.txt
           grep -F 'SSLContext.getDefault()' android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/RawWebSocket.kt
           grep -F 'endpointIdentificationAlgorithm = "HTTPS"' android/app/src/main/kotlin/org/flowseal/tgwsproxy/proxy/RawWebSocket.kt
       - name: Install alongside the previous app
