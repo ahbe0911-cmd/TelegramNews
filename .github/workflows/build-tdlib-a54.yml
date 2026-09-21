@@ -1,16 +1,19 @@
-name: Build TDLib A54 APK
+name: Build Independent News Cafenet Gozar A54 APKs
 on:
   workflow_dispatch:
   push:
-    branches: [main, vpn-development]
+    branches: [main, vpn-development, three-independent-apps]
     paths:
       - 'lib/td_news_*.dart'
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
+      - 'lib/gozar_main.dart'
+      - 'lib/td_vmess_parser.dart'
       - 'native/SystemVpnBridge.kt'
       - 'native/SystemVpnService.kt'
       - 'native/InternalTelegramProxyService.kt'
       - 'scripts/enable_full_vpn.py'
+      - 'scripts/configure_gozar_standalone.py'
       - 'lib/td_media_viewer.dart'
       - 'lib/td_inline_video.dart'
       - 'lib/td_clock_card.dart'
@@ -23,6 +26,7 @@ on:
       - 'test/td_news_engine_test.dart'
       - 'test/td_system_vpn_test.dart'
       - 'test/td_internal_vpn_test.dart'
+      - 'test/td_gozar_app_test.dart'
       - 'test/td_vpn_routing_test.dart'
       - 'native/VpnRoutingPolicy.kt'
       - 'test/td_news_ui_test.dart'
@@ -70,6 +74,8 @@ jobs:
             artifact: NabzKhabar-News-A54
           - variant: cafenet
             artifact: Cafenet-A54
+          - variant: gozar
+            artifact: Gozar-A54
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -84,9 +90,14 @@ jobs:
         run: python3 scripts/prepare_android.py --profile modern
       - name: Configure independent app ID, label and launcher icon
         run: python3 scripts/configure_variant.py ${{ matrix.variant }}
-      - name: Add Android platform VPN service and native bridge
+      - name: Add Android VPN service only to Gozar
+        if: matrix.variant == 'gozar'
         run: python3 scripts/enable_full_vpn.py
+      - name: Remove all Telegram components from standalone Gozar
+        if: matrix.variant == 'gozar'
+        run: python3 scripts/configure_gozar_standalone.py
       - name: Install verified Xray TUN engine for arm64 Android
+        if: matrix.variant == 'gozar'
         run: |
           mkdir -p android/app/libs
           curl -fL --retry 3 --retry-delay 3 \
@@ -96,6 +107,7 @@ jobs:
       - name: Restore dependencies
         run: flutter pub get
       - name: Adapt older TDLib plugin for Android Gradle namespace
+        if: matrix.variant != 'gozar'
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -112,10 +124,12 @@ jobs:
           gradle.write_text(source)
           PY
       - uses: actions/download-artifact@v4
+        if: matrix.variant != 'gozar'
         with:
           name: TDLib-ARM64-engine
           path: native-tdlib
       - name: Replace outdated native library with the verified ARM64 build
+        if: matrix.variant != 'gozar'
         run: |
           python3 - <<'PYTHON'
           from pathlib import Path
@@ -127,21 +141,32 @@ jobs:
           assert len(targets) == 1, targets
           shutil.copyfile(native, targets[0])
           PYTHON
-      - name: Validate TDLib application source
+      - name: Validate independent Telegram app sources
+        if: matrix.variant != 'gozar'
         run: flutter analyze --no-fatal-infos lib
+      - name: Validate Gozar standalone VPN source
+        if: matrix.variant == 'gozar'
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart
       - name: Test channel parsing and local sources
+        if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
       - name: Verify VMess VPN profiles and preserve other protocols
+        if: matrix.variant == 'gozar'
         run: flutter test test/td_system_vpn_test.dart
-      - name: Verify separate Telegram SOCKS-only Xray core
-        run: flutter test test/td_internal_vpn_test.dart
+      - name: Verify standalone Gozar has no Telegram features
+        if: matrix.variant == 'gozar'
+        run: flutter test test/td_gozar_app_test.dart
       - name: Verify Android VPN per-app selection bridge
+        if: matrix.variant == 'gozar'
         run: flutter test test/td_vpn_routing_test.dart
       - name: Verify home and settings layout
+        if: matrix.variant != 'gozar'
         run: flutter test test/td_news_ui_test.dart
       - name: Verify lazy inline video and justified Persian text
+        if: matrix.variant != 'gozar'
         run: flutter test test/td_inline_video_test.dart
       - name: Verify full-resolution photo and document downloads
+        if: matrix.variant != 'gozar'
         run: flutter test test/td_downloads_test.dart
       - name: Configure optional release signing
         env:
@@ -150,8 +175,14 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: python3 scripts/configure_build.py
-      - name: Compile new TDLib A54 application
-        run: flutter build apk --release --target lib/td_news_main.dart --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=APP_VARIANT=${{ matrix.variant }}
+      - name: Compile separately installable A54 application
+        run: |
+          if [ "${{ matrix.variant }}" = "gozar" ]; then
+            TARGET=lib/gozar_main.dart
+          else
+            TARGET=lib/td_news_main.dart
+          fi
+          flutter build apk --release --target "$TARGET" --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=APP_VARIANT=${{ matrix.variant }}
       - name: Give artifact a distinct name
         run: python3 scripts/verify_apk_variant.py ${{ matrix.variant }}
       - name: Name the installable APK
