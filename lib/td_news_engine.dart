@@ -299,7 +299,9 @@ class TdNewsController extends ChangeNotifier {
 
   Future<void> _applySystemVpnForTelegram() {
     if (!vpnSocksWanted || vpnSocksInstalled ||
-        bridge.sender == null || state != 'authorizationStateReady') {
+        bridge.sender == null || state == 'setup' || state == 'connecting' ||
+        state == 'authorizationStateWaitTdlibParameters' ||
+        state == 'authorizationStateClosed') {
       return Future<void>.value();
     }
     final pending = _vpnProxyAttempt;
@@ -317,14 +319,32 @@ class TdNewsController extends ChangeNotifier {
           timeout: const Duration(seconds: 2));
       socket.destroy();
       if (!vpnSocksWanted) return;
-      final response = await bridge.request({
-        '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
-        'enable': true, 'type': {
-          '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
-        },
-      });
-      if (response['@type'] != 'proxy' || response['id'] is! int) {
-        throw StateError('TDLib proxy response is invalid');
+      // Avoid creating a duplicate proxy when reconnecting after a stop or
+      // app restart. TDLib keeps local proxy entries in its database.
+      final existing = await bridge.request({'@type': 'getProxies'});
+      final known = existing['proxies'];
+      int? proxyId;
+      if (known is List) {
+        for (final item in known.whereType<Map>()) {
+          if (item['server'] == '127.0.0.1' && item['port'] == 10808 &&
+              item['id'] is int) {
+            proxyId = item['id'] as int;
+            break;
+          }
+        }
+      }
+      if (proxyId == null) {
+        final response = await bridge.request({
+          '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
+          'enable': true, 'type': {
+            '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
+          },
+        });
+        if (response['@type'] != 'proxy' || response['id'] is! int) {
+          throw StateError('TDLib proxy response is invalid');
+        }
+      } else {
+        await bridge.request({'@type': 'enableProxy', 'proxy_id': proxyId});
       }
       if (!vpnSocksWanted) {
         await bridge.request({'@type': 'disableProxy'});
@@ -610,11 +630,15 @@ class TdNewsController extends ChangeNotifier {
         status = 'API ID یا API Hash پذیرفته نشد؛ مقادیر را بررسی کنید.';
         changed();
       }
+    } else if (state != 'authorizationStateReady' &&
+        state != 'authorizationStateWaitTdlibParameters' && vpnSocksWanted) {
+      // Phone/code/password authorization must also use the local proxy.
+      unawaited(_applySystemVpnForTelegram().catchError((Object _) {}));
     } else if (state == 'authorizationStateReady') {
-      // The system VPN may already be running when this account logs in.
-      // Do not depend on the user opening Settings or pressing Retry.
+      // VPN may already be running when this account logs in.
+      // Apply SOCKS without holding back cached feed rendering.
       if (vpnSocksWanted) {
-        try { await _applySystemVpnForTelegram(); } catch (_) {}
+        unawaited(_applySystemVpnForTelegram().catchError((Object _) {}));
       }
       // Render TDLib's on-device cache before waiting for a remote round trip.
       for (final source in sources.values) {
