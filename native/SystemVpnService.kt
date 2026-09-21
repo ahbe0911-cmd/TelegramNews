@@ -92,7 +92,19 @@ class SystemVpnService : VpnService() {
                         }
                     }
                 } else {
-                    builder.addDisallowedApplication(packageName)
+                    // Gozar itself and sensitive local apps keep Android's
+                    // direct route while every other app uses the VPN.
+                    val directPackages = listOf(packageName) +
+                        AutomaticBypassPolicy.installedPackages(
+                            packageManager, packageName
+                        )
+                    directPackages.distinct().forEach { pkg ->
+                        try {
+                            builder.addDisallowedApplication(pkg)
+                        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                            // An app may be removed between discovery and TUN setup.
+                        }
+                    }
                 }
                 val fd = builder.establish()
                     ?: throw IllegalStateException("Android did not establish TUN")
