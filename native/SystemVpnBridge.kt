@@ -21,6 +21,31 @@ object SystemVpnBridge {
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "startInternal" -> {
+                        val config = call.argument<String>("config")
+                        if (config.isNullOrBlank() || config.length > 1024 * 1024) {
+                            result.error("BAD_INTERNAL_CONFIG", "Invalid internal Xray config", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val intent = Intent(activity, InternalTelegramProxyService::class.java)
+                                .putExtra(InternalTelegramProxyService.EXTRA_CONFIG, config)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                activity.startForegroundService(intent)
+                            } else {
+                                activity.startService(intent)
+                            }
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("INTERNAL_START_FAILED",
+                                "Cannot start separate Telegram Xray service", null)
+                        }
+                    }
+                    "stopInternal" -> {
+                        activity.stopService(Intent(activity,
+                            InternalTelegramProxyService::class.java))
+                        result.success(null)
+                    }
                     "installedApps" -> {
                         val launcher = Intent(Intent.ACTION_MAIN)
                             .addCategory(Intent.CATEGORY_LAUNCHER)

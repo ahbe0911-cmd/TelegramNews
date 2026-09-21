@@ -33,7 +33,7 @@ class MainActivity : FlutterActivity() {
     }
 ''', 1)
 activity.write_text(code)
-for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt'):
+for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt', 'InternalTelegramProxyService.kt'):
     (activity.parent / name).write_bytes((ROOT / 'native' / name).read_bytes())
 
 manifest = host / 'app/src/main/AndroidManifest.xml'
@@ -52,6 +52,16 @@ source = source.replace('<application', '''
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <application''', 1)
 source = source.replace('</application>', '''
+        <service
+            android:name=".InternalTelegramProxyService"
+            android:enabled="true"
+            android:exported="false"
+            android:process=":telegram_proxy"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User enabled persistent Telegram SOCKS proxy using selected Xray server" />
+        </service>
         <service
             android:name=".SystemVpnService"
             android:exported="false"

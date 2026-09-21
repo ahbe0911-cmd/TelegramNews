@@ -36,6 +36,16 @@ class SystemVpnBridge {
   static Future<void> stop() async {
     await channel.invokeMethod<void>('stop');
   }
+
+  /// A separate Android process hosts SOCKS-only Xray. It has no TUN fd and
+  /// cannot intercept its own outbound traffic; it reuses the selected server.
+  static Future<void> startInternal(String config) async {
+    await channel.invokeMethod<void>('startInternal', {'config': config});
+  }
+
+  static Future<void> stopInternal() async {
+    await channel.invokeMethod<void>('stopInternal');
+  }
 }
 
 /// Supported: VMess, VLESS, Trojan share links and Xray JSON.
@@ -181,5 +191,37 @@ String buildFullDeviceXrayConfig(String supplied) {
       {'type': 'field', 'inboundTag': ['vpn', 'local-socks'],
        'outboundTag': 'proxy'},
     ]},
+  });
+}
+
+
+/// Creates a second, SOCKS-only core config using the SAME proxy outbound
+/// selected for Android's system-wide VPN, but no TUN or Android VPN service.
+/// The remote Android process has its own Go runtime (unlike starting two
+/// controllers in the main process, which would share the global TUN fd key).
+String buildInternalTelegramXrayConfig(String fullDeviceConfig) {
+  final parsed = jsonDecode(fullDeviceConfig);
+  if (parsed is! Map || parsed['outbounds'] is! List ||
+      (parsed['outbounds'] as List).isEmpty) {
+    throw const FormatException('کانفیگ داخلی Xray ناقص است.');
+  }
+  final proxy = (parsed['outbounds'] as List).first;
+  if (proxy is! Map || proxy['protocol'] is! String) {
+    throw const FormatException('سرور Xray داخلی معتبر نیست.');
+  }
+  return jsonEncode({
+    'log': {'loglevel': 'warning'},
+    'inbounds': [
+      {'tag': 'telegram-socks', 'listen': '127.0.0.1', 'port': 10809,
+        'protocol': 'socks', 'settings': {'auth': 'noauth', 'udp': true}},
+    ],
+    'outbounds': parsed['outbounds'],
+    'routing': {
+      'domainStrategy': 'AsIs',
+      'rules': [
+        {'type': 'field', 'inboundTag': ['telegram-socks'],
+         'outboundTag': proxy['tag'] ?? 'proxy'},
+      ],
+    },
   });
 }
