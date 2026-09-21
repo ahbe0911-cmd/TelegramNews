@@ -54,6 +54,15 @@ class _TdNewsAppState extends State<TdNewsApp> {
       final hash = await vault.read(key: 'td_api_hash');
       if (id == null || id <= 0 || hash == null || hash.isEmpty) return;
       final dir = await getApplicationSupportDirectory();
+      // The VPN may survive closing the UI; restore the desired local SOCKS
+      // route BEFORE starting TDLib, otherwise startup disables its proxy.
+      try {
+        final vpn = await SystemVpnBridge.status();
+        if (vpn['stage'] == 'running' &&
+            (widget.preferences.getBool('device_vpn_internal_telegram') ?? true)) {
+          unawaited(news.enableSystemVpnForTelegram());
+        }
+      } catch (_) { /* Allow Telegram to start even without the VPN engine. */ }
       await news.start(id, hash, dir.path);
     } catch (_) { /* Device can still show the manual login form. */ }
   }
@@ -128,6 +137,8 @@ class _TdHomeState extends State<TdHome> {
   final channel = TextEditingController();
   final vpnProfile = TextEditingController();
   bool vpnBusy = false;
+  bool vpnRepairBusy = false;
+  String? vpnInternalCheck;
   String vpnStage = 'off';
   String vpnStatus = 'VPN خاموش است.';
   String vpnRoutingMode = 'all';
@@ -182,9 +193,10 @@ class _TdHomeState extends State<TdHome> {
       });
       if (stage == 'running' && vpnUseInsideApp) {
         try {
-          await widget.news.enableSystemVpnForTelegram();
+          await widget.news.enableSystemVpnForTelegram()
+              .timeout(const Duration(seconds: 6));
         } catch (_) {
-          // Separate TDLib/SOCKS failure from the native Android VPN state.
+          // A delayed TDLib request must not freeze the settings page.
         }
         if (mounted && widget.news.vpnSocksInstalled) {
           setState(() {
@@ -404,6 +416,51 @@ class _TdHomeState extends State<TdHome> {
     await refreshVpnStatus();
   }
 
+  Future<void> repairInternalTelegramVpn() async {
+    if (vpnRepairBusy || vpnStage != 'running') return;
+    setState(() {
+      vpnRepairBusy = true;
+      vpnInternalCheck = 'در حال بررسی SOCKS و بازیابی اتصال تلگرام…';
+    });
+    try {
+      final check = await widget.news.repairInternalTelegramVpn()
+          .timeout(const Duration(seconds: 18));
+      if (mounted) setState(() { vpnInternalCheck = check; });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          vpnInternalCheck = 'بررسی اتصال داخلی طول کشید. '
+              'VPN را قطع و دوباره وصل کنید و «تعمیر اتصال داخلی» را بزنید.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() { vpnRepairBusy = false; });
+    }
+  }
+
+  String telegramVpnDetail() {
+    if (!vpnUseInsideApp || vpnStage != 'running') {
+      return 'اتصال داخلی تلگرام خاموش است.';
+    }
+    if (widget.news.vpnSocksError != null) return widget.news.vpnSocksError!;
+    if (!widget.news.vpnSocksInstalled) {
+      return widget.news.vpnSocksWanted
+          ? 'VPN روشن است؛ اتصال SOCKS داخلی تلگرام هنوز آماده نشده است.'
+          : 'تلگرام به موتور VPN داخلی متصل نشده است.';
+    }
+    return switch (widget.news.telegramConnectionState) {
+      'connectionStateReady' => 'اتصال سرور تلگرام برقرار است.',
+      'connectionStateUpdating' => 'تلگرام متصل است و پیام‌ها را به‌روز می‌کند.',
+      'connectionStateConnectingToProxy' =>
+        'SOCKS تنظیم شده و تلگرام در حال اتصال به پروکسی است.',
+      'connectionStateConnecting' =>
+        'SOCKS تنظیم شده و تلگرام در حال اتصال به سرور است.',
+      'connectionStateWaitingForNetwork' =>
+        'SOCKS تنظیم شده، اما تلگرام هنوز شبکه را در دسترس نمی‌بیند.',
+      _ => 'SOCKS محلی فعال است؛ اتصال به سرور تلگرام هنوز تأیید نشده است.',
+    };
+  }
+
   Widget vpnPanel() {
     final colors = Theme.of(context).colorScheme;
     final running = vpnStage == 'running';
@@ -470,6 +527,23 @@ class _TdHomeState extends State<TdHome> {
         Text(vpnStatus, key: const ValueKey('xray-vpn-status'),
             style: TextStyle(color: running ? colors.primary
                 : colors.onSurfaceVariant, fontSize: 12)),
+        if (running && vpnUseInsideApp) ...[
+          const SizedBox(height: 8),
+          Text(telegramVpnDetail(), key: const ValueKey('vpn-internal-status'),
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
+          if (vpnInternalCheck != null) Text(vpnInternalCheck!,
+              key: const ValueKey('vpn-internal-diagnostic'),
+              style: TextStyle(color: colors.primary, fontSize: 12)),
+          OutlinedButton.icon(
+            key: const ValueKey('vpn-repair-internal'),
+            onPressed: vpnRepairBusy || vpnBusy ? null : repairInternalTelegramVpn,
+            icon: vpnRepairBusy
+                ? const SizedBox(height: 16, width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.build_circle_outlined),
+            label: const Text('تعمیر و بررسی اتصال داخلی تلگرام'),
+          ),
+        ],
         TextButton.icon(
           onPressed: vpnBusy ? null : refreshVpnStatus,
           icon: const Icon(Icons.refresh_rounded, size: 17),
