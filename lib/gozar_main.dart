@@ -89,6 +89,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   String mode = 'all';
   Set<String> packages = {};
   bool busy = false;
+  bool disconnecting = false;
+  int operationId = 0;
+  Timer? statusTimer;
   bool hideProfile = true;
   int currentPage = 0;
   int selectedProfile = -1;
@@ -120,6 +123,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         ?? const <String>[]).toSet();
     unawaited(_loadProfile());
     unawaited(refresh());
+    // Observe OS-initiated disconnects without rebuilding the whole UI every frame.
+    statusTimer = Timer.periodic(const Duration(seconds: 2),
+        (_) => unawaited(refresh()));
   }
 
   Future<void> _loadProfile() async {
@@ -395,6 +401,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     countersTimer?.cancel();
+    statusTimer?.cancel();
     profile.dispose();
     super.dispose();
   }
@@ -404,22 +411,31 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       final native = await SystemVpnBridge.status();
       if (!mounted) return;
       final status = native['stage']?.toString() ?? 'off';
+      // A status read that began before a stop request must not repaint
+      // "running" over the user's explicit disconnect action.
+      if (disconnecting && (status == 'running' || status == 'starting')) {
+        return;
+      }
       if (status == 'running') {
         _startCounters();
       } else if (countersTimer != null) {
         _stopCounters();
       }
-      setState(() {
-        stage = status;
-        detail = switch (status) {
+      final nextDetail = switch (status) {
           'running' => 'تونل VPN اندروید فعال است. برای اطمینان از اتصال '
               'سرور، اینترنت برنامه‌های انتخاب‌شده را آزمایش کنید.',
           'starting' => 'در حال راه‌اندازی موتور Xray و تونل اندروید…',
           'consent' => 'مجوز VPN را در پنجره سیستم تأیید کنید.',
+          'stopping' => 'در حال بستن تونل و توقف موتور VPN…',
           'error' => 'موتور VPN راه‌اندازی نشد؛ کانفیگ و مجوز اندروید را بررسی کنید.',
           _ => 'VPN خاموش است.',
         };
-      });
+      if (status != stage || nextDetail != detail) {
+        setState(() {
+          stage = status;
+          detail = nextDetail;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { detail = 'سرویس VPN در دسترس نیست.'; });
     }
@@ -431,7 +447,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   }
 
   Future<void> connect() async {
-    if (busy) return;
+    if (busy || disconnecting || stage == 'stopping') return;
+    final requestId = ++operationId;
     setState(() { busy = true; });
     try {
       if (mode == 'selected' && packages.isEmpty) {
@@ -441,15 +458,22 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       final input = profile.text.trim();
       final config = buildFullDeviceXrayConfig(input);
       await _vault.write(key: 'gozar_xray_profile', value: input);
+      if (requestId != operationId) return;
       // Only the selected server is changed; native TUN and routing logic
       // remains the same as the previous released Gozar build.
       await SystemVpnBridge.start(config, mode: mode,
           packages: packages.toList());
+      if (requestId != operationId) {
+        // Stop can be pressed during the async permission/start operation.
+        await SystemVpnBridge.stop();
+        return;
+      }
       await refresh();
       // Android's permission sheet is asynchronous; do not claim connectivity
       // until the native service reports that it started its TUN core.
-      for (var i = 0; i < 18 && mounted; i++) {
-        if (stage == 'running' || stage == 'error' || stage == 'off') break;
+      for (var i = 0; i < 18 && mounted && requestId == operationId; i++) {
+        if (stage == 'running' || stage == 'error' || stage == 'off' ||
+            stage == 'stopping') break;
         await Future<void>.delayed(const Duration(milliseconds: 850));
         await refresh();
       }
@@ -459,20 +483,41 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       notice('اتصال برقرار نشد؛ مجوز VPN و فرمت کانفیگ را بررسی کنید.');
       await refresh();
     } finally {
-      if (mounted) setState(() { busy = false; });
+      if (mounted && requestId == operationId) {
+        setState(() { busy = false; });
+      }
     }
   }
 
   Future<void> disconnect() async {
-    if (busy) return;
-    setState(() { busy = true; });
+    // Disconnect must work even while an earlier connect() is awaiting
+    // permission, profile storage or native startup.
+    if (disconnecting) return;
+    final requestId = ++operationId;
+    setState(() {
+      disconnecting = true;
+      busy = false;
+      stage = 'stopping';
+      detail = 'در حال بستن تونل و توقف موتور VPN…';
+    });
     try {
       await SystemVpnBridge.stop();
-      await refresh();
+      // Do not show OFF until Android confirms the TUN/core are stopped.
+      for (var i = 0; i < 24 && mounted && requestId == operationId; i++) {
+        await refresh();
+        if (stage == 'off' || stage == 'error') break;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (stage == 'stopping') {
+        notice('توقف موتور هنوز ادامه دارد؛ وضعیت VPN را بررسی کنید.');
+      }
     } catch (_) {
       notice('قطع VPN انجام نشد؛ دوباره تلاش کنید.');
+      await refresh();
     } finally {
-      if (mounted) setState(() { busy = false; });
+      if (mounted && requestId == operationId) {
+        setState(() { disconnecting = false; });
+      }
     }
   }
 
@@ -612,7 +657,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   Widget _hero() {
     final connected = stage == 'running';
-    final ready = stage != 'starting' && stage != 'consent';
+    final canStop = busy || connected || stage == 'starting' ||
+        stage == 'consent' || stage == 'stopping';
     return GozarPanel(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
       glow: connected ? GozarPalette.cyan : GozarPalette.blue,
@@ -631,11 +677,12 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         const SizedBox(height: 20),
         GozarPowerButton(
           key: const ValueKey('gozar-power'),
-          connected: connected, busy: busy || !ready,
-          label: connected ? 'برای قطع اتصال لمس کنید'
-              : ready ? 'برای اتصال لمس کنید' : 'منتظر راه‌اندازی',
-          onPressed: busy || !ready ? null
-              : connected ? disconnect : connect,
+          connected: connected, busy: busy || disconnecting ||
+              stage == 'starting' || stage == 'consent' || stage == 'stopping',
+          label: canStop ? 'برای قطع اتصال لمس کنید'
+              : 'برای اتصال لمس کنید',
+          onPressed: disconnecting ? null
+              : canStop ? disconnect : connect,
         ),
         const SizedBox(height: 15),
         Text(detail, key: const ValueKey('gozar-vpn-status'),
@@ -672,8 +719,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   Widget _connectActions() => Row(children: [
     Expanded(child: FilledButton.icon(
       key: const ValueKey('gozar-connect'),
-      onPressed: busy || stage == 'running' ||
-          stage == 'starting' || stage == 'consent' ? null : connect,
+      onPressed: busy || disconnecting || stage == 'running' ||
+          stage == 'starting' || stage == 'consent' ||
+          stage == 'stopping' ? null : connect,
       style: FilledButton.styleFrom(
         backgroundColor: GozarPalette.blue,
         foregroundColor: GozarPalette.text,
@@ -685,10 +733,11 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     const SizedBox(width: 9),
     Expanded(child: OutlinedButton.icon(
       key: const ValueKey('gozar-disconnect'),
-      onPressed: busy || stage == 'off' ? null : disconnect,
+      onPressed: disconnecting || (stage == 'off' && !busy)
+          ? null : disconnect,
       style: OutlinedButton.styleFrom(
         foregroundColor: GozarPalette.text,
-        side: const BorderSide(color: GozarPalette.purple),
+        side: const BorderSide(color: GozarPalette.red),
         padding: const EdgeInsets.symmetric(vertical: 13),
       ),
       icon: const Icon(Icons.stop_circle_outlined),
@@ -1028,6 +1077,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 child: Text(stage == 'running' ? '●  تونل فعال'
                     : stage == 'starting' || stage == 'consent'
                         ? '●  در حال اتصال'
+                        : stage == 'stopping' ? '●  در حال قطع'
                         : '●  خاموش',
                     style: TextStyle(fontSize: 11,
                         color: stage == 'running'
