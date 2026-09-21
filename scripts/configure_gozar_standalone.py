@@ -28,6 +28,13 @@ dev_dependencies:
   flutter_lints: 4.0.0
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/Vazirmatn-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Vazirmatn-Bold.ttf
+          weight: 700
 ''')
 host = root / 'android/app/src/main'
 activity = next((host / 'kotlin').rglob('MainActivity.kt'))

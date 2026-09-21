@@ -24,18 +24,26 @@ void main() {
     });
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
-    await tester.pumpAndSettle();
+    // The requested live neon animation continuously ticks by design.
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('گذر'), findsWidgets);
+    expect(find.byKey(const ValueKey('gozar-power')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
+    expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
+    expect(find.text('خانه'), findsOneWidget);
+    expect(find.text('سرورها'), findsOneWidget);
+    expect(find.text('تنظیمات'), findsOneWidget);
+    await tester.tap(find.text('سرورها'));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-config')), findsOneWidget);
-    // The redesigned homepage is intentionally scrollable on a phone.
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('gozar-choose-apps')),
-      230,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.tap(find.text('تنظیمات'));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-connect')), findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-disconnect')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-vpn-settings')), findsWidgets);
+    await tester.tap(find.text('خانه'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-connect')), findsWidgets);
+    expect(find.byKey(const ValueKey('gozar-disconnect')), findsWidgets);
     expect(find.text('پیام‌های من'), findsNothing);
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());

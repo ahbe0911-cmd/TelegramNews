@@ -8,6 +8,7 @@ on:
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_visuals.dart'
       - 'lib/td_vmess_parser.dart'
       - 'native/SystemVpnBridge.kt'
       - 'native/SystemVpnService.kt'
@@ -104,6 +105,14 @@ jobs:
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
             -o android/app/libs/libv2ray.aar
           echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
+      - name: Install the provided open-licensed Vazirmatn typeface for Gozar only
+        if: matrix.variant == 'gozar'
+        run: |
+          mkdir -p assets/fonts
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Regular.ttf -o assets/fonts/Vazirmatn-Regular.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Bold.ttf -o assets/fonts/Vazirmatn-Bold.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/OFL.txt -o assets/fonts/OFL.txt
+          test -s assets/fonts/Vazirmatn-Regular.ttf && test -s assets/fonts/Vazirmatn-Bold.ttf
       - name: Restore dependencies
         run: flutter pub get
       - name: Adapt older TDLib plugin for Android Gradle namespace
