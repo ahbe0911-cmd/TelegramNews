@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'gozar_visuals.dart';
+import 'gozar_subscription.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -112,6 +113,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   final List<double> sentSeries = [];
   int? tcpLatencyMs;
   bool checkingTcp = false;
+  bool importingSubscription = false;
+  bool choosingBestServer = false;
 
   @override
   void initState() {
@@ -196,6 +199,98 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     } catch (_) {
       if (!quiet) notice('ذخیره کانفیگ انجام نشد؛ دوباره تلاش کنید.');
       rethrow;
+    }
+  }
+
+  Future<void> importSubscription() async {
+    if (importingSubscription) return;
+    final controller = TextEditingController();
+    try {
+      final url = await showDialog<String>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('افزودن لینک اشتراک'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            enableSuggestions: false,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(
+              hintText: 'https://example.com/subscription',
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialog).pop(),
+                child: const Text('انصراف')),
+            FilledButton(
+              onPressed: () => Navigator.of(dialog).pop(controller.text.trim()),
+              child: const Text('دریافت'),
+            ),
+          ],
+        ),
+      );
+      if (url == null || url.isEmpty || !mounted) return;
+      setState(() { importingSubscription = true; });
+      final nodes = await fetchGozarSubscription(url);
+      final updated = List<GozarProfile>.from(profiles);
+      final existing = updated.map((item) => item.link).toSet();
+      var added = 0;
+      for (final node in nodes) {
+        if (existing.add(node.link)) {
+          updated.add(GozarProfile(node.name, node.link));
+          added++;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        profiles = updated;
+        if (selectedProfile < 0 && updated.isNotEmpty) {
+          selectedProfile = 0;
+          profile.text = updated.first.link;
+        }
+      });
+      await _persistProfiles();
+      notice(added == 0
+          ? 'همه سرورهای این اشتراک از قبل وجود داشتند.'
+          : added.toString() + ' سرور معتبر از اشتراک اضافه شد.');
+    } on FormatException catch (error) {
+      notice(error.message.toString());
+    } catch (_) {
+      notice('دریافت اشتراک انجام نشد؛ اینترنت و اعتبار لینک را بررسی کنید.');
+    } finally {
+      controller.dispose();
+      if (mounted) setState(() { importingSubscription = false; });
+    }
+  }
+
+  Future<void> chooseBestServer() async {
+    if (choosingBestServer || profiles.isEmpty) return;
+    setState(() { choosingBestServer = true; });
+    try {
+      final result = await chooseBestGozarNode(
+        profiles.map((item) => item.link).toList(),
+      );
+      if (result == null) {
+        notice('هیچ سرور قابل دسترسی در آزمایش TCP پیدا نشد.');
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        selectedProfile = result.index;
+        profile.text = profiles[result.index].link;
+        tcpLatencyMs = result.latencyMs;
+        currentPage = 0;
+      });
+      await widget.preferences.setInt('gozar_profile_index', result.index);
+      notice('بهترین سرور انتخاب شد: ' + profiles[result.index].name +
+          ' — ' + result.latencyMs.toString() + ' ms');
+      if (stage == 'running') {
+        notice('برای اعمال سرور جدید، VPN را قطع و دوباره وصل کنید.');
+      }
+    } finally {
+      if (mounted) setState(() { choosingBestServer = false; });
     }
   }
 
@@ -943,6 +1038,28 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             onPressed: addProfile,
             icon: const Icon(Icons.add_rounded),
             label: const Text('افزودن سرور جدید'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('gozar-import-subscription'),
+            onPressed: busy || importingSubscription
+                ? null : importSubscription,
+            icon: importingSubscription
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.cloud_download_outlined),
+            label: const Text('افزودن لینک اشتراک'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('gozar-best-server'),
+            onPressed: busy || choosingBestServer || profiles.isEmpty
+                ? null : chooseBestServer,
+            icon: choosingBestServer
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.speed_rounded),
+            label: const Text('انتخاب خودکار بهترین سرور'),
           ),
         ],
       )),
