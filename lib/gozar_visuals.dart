@@ -19,8 +19,8 @@ class AuroraBackdrop extends StatelessWidget {
   const AuroraBackdrop({super.key});
 
   @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: Positioned.fill(
+  Widget build(BuildContext context) => Positioned.fill(
+    child: IgnorePointer(
       child: CustomPaint(painter: _AuroraPainter()),
     ),
   );
