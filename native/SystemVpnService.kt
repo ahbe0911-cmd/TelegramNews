@@ -21,6 +21,8 @@ import libv2ray.Libv2ray
 class SystemVpnService : VpnService() {
     companion object {
         const val EXTRA_CONFIG = "xray_config"
+        const val EXTRA_ROUTING_MODE = "vpn_routing_mode"
+        const val EXTRA_PACKAGES = "vpn_routing_packages"
         @Volatile var stage = "off"
         @Volatile var detail = "VPN خاموش است."
         private const val NOTIFICATION_CHANNEL = "xray_device_vpn"
@@ -33,6 +35,18 @@ class SystemVpnService : VpnService() {
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
         val config = intent?.getStringExtra(EXTRA_CONFIG)
+        val routing = try {
+            VpnRoutingPolicy(
+                intent?.getStringExtra(EXTRA_ROUTING_MODE) ?: "all",
+                intent?.getStringArrayListExtra(EXTRA_PACKAGES) ?: emptyList(),
+                packageName
+            )
+        } catch (e: IllegalArgumentException) {
+            stage = "error"
+            detail = "Invalid VPN app selection"
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (config.isNullOrBlank() || VpnService.prepare(this) != null) {
             stage = "error"
             detail = "Android VPN permission or configuration missing"
@@ -46,7 +60,7 @@ class SystemVpnService : VpnService() {
             try {
                 Seq.setContext(applicationContext)
                 Libv2ray.initCoreEnv(filesDir.absolutePath, "")
-                val fd = Builder()
+                val builder = Builder()
                     .setSession(applicationInfo.loadLabel(packageManager).toString())
                     .setMtu(1500)
                     .addAddress("10.25.0.2", 30)
@@ -55,10 +69,21 @@ class SystemVpnService : VpnService() {
                     .addRoute("::", 0)
                     .addDnsServer("1.1.1.1")
                     .addDnsServer("2606:4700:4700::1111")
-                    // The package-hosted Go core must be able to open its
-                    // outbound sockets outside the tunnel to avoid recursion.
-                    .addDisallowedApplication(packageName)
-                    .establish()
+                // Android allows EITHER an allow-list OR a deny-list.
+                // Our own package never enters TUN to protect Xray outbound
+                // sockets; its TDLib uses the local SOCKS inbound instead.
+                if (routing.mode == "selected") {
+                    routing.packages.forEach { pkg ->
+                        try {
+                            builder.addAllowedApplication(pkg)
+                        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                            throw IllegalStateException("Selected app missing: $pkg", e)
+                        }
+                    }
+                } else {
+                    builder.addDisallowedApplication(packageName)
+                }
+                val fd = builder.establish()
                     ?: throw IllegalStateException("Android did not establish TUN")
                 if (stopped) {
                     fd.close()

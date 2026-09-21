@@ -33,13 +33,20 @@ class MainActivity : FlutterActivity() {
     }
 ''', 1)
 activity.write_text(code)
-for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt'):
+for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt'):
     (activity.parent / name).write_bytes((ROOT / 'native' / name).read_bytes())
 
 manifest = host / 'app/src/main/AndroidManifest.xml'
 source = manifest.read_text()
 assert source.count('<application') == 1
 assert source.count('</application>') == 1
+source = source.replace('<application', '''<queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+    </queries>
+    <application''', 1)
 source = source.replace('<application', '''
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
