@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'gozar_visuals.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,6 +10,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'td_system_vpn.dart';
+
+class GozarProfile {
+  final String name;
+  final String link;
+  const GozarProfile(this.name, this.link);
+
+  factory GozarProfile.fromJson(Map<String, dynamic> input) =>
+      GozarProfile(input['name']?.toString() ?? 'سرور شخصی',
+          input['link']?.toString() ?? '');
+
+  Map<String, String> toJson() => {'name': name, 'link': link};
+}
 
 /// «گذر» is a standalone VPN: no Telegram account, feed, or TDLib in this APK.
 Future<void> main() async {
@@ -27,10 +43,30 @@ class GozarApp extends StatelessWidget {
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff087E70)),
-      scaffoldBackgroundColor: const Color(0xfff4f9f7),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: GozarPalette.cyan,
+        brightness: Brightness.dark,
+        surface: GozarPalette.navy,
+      ),
+      scaffoldBackgroundColor: GozarPalette.base,
+      fontFamily: 'Roboto',
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xff203657),
+        contentTextStyle: TextStyle(color: GozarPalette.text),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xff49628b)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: GozarPalette.cyan),
+        ),
       ),
     ),
     home: GozarHome(preferences: preferences),
@@ -54,6 +90,25 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   Set<String> packages = {};
   bool busy = false;
   bool hideProfile = true;
+  int currentPage = 0;
+  int selectedProfile = -1;
+  List<GozarProfile> profiles = [];
+  Timer? countersTimer;
+  bool samplingCounters = false;
+  DateTime? connectedObservedAt;
+  DateTime? sampledAt;
+  int? receivedAtSample;
+  int? sentAtSample;
+  int? receivedAtStart;
+  int? sentAtStart;
+  double? receivedMbps;
+  double? sentMbps;
+  int? receivedSession;
+  int? sentSession;
+  final List<double> receivedSeries = [];
+  final List<double> sentSeries = [];
+  int? tcpLatencyMs;
+  bool checkingTcp = false;
 
   @override
   void initState() {
@@ -69,11 +124,266 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   Future<void> _loadProfile() async {
     try {
-      final value = await _vault.read(key: 'gozar_xray_profile');
-      if (mounted && value != null && profile.text.isEmpty) {
-        profile.text = value;
+      final encoded = await _vault.read(key: 'gozar_profiles_v2');
+      final parsed = encoded == null ? null : jsonDecode(encoded);
+      final saved = <GozarProfile>[];
+      if (parsed is List) {
+        for (final entry in parsed) {
+          if (entry is Map) {
+            final p = GozarProfile.fromJson(Map<String, dynamic>.from(entry));
+            if (p.link.isNotEmpty) saved.add(p);
+          }
+        }
       }
-    } catch (_) { /* VPN can still be configured manually. */ }
+      // Migrate the previously installed Gozar profile, without losing it.
+      final legacy = await _vault.read(key: 'gozar_xray_profile');
+      if (saved.isEmpty && legacy != null && legacy.trim().isNotEmpty) {
+        saved.add(GozarProfile('سرور قبلی', legacy.trim()));
+      }
+      if (!mounted) return;
+      final preferred = widget.preferences.getInt('gozar_profile_index') ?? 0;
+      final index = saved.isEmpty ? -1 : preferred.clamp(0, saved.length - 1);
+      setState(() {
+        profiles = saved;
+        selectedProfile = index;
+      });
+      if (index >= 0 && profile.text.isEmpty) {
+        profile.text = saved[index].link;
+      }
+    } catch (_) {
+      // Secure storage may be temporarily unavailable; manual entry remains.
+    }
+  }
+
+  Future<void> _persistProfiles() async {
+    await _vault.write(key: 'gozar_profiles_v2',
+        value: jsonEncode(profiles.map((p) => p.toJson()).toList()));
+    await widget.preferences.setInt('gozar_profile_index',
+        selectedProfile < 0 ? 0 : selectedProfile);
+  }
+
+  Future<void> saveProfile({bool quiet = false}) async {
+    final input = profile.text.trim();
+    try {
+      // Use exactly the same strict config validation as the VPN connection.
+      buildFullDeviceXrayConfig(input);
+      final updated = List<GozarProfile>.from(profiles);
+      final index = selectedProfile;
+      if (index >= 0 && index < updated.length) {
+        updated[index] = GozarProfile(updated[index].name, input);
+      } else {
+        updated.add(GozarProfile('سرور ' + (updated.length + 1).toString(),
+            input));
+      }
+      if (!mounted) return;
+      setState(() {
+        profiles = updated;
+        selectedProfile = index >= 0 && index < updated.length
+            ? index : updated.length - 1;
+      });
+      await _persistProfiles();
+      await _vault.write(key: 'gozar_xray_profile', value: input);
+      if (!quiet) notice('کانفیگ در حافظه امن گذر ذخیره شد.');
+    } on FormatException catch (error) {
+      if (!quiet) notice(error.message.toString());
+      rethrow;
+    } catch (_) {
+      if (!quiet) notice('ذخیره کانفیگ انجام نشد؛ دوباره تلاش کنید.');
+      rethrow;
+    }
+  }
+
+  void selectProfile(int index) {
+    if (index < 0 || index >= profiles.length) return;
+    setState(() {
+      selectedProfile = index;
+      profile.text = profiles[index].link;
+      tcpLatencyMs = null;
+      currentPage = 0;
+    });
+    unawaited(widget.preferences.setInt('gozar_profile_index', index));
+    if (stage == 'running') {
+      notice('برای استفاده از سرور جدید، اتصال را قطع و دوباره برقرار کنید.');
+    }
+  }
+
+  void addProfile() {
+    setState(() {
+      selectedProfile = -1;
+      profile.clear();
+      tcpLatencyMs = null;
+      currentPage = 0;
+    });
+  }
+
+  Future<void> renameProfile(int index) async {
+    if (index < 0 || index >= profiles.length) return;
+    final name = TextEditingController(text: profiles[index].name);
+    try {
+      final value = await showDialog<String>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('نام سرور'),
+          content: TextField(
+            autofocus: true, controller: name,
+            maxLength: 40,
+            decoration: const InputDecoration(hintText: 'نام دلخواه'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialog).pop(),
+                child: const Text('انصراف')),
+            FilledButton(
+              onPressed: () => Navigator.of(dialog).pop(name.text.trim()),
+              child: const Text('ذخیره'),
+            ),
+          ],
+        ),
+      );
+      if (value == null || value.isEmpty || !mounted) return;
+      final updated = List<GozarProfile>.from(profiles);
+      updated[index] = GozarProfile(value, updated[index].link);
+      setState(() { profiles = updated; });
+      await _persistProfiles();
+    } finally {
+      name.dispose();
+    }
+  }
+
+  Future<void> deleteProfile(int index) async {
+    if (stage == 'running') {
+      notice('برای حذف سرور فعال، ابتدا VPN را قطع کنید.');
+      return;
+    }
+    if (index < 0 || index >= profiles.length) return;
+    final updated = List<GozarProfile>.from(profiles)..removeAt(index);
+    if (!mounted) return;
+    final nextIndex = updated.isEmpty ? -1
+        : selectedProfile == index ? 0
+        : selectedProfile > index ? selectedProfile - 1 : selectedProfile;
+    setState(() {
+      profiles = updated;
+      selectedProfile = nextIndex;
+      profile.text = nextIndex < 0 ? '' : updated[nextIndex].link;
+    });
+    await _persistProfiles();
+    if (updated.isEmpty) await _vault.delete(key: 'gozar_xray_profile');
+  }
+
+  void _stopCounters() {
+    countersTimer?.cancel();
+    countersTimer = null;
+    receivedAtSample = null;
+    sentAtSample = null;
+    sampledAt = null;
+    receivedAtStart = null;
+    sentAtStart = null;
+    receivedMbps = null;
+    sentMbps = null;
+    receivedSession = null;
+    sentSession = null;
+    receivedSeries.clear();
+    sentSeries.clear();
+    connectedObservedAt = null;
+  }
+
+  void _startCounters() {
+    if (countersTimer != null) return;
+    connectedObservedAt = DateTime.now();
+    unawaited(sampleCounters());
+    countersTimer = Timer.periodic(const Duration(seconds: 2),
+        (_) => unawaited(sampleCounters()));
+  }
+
+  Future<void> sampleCounters() async {
+    if (!mounted || samplingCounters || stage != 'running') return;
+    samplingCounters = true;
+    try {
+      final now = DateTime.now();
+      final counters = await SystemVpnBridge.networkCounters();
+      if (!mounted || stage != 'running') return;
+      final rx = counters['rx'] ?? -1;
+      final tx = counters['tx'] ?? -1;
+      if (rx < 0 || tx < 0) return;
+      if (receivedAtStart == null || sentAtStart == null ||
+          receivedAtSample == null || sentAtSample == null ||
+          sampledAt == null) {
+        setState(() {
+          receivedAtStart = rx;
+          sentAtStart = tx;
+          receivedAtSample = rx;
+          sentAtSample = tx;
+          sampledAt = now;
+        });
+        return;
+      }
+      final seconds = now.difference(sampledAt!).inMilliseconds / 1000;
+      if (seconds <= 0) return;
+      final download = rx >= receivedAtSample!
+          ? (rx - receivedAtSample!) * 8 / (seconds * 1000000) : 0.0;
+      final upload = tx >= sentAtSample!
+          ? (tx - sentAtSample!) * 8 / (seconds * 1000000) : 0.0;
+      setState(() {
+        receivedMbps = download;
+        sentMbps = upload;
+        receivedSession = rx >= receivedAtStart!
+            ? rx - receivedAtStart! : 0;
+        sentSession = tx >= sentAtStart! ? tx - sentAtStart! : 0;
+        receivedAtSample = rx;
+        sentAtSample = tx;
+        sampledAt = now;
+        receivedSeries.add(download);
+        sentSeries.add(upload);
+        if (receivedSeries.length > 27) receivedSeries.removeAt(0);
+        if (sentSeries.length > 27) sentSeries.removeAt(0);
+      });
+    } catch (_) {
+      // TrafficStats may be unsupported by a particular Android build.
+      // A missing reading stays unavailable; never fabricate chart values.
+    } finally {
+      samplingCounters = false;
+    }
+  }
+
+  String _speed(double? speed) =>
+      speed == null ? '—' : speed.toStringAsFixed(2) + ' Mb/s';
+
+  String _volume(int? bytes) {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return bytes.toString() + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toStringAsFixed(1) + ' KB';
+    if (bytes < 1073741824) {
+      return (bytes / 1048576).toStringAsFixed(1) + ' MB';
+    }
+    return (bytes / 1073741824).toStringAsFixed(2) + ' GB';
+  }
+
+  Future<void> checkTcpLatency() async {
+    if (checkingTcp) return;
+    setState(() { checkingTcp = true; tcpLatencyMs = null; });
+    try {
+      final config = jsonDecode(buildFullDeviceXrayConfig(profile.text.trim()))
+          as Map<String, dynamic>;
+      final outbound = (config['outbounds'] as List).first as Map;
+      final settings = outbound['settings'] as Map;
+      final endpoint = (settings['vnext'] as List?)?.first ??
+          (settings['servers'] as List?)?.first;
+      if (endpoint is! Map || endpoint['address'] is! String ||
+          endpoint['port'] is! int) {
+        throw const FormatException('نشانی سرور برای آزمایش TCP در دسترس نیست.');
+      }
+      // Because Gozar hosts the VPN, its own sockets bypass the TUN. This
+      // checks direct TCP reachability, not Telegram ping or VPN throughput.
+      final timer = Stopwatch()..start();
+      final socket = await Socket.connect(endpoint['address'] as String,
+          endpoint['port'] as int, timeout: const Duration(seconds: 5));
+      timer.stop();
+      socket.destroy();
+      if (mounted) setState(() { tcpLatencyMs = timer.elapsedMilliseconds; });
+    } catch (_) {
+      notice('ارتباط مستقیم TCP با سرور برقرار نشد؛ این تست سرعت VPN نیست.');
+    } finally {
+      if (mounted) setState(() { checkingTcp = false; });
+    }
   }
 
   @override
@@ -84,6 +394,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    countersTimer?.cancel();
     profile.dispose();
     super.dispose();
   }
@@ -93,6 +404,11 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       final native = await SystemVpnBridge.status();
       if (!mounted) return;
       final status = native['stage']?.toString() ?? 'off';
+      if (status == 'running') {
+        _startCounters();
+      } else if (countersTimer != null) {
+        _stopCounters();
+      }
       setState(() {
         stage = status;
         detail = switch (status) {
@@ -125,6 +441,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       final input = profile.text.trim();
       final config = buildFullDeviceXrayConfig(input);
       await _vault.write(key: 'gozar_xray_profile', value: input);
+      // Only the selected server is changed; native TUN and routing logic
+      // remains the same as the previous released Gozar build.
       await SystemVpnBridge.start(config, mode: mode,
           packages: packages.toList());
       await refresh();
@@ -278,106 +596,3 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final connected = stage == 'running';
-    final colors = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('گذر'),
-          centerTitle: true, backgroundColor: colors.surface),
-      body: SafeArea(child: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Card(child: Padding(padding: const EdgeInsets.all(22),
-            child: Column(children: [
-              Icon(connected ? Icons.shield_rounded : Icons.shield_outlined,
-                  size: 62, color: connected ? colors.primary
-                      : colors.onSurfaceVariant),
-              const SizedBox(height: 8),
-              const Text('گذر', style: TextStyle(
-                  fontSize: 30, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              const Text('VPN مستقل برای اینترنت گوشی',
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              Text(detail, key: const ValueKey('gozar-vpn-status'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: colors.primary)),
-            ]),
-          )),
-          const SizedBox(height: 14),
-          Card(child: Padding(padding: const EdgeInsets.all(18),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('کانفیگ VPN', style: TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 17)),
-                const SizedBox(height: 8),
-                const Text('لینک VMess، VLESS، Trojan یا JSON کامل Xray را '
-                    'اینجا وارد کنید. کانفیگ در حافظه امن همین برنامه ذخیره می‌شود.',
-                    style: TextStyle(fontSize: 12)),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('gozar-config'),
-                  controller: profile,
-                  obscureText: hideProfile,
-                  maxLines: hideProfile ? 1 : 3,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: 'vmess:// یا vless:// یا trojan://',
-                    suffixIcon: IconButton(
-                      tooltip: hideProfile ? 'نمایش کانفیگ' : 'پنهان‌کردن کانفیگ',
-                      onPressed: () =>
-                          setState(() { hideProfile = !hideProfile; }),
-                      icon: Icon(hideProfile
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  key: const ValueKey('gozar-choose-apps'),
-                  onPressed: busy ? null : chooseApps,
-                  icon: const Icon(Icons.apps_outlined),
-                  label: Text(mode == 'all' ? 'انتخاب برنامه‌ها: همه برنامه‌ها'
-                      : 'انتخاب برنامه‌ها: فقط ' +
-                        packages.length.toString() + ' برنامه'),
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  key: const ValueKey('gozar-connect'),
-                  onPressed: busy || connected ? null : connect,
-                  icon: const Icon(Icons.power_settings_new),
-                  label: const Text('اتصال VPN'),
-                ),
-                const SizedBox(height: 5),
-                OutlinedButton.icon(
-                  key: const ValueKey('gozar-disconnect'),
-                  onPressed: busy || stage == 'off' ? null : disconnect,
-                  icon: const Icon(Icons.stop_circle_outlined),
-                  label: const Text('قطع اتصال'),
-                ),
-                TextButton.icon(
-                  onPressed: busy ? null : refresh,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('بررسی وضعیت اتصال'),
-                ),
-              ],
-            ),
-          )),
-          const SizedBox(height: 12),
-          const Padding(padding: EdgeInsets.all(8),
-            child: Text('گذر به‌صورت جداگانه نصب و اجرا می‌شود. '
-              'اگر «همه برنامه‌ها» فعال باشد، کافی‌نت و نبض خبر نیز '
-              'از VPN گوشی استفاده می‌کنند. خودِ گذر برای جلوگیری از '
-              'حلقه‌شدن اتصال از تونل خودش عبور نمی‌کند.',
-              style: TextStyle(fontSize: 12), textAlign: TextAlign.justify),
-          ),
-        ],
-      )),
-    );
-  }
-}
