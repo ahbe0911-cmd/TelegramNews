@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.net.TrafficStats
+import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -21,6 +23,26 @@ object SystemVpnBridge {
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // Device app-UID counters: approximate app traffic, NOT
+                    // a fabricated tunnel throughput or server speed test.
+                    "networkCounters" -> {
+                        val uid = android.os.Process.myUid()
+                        val received = TrafficStats.getUidRxBytes(uid)
+                        val sent = TrafficStats.getUidTxBytes(uid)
+                        result.success(mapOf(
+                            "rx" to received,
+                            "tx" to sent
+                        ))
+                    }
+                    "openVpnSettings" -> {
+                        try {
+                            activity.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
+                            result.success(null)
+                        } catch (_: Exception) {
+                            result.error("NO_VPN_SETTINGS",
+                                "Android VPN settings could not open", null)
+                        }
+                    }
                     "startInternal" -> {
                         val config = call.argument<String>("config")
                         if (config.isNullOrBlank() || config.length > 1024 * 1024) {
