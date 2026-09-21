@@ -3,6 +3,7 @@ package ir.channel.telegram_news
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
@@ -13,27 +14,39 @@ import libv2ray.CoreController
 import libv2ray.Libv2ray
 
 /**
- * Xray-core's TUN inbound receives the actual Android VpnService file
- * descriptor. This package is excluded from platform VPN routing to prevent
- * Xray's own outbound sockets from looping; the app's TDLib connects to the
- * core's local SOCKS listener when VPN is activated.
+ * Android's TUN descriptor is passed to Xray. Stop requests are handled by
+ * the service itself, rather than waiting for Android to call onDestroy().
  */
 class SystemVpnService : VpnService() {
     companion object {
         const val EXTRA_CONFIG = "xray_config"
         const val EXTRA_ROUTING_MODE = "vpn_routing_mode"
         const val EXTRA_PACKAGES = "vpn_routing_packages"
+        const val ACTION_STOP = "ir.channel.telegram_news.ACTION_STOP_VPN"
         @Volatile var stage = "off"
         @Volatile var detail = "VPN خاموش است."
         private const val NOTIFICATION_CHANNEL = "xray_device_vpn"
         private const val NOTIFICATION_ID = 19741
     }
 
-    @Volatile private var stopped = false
+    private val resourceLock = Any()
+    @Volatile private var stopping = false
     private var tunnel: ParcelFileDescriptor? = null
     private var core: CoreController? = null
+    private var startupThread: Thread? = null
 
-    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopVpn("Disconnect requested")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (stopping) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Android may redeliver a start while the same service is running.
+        if (stage == "starting" || stage == "running") return START_NOT_STICKY
         val config = intent?.getStringExtra(EXTRA_CONFIG)
         val routing = try {
             VpnRoutingPolicy(
@@ -56,10 +69,11 @@ class SystemVpnService : VpnService() {
         createForegroundNotification()
         stage = "starting"
         detail = "Initializing Xray-core and Android TUN"
-        Thread {
+        startupThread = Thread({
             try {
                 Seq.setContext(applicationContext)
                 Libv2ray.initCoreEnv(filesDir.absolutePath, "")
+                if (stopping) return@Thread
                 val builder = Builder()
                     .setSession(applicationInfo.loadLabel(packageManager).toString())
                     .setMtu(1500)
@@ -69,9 +83,6 @@ class SystemVpnService : VpnService() {
                     .addRoute("::", 0)
                     .addDnsServer("1.1.1.1")
                     .addDnsServer("2606:4700:4700::1111")
-                // Android allows EITHER an allow-list OR a deny-list.
-                // Our own package never enters TUN to protect Xray outbound
-                // sockets; its TDLib uses the local SOCKS inbound instead.
                 if (routing.mode == "selected") {
                     routing.packages.forEach { pkg ->
                         try {
@@ -85,31 +96,78 @@ class SystemVpnService : VpnService() {
                 }
                 val fd = builder.establish()
                     ?: throw IllegalStateException("Android did not establish TUN")
-                if (stopped) {
-                    fd.close()
-                    return@Thread
+                synchronized(resourceLock) {
+                    if (stopping) {
+                        fd.close()
+                        return@Thread
+                    }
+                    tunnel = fd
                 }
-                tunnel = fd
                 val controller = Libv2ray.newCoreController(object : CoreCallbackHandler {
                     override fun startup(): Long = 0
                     override fun shutdown(): Long = 0
                     override fun onEmitStatus(code: Long, message: String?): Long = 0
                 })
-                core = controller
-                controller.startLoop(config, fd.fd)
-                if (stopped) {
-                    controller.stopLoop()
-                    return@Thread
+                synchronized(resourceLock) {
+                    if (stopping) return@Thread
+                    core = controller
                 }
-                stage = "running"
-                detail = "Xray TUN active; test the actual server separately"
+                // stopVpn() closes the fd immediately and calls stopLoop() on
+                // another thread, even when startLoop() has not returned yet.
+                controller.startLoop(config, fd.fd)
+                synchronized(resourceLock) {
+                    if (!stopping) {
+                        stage = "running"
+                        detail = "Xray TUN active; test the actual server separately"
+                    }
+                }
             } catch (error: Throwable) {
-                stage = "error"
-                detail = "Xray core failed: " + error.javaClass.simpleName
-                stopSelf()
+                if (!stopping) {
+                    stage = "error"
+                    detail = "Xray core failed: " + error.javaClass.simpleName
+                    stopSelf()
+                }
             }
-        }.start()
+        }, "gozar-vpn-start").also { it.start() }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Closing the TUN immediately drops Android's VPN interface. The Xray
+     * controller is stopped off the main thread before reporting "off".
+     * This is also used for revocation and unexpected service destruction.
+     */
+    private fun stopVpn(reason: String) {
+        val startup: Thread?
+        synchronized(resourceLock) {
+            if (stopping) return
+            stopping = true
+            stage = "stopping"
+            detail = reason
+            startup = startupThread
+            try { tunnel?.close() } catch (_: Exception) { }
+            tunnel = null
+        }
+        Thread({
+            try {
+                // Start may still be publishing its controller; wait briefly,
+                // then stopLoop() can interrupt a still-blocking startLoop().
+                startup?.join(500)
+                val active = synchronized(resourceLock) {
+                    val value = core
+                    core = null
+                    value
+                }
+                try { active?.stopLoop() } catch (_: Throwable) { }
+                // If startLoop returned after stopLoop raced with startup,
+                // startup's stopped check prevents a stale "running" state.
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } finally {
+                stage = "off"
+                detail = "VPN خاموش است."
+            }
+        }, "gozar-vpn-stop").start()
     }
 
     private fun createForegroundNotification() {
@@ -141,25 +199,13 @@ class SystemVpnService : VpnService() {
     }
 
     override fun onRevoke() {
-        stage = "off"
-        detail = "Android revoked the VPN permission"
+        stopVpn("Android revoked the VPN permission")
         stopSelf()
         super.onRevoke()
     }
 
     override fun onDestroy() {
-        stopped = true
-        val active = core
-        core = null
-        try { tunnel?.close() } catch (_: Exception) { }
-        tunnel = null
-        Thread {
-            try { active?.stopLoop() } catch (_: Throwable) { }
-        }.start()
-        if (stage != "error") {
-            stage = "off"
-            detail = "VPN خاموش است."
-        }
+        stopVpn("Android VPN service destroyed")
         super.onDestroy()
     }
 }
