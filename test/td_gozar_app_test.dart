@@ -42,8 +42,14 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-vpn-settings')), findsWidgets);
     await tester.tap(find.text('خانه'));
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(const ValueKey('gozar-connect')), findsWidgets);
-    expect(find.byKey(const ValueKey('gozar-disconnect')), findsWidgets);
+    // The command row follows the animated hero on compact phone screens.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('gozar-connect')),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const ValueKey('gozar-connect')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-disconnect')), findsOneWidget);
     expect(find.text('پیام‌های من'), findsNothing);
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
