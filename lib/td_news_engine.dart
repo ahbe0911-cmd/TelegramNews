@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -281,29 +282,79 @@ class TdNewsController extends ChangeNotifier {
     return id;
   }
 
+  bool vpnSocksWanted = false;
   bool vpnSocksInstalled = false;
+  String? vpnSocksError;
+  Future<void>? _vpnProxyAttempt;
 
-  /// The VPN service excludes its own package to prevent Xray outbound loops.
-  /// Route the same package's TDLib through Xray's loopback SOCKS listener.
-  Future<void> enableSystemVpnForTelegram() async {
-    if (vpnSocksInstalled || bridge.sender == null ||
-        state != 'authorizationStateReady') return;
-    await bridge.request({
-      '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
-      'enable': true, 'type': {
-        '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
-      },
-    });
-    vpnSocksInstalled = true;
+  /// The VPN host's package is intentionally outside Android's TUN so native
+  /// Xray outbound sockets cannot loop. TDLib must use Xray's local SOCKS
+  /// inbound instead. Remember the request across Telegram login transitions.
+  Future<void> enableSystemVpnForTelegram() {
+    vpnSocksWanted = true;
+    vpnSocksError = null;
     changed();
+    return _applySystemVpnForTelegram();
+  }
+
+  Future<void> _applySystemVpnForTelegram() {
+    if (!vpnSocksWanted || vpnSocksInstalled ||
+        bridge.sender == null || state != 'authorizationStateReady') {
+      return Future<void>.value();
+    }
+    final pending = _vpnProxyAttempt;
+    if (pending != null) return pending;
+    final task = _installSystemVpnProxy();
+    _vpnProxyAttempt = task;
+    return task.whenComplete(() { _vpnProxyAttempt = null; });
+  }
+
+  Future<void> _installSystemVpnProxy() async {
+    try {
+      // TDLib's addProxy call accepts loopback only when a listener exists.
+      // Report local-SOCKS readiness separately from Telegram auth/server.
+      final socket = await Socket.connect('127.0.0.1', 10808,
+          timeout: const Duration(seconds: 2));
+      socket.destroy();
+      if (!vpnSocksWanted) return;
+      final response = await bridge.request({
+        '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
+        'enable': true, 'type': {
+          '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
+        },
+      });
+      if (response['@type'] != 'proxy' || response['id'] is! int) {
+        throw StateError('TDLib proxy response is invalid');
+      }
+      if (!vpnSocksWanted) {
+        await bridge.request({'@type': 'disableProxy'});
+        return;
+      }
+      vpnSocksInstalled = true;
+      vpnSocksError = null;
+      changed();
+    } catch (_) {
+      vpnSocksInstalled = false;
+      vpnSocksError = 'اتصال تلگرام به SOCKS محلی برقرار نشد؛ دوباره تلاش کنید.';
+      changed();
+      rethrow;
+    }
   }
 
   Future<void> disableSystemVpnForTelegram() async {
-    if (bridge.sender != null) {
-      await bridge.request({'@type': 'disableProxy'});
+    vpnSocksWanted = false;
+    vpnSocksError = null;
+    if (bridge.sender != null && vpnSocksInstalled) {
+      try {
+        await bridge.request({'@type': 'disableProxy'});
+      } finally {
+        vpnSocksInstalled = false;
+        changed();
+      }
+    } else {
+      vpnSocksInstalled = false;
+      changed();
     }
-    vpnSocksInstalled = false;
-    changed();
   }
 
   /// Sends text to the actual Telegram self-chat.
@@ -446,6 +497,9 @@ class TdNewsController extends ChangeNotifier {
       if (parametersSetup != null) await parametersSetup;
       try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
       vpnSocksInstalled = false;
+      if (vpnSocksWanted && state == 'authorizationStateReady') {
+        unawaited(_applySystemVpnForTelegram().catchError((Object _) {}));
+      }
     } catch (_) {
       state = 'failed';
       status = 'راه‌اندازی TDLib ناموفق بود؛ تنظیمات یا کتابخانه بومی را بررسی کنید.';
@@ -557,6 +611,11 @@ class TdNewsController extends ChangeNotifier {
         changed();
       }
     } else if (state == 'authorizationStateReady') {
+      // The system VPN may already be running when this account logs in.
+      // Do not depend on the user opening Settings or pressing Retry.
+      if (vpnSocksWanted) {
+        try { await _applySystemVpnForTelegram(); } catch (_) {}
+      }
       // Render TDLib's on-device cache before waiting for a remote round trip.
       for (final source in sources.values) {
         unawaited(loadHistory(source.id, limit: 12, onlyLocal: true));

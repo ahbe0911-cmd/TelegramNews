@@ -15,8 +15,22 @@ class SystemVpnBridge {
     return result ?? {'stage': 'off', 'detail': 'VPN خاموش است.'};
   }
 
-  static Future<void> start(String xrayConfig) async {
-    await channel.invokeMethod<String>('start', {'config': xrayConfig});
+  static Future<void> start(String xrayConfig,
+      {String mode = 'all', List<String> packages = const []}) async {
+    await channel.invokeMethod<String>('start', {
+      'config': xrayConfig, 'mode': mode, 'packages': packages,
+    });
+  }
+
+  /// Android 11+ exposes only launchable apps granted visibility in manifest.
+  static Future<List<Map<String, String>>> installedApps() async {
+    final response = await channel.invokeListMethod<dynamic>('installedApps');
+    if (response == null) return [];
+    return response.whereType<Map>().map((raw) => <String, String>{
+      'package': raw['package']?.toString() ?? '',
+      'label': raw['label']?.toString() ?? '',
+    }).where((app) =>
+        app['package']!.isNotEmpty && app['label']!.isNotEmpty).toList();
   }
 
   static Future<void> stop() async {
