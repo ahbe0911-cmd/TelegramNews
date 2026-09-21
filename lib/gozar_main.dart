@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'gozar_visuals.dart';
 import 'gozar_subscription.dart';
@@ -111,8 +110,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   int? sentSession;
   final List<double> receivedSeries = [];
   final List<double> sentSeries = [];
-  int? tcpLatencyMs;
-  bool checkingTcp = false;
+  final Map<String, int> tcpLatencies = {};
+  final Set<String> checkingTcpProfiles = {};
   bool importingSubscription = false;
   bool choosingBestServer = false;
 
@@ -280,7 +279,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       setState(() {
         selectedProfile = result.index;
         profile.text = profiles[result.index].link;
-        tcpLatencyMs = result.latencyMs;
+        tcpLatencies[profiles[result.index].link] = result.latencyMs;
         currentPage = 0;
       });
       await widget.preferences.setInt('gozar_profile_index', result.index);
@@ -299,7 +298,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     setState(() {
       selectedProfile = index;
       profile.text = profiles[index].link;
-      tcpLatencyMs = null;
       currentPage = 0;
     });
     unawaited(widget.preferences.setInt('gozar_profile_index', index));
@@ -312,7 +310,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     setState(() {
       selectedProfile = -1;
       profile.clear();
-      tcpLatencyMs = null;
       currentPage = 0;
     });
   }
@@ -458,32 +455,31 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     return (bytes / 1073741824).toStringAsFixed(2) + ' GB';
   }
 
-  Future<void> checkTcpLatency() async {
-    if (checkingTcp) return;
-    setState(() { checkingTcp = true; tcpLatencyMs = null; });
+  Future<void> checkTcpLatency(int index) async {
+    if (index < 0 || index >= profiles.length) return;
+    final link = profiles[index].link;
+    if (checkingTcpProfiles.contains(link)) return;
+    setState(() {
+      checkingTcpProfiles.add(link);
+      tcpLatencies.remove(link);
+    });
     try {
-      final config = jsonDecode(buildFullDeviceXrayConfig(profile.text.trim()))
-          as Map<String, dynamic>;
-      final outbound = (config['outbounds'] as List).first as Map;
-      final settings = outbound['settings'] as Map;
-      final endpoint = (settings['vnext'] as List?)?.first ??
-          (settings['servers'] as List?)?.first;
-      if (endpoint is! Map || endpoint['address'] is! String ||
-          endpoint['port'] is! int) {
-        throw const FormatException('نشانی سرور برای آزمایش TCP در دسترس نیست.');
+      final latency = await probeGozarNode(
+        link,
+        timeout: const Duration(seconds: 5),
+      );
+      if (latency == null) {
+        throw StateError('TCP unreachable');
       }
-      // Because Gozar hosts the VPN, its own sockets bypass the TUN. This
-      // checks direct TCP reachability, not Telegram ping or VPN throughput.
-      final timer = Stopwatch()..start();
-      final socket = await Socket.connect(endpoint['address'] as String,
-          endpoint['port'] as int, timeout: const Duration(seconds: 5));
-      timer.stop();
-      socket.destroy();
-      if (mounted) setState(() { tcpLatencyMs = timer.elapsedMilliseconds; });
+      if (mounted && profiles.any((item) => item.link == link)) {
+        setState(() { tcpLatencies[link] = latency; });
+      }
     } catch (_) {
-      notice('ارتباط مستقیم TCP با سرور برقرار نشد؛ این تست سرعت VPN نیست.');
+      notice('اتصال TCP این سرور برقرار نشد.');
     } finally {
-      if (mounted) setState(() { checkingTcp = false; });
+      if (mounted) {
+        setState(() { checkingTcpProfiles.remove(link); });
+      }
     }
   }
 
@@ -949,33 +945,14 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       _hero(),
       const SizedBox(height: 13),
       _traffic(),
-      const SizedBox(height: 10),
-      GozarPanel(glow: GozarPalette.purple,
-        child: Column(children: [
-          _eyebrow(Icons.speed_outlined, 'آزمایش دسترسی به سرور',
-              color: GozarPalette.purple),
-          const SizedBox(height: 8),
-          Text(tcpLatencyMs == null ? 'تاخیر: —'
-              : 'تاخیر اتصال TCP: ' + tcpLatencyMs.toString() + ' ms',
-            key: const ValueKey('gozar-tcp-latency'),
-            style: const TextStyle(color: GozarPalette.text)),
-          const SizedBox(height: 6),
-          const Text('این عدد زمان اتصال مستقیم TCP به سرور است، '
-              'نه پینگ از داخل VPN.',
-              style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
-          TextButton.icon(
-            onPressed: checkingTcp ? null : checkTcpLatency,
-            icon: const Icon(Icons.wifi_tethering_outlined),
-            label: const Text('بررسی تاخیر TCP'),
-          ),
-        ]),
-      ),
     ],
   );
 
   Widget _serverCard(int index) {
     final item = profiles[index];
     final selected = selectedProfile == index;
+    final latency = tcpLatencies[item.link];
+    final testing = checkingTcpProfiles.contains(item.link);
     return GozarPanel(
       glow: selected ? GozarPalette.cyan : GozarPalette.purple,
       child: Column(children: [
@@ -994,8 +971,24 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
             ],
           )),
-          if (selected) const Icon(Icons.verified_outlined,
+          TextButton(
+            key: ValueKey('gozar-test-server-' + index.toString()),
+            onPressed: testing ? null : () => checkTcpLatency(index),
+            child: Text(testing ? '…' : 'تست'),
+          ),
+          if (latency != null)
+            Text(latency.toString() + ' ms',
+              key: ValueKey('gozar-tcp-' + index.toString()),
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(
+                color: GozarPalette.cyan,
+                fontWeight: FontWeight.w800,
+              )),
+          if (selected) const Padding(
+            padding: EdgeInsets.only(right: 7),
+            child: Icon(Icons.verified_outlined,
               color: GozarPalette.cyan, size: 20),
+          ),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -1101,6 +1094,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           const Text('در صورت تغییر برنامه‌ها، VPN را قطع و دوباره وصل کنید.',
               style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+          const SizedBox(height: 6),
+          const Text('برنامه‌های بانکی، روبیکا و بله در حالت «همه» '
+              'به‌طور خودکار از اینترنت مستقیم استفاده می‌کنند.',
+              style: TextStyle(color: GozarPalette.cyan, fontSize: 11)),
           TextButton.icon(
             onPressed: refresh,
             icon: const Icon(Icons.refresh_rounded),
