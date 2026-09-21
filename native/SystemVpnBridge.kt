@@ -16,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 object SystemVpnBridge {
     private const val CHANNEL = "ir.channel.telegram_tdnews/system_vpn"
     private const val REQUEST_VPN = 7301
+    private var consentPending = false
     private var waitingConfig: String? = null
     private var waitingRouting: VpnRoutingPolicy? = null
 
@@ -91,7 +92,13 @@ object SystemVpnBridge {
                     "stop" -> {
                         waitingConfig = null
                         waitingRouting = null
-                        activity.stopService(Intent(activity, SystemVpnService::class.java))
+                        val wasStopping = SystemVpnService.stage == "stopping"
+                        val stoppedService = activity.stopService(
+                            Intent(activity, SystemVpnService::class.java))
+                        if (!stoppedService && !wasStopping) {
+                            SystemVpnService.stage = "off"
+                            SystemVpnService.detail = "VPN خاموش است."
+                        }
                         result.success(null)
                     }
                     "start" -> {
@@ -100,8 +107,9 @@ object SystemVpnBridge {
                             result.error("INVALID_CONFIG", "Invalid Xray JSON", null)
                             return@setMethodCallHandler
                         }
-                        if (SystemVpnService.stage == "running" ||
-                            SystemVpnService.stage == "starting") {
+                        if (consentPending || SystemVpnService.stage == "running" ||
+                            SystemVpnService.stage == "starting" ||
+                            SystemVpnService.stage == "stopping") {
                             result.error("VPN_BUSY", "Disconnect the existing VPN first", null)
                             return@setMethodCallHandler
                         }
@@ -118,6 +126,7 @@ object SystemVpnBridge {
                         try {
                             val approval = VpnService.prepare(activity)
                             if (approval != null) {
+                                consentPending = true
                                 waitingConfig = config
                                 waitingRouting = policy
                                 SystemVpnService.stage = "consent"
@@ -130,6 +139,7 @@ object SystemVpnBridge {
                                 result.success("starting")
                             }
                         } catch (e: Exception) {
+                            consentPending = false
                             waitingConfig = null
                             waitingRouting = null
                             SystemVpnService.stage = "error"
@@ -145,6 +155,7 @@ object SystemVpnBridge {
     @Suppress("DEPRECATION")
     fun onActivityResult(activity: MainActivity, requestCode: Int, resultCode: Int): Boolean {
         if (requestCode != REQUEST_VPN) return false
+        consentPending = false
         val config = waitingConfig
         val policy = waitingRouting
         waitingConfig = null
@@ -156,10 +167,10 @@ object SystemVpnBridge {
                 SystemVpnService.stage = "error"
                 SystemVpnService.detail = e.javaClass.simpleName
             }
-        } else {
+        } else if (config != null) {
             SystemVpnService.stage = "off"
             SystemVpnService.detail = "Android VPN permission was not granted"
-        }
+        } // A cancelled permission result must not change a later service state.
         return true
     }
 
