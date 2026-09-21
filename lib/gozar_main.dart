@@ -50,7 +50,7 @@ class GozarApp extends StatelessWidget {
         surface: GozarPalette.navy,
       ),
       scaffoldBackgroundColor: GozarPalette.base,
-      fontFamily: 'Roboto',
+      fontFamily: 'Vazirmatn',
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: Color(0xff203657),
         contentTextStyle: TextStyle(color: GozarPalette.text),
@@ -804,23 +804,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     children: [
       _hero(),
       const SizedBox(height: 13),
-      _profileInput(),
-      const SizedBox(height: 13),
-      OutlinedButton.icon(
-        key: const ValueKey('gozar-choose-apps'),
-        onPressed: busy ? null : chooseApps,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: GozarPalette.cyan,
-          side: const BorderSide(color: Color(0xff327da2)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-        ),
-        icon: const Icon(Icons.apps_rounded),
-        label: Text(mode == 'all'
-          ? 'انتخاب برنامه‌ها: همه برنامه‌ها'
-          : 'انتخاب برنامه‌ها: ' +
-              packages.length.toString() + ' برنامه'),
-      ),
-      const SizedBox(height: 13),
       _traffic(),
       const SizedBox(height: 10),
       GozarPanel(glow: GozarPalette.purple,
@@ -915,6 +898,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         ],
       )),
       const SizedBox(height: 13),
+      _profileInput(),
+      const SizedBox(height: 13),
       if (profiles.isEmpty)
         const GozarPanel(child: Text('هنوز سروری ذخیره نکرده‌اید. '
             'سرور جدید را اضافه کنید و لینک اختصاصی خود را وارد کنید.',
@@ -960,8 +945,35 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   );
 
   Widget _security() => ListView(
+    key: const ValueKey('gozar-settings-page'),
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
     children: [
+      GozarPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _eyebrow(Icons.settings_rounded, 'تنظیمات گذر'),
+          const SizedBox(height: 8),
+          const Text('انتخاب برنامه‌های VPN، امنیت و کنترل وضعیت اتصال',
+            style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const ValueKey('gozar-choose-apps'),
+            onPressed: busy ? null : chooseApps,
+            icon: const Icon(Icons.apps_rounded),
+            label: Text(mode == 'all' ? 'برنامه‌ها: همه'
+                : 'برنامه‌ها: ' + packages.length.toString() + ' انتخاب‌شده'),
+          ),
+          const SizedBox(height: 8),
+          const Text('در صورت تغییر برنامه‌ها، VPN را قطع و دوباره وصل کنید.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+          TextButton.icon(
+            onPressed: refresh,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('بررسی وضعیت VPN'),
+          ),
+        ],
+      )),
+      const SizedBox(height: 13),
       GozarPanel(glow: GozarPalette.purple,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1016,7 +1028,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final views = <Widget>[_home(), _servers(), _apps(), _security()];
+    final views = <Widget>[_home(), _servers(), _security()];
     return Scaffold(
       backgroundColor: GozarPalette.base,
       body: Stack(children: [
@@ -1082,15 +1094,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: GozarPalette.cyan),
                 label: 'سرورها'),
               NavigationDestination(
-                icon: Icon(Icons.apps_outlined),
-                selectedIcon: Icon(Icons.apps_rounded,
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings_rounded,
                     color: GozarPalette.cyan),
-                label: 'برنامه‌ها'),
-              NavigationDestination(
-                icon: Icon(Icons.shield_outlined),
-                selectedIcon: Icon(Icons.shield_rounded,
-                    color: GozarPalette.cyan),
-                label: 'امنیت'),
+                label: 'تنظیمات'),
             ],
           ),
         ])),
