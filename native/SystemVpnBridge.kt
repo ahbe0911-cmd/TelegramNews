@@ -89,10 +89,27 @@ object SystemVpnBridge {
                         "detail" to SystemVpnService.detail
                     ))
                     "stop" -> {
+                        // Cancel an outstanding Android permission request too.
                         waitingConfig = null
                         waitingRouting = null
-                        activity.stopService(Intent(activity, SystemVpnService::class.java))
-                        result.success(null)
+                        try {
+                            // stopService() only schedules onDestroy(): send an
+                            // ordered command to close the TUN immediately.
+                            activity.startService(
+                                Intent(activity, SystemVpnService::class.java)
+                                    .setAction(SystemVpnService.ACTION_STOP)
+                            )
+                            result.success(null)
+                        } catch (error: Exception) {
+                            // On restricted Android builds still request normal
+                            // service teardown, and report failure if that fails.
+                            val stopped = activity.stopService(
+                                Intent(activity, SystemVpnService::class.java)
+                            )
+                            if (stopped) result.success(null) else
+                                result.error("VPN_STOP_FAILED",
+                                    "Android could not stop the VPN service", null)
+                        }
                     }
                     "start" -> {
                         val config = call.argument<String>("config")
