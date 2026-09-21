@@ -21,6 +21,8 @@ on:
       - 'scripts/verify_apk_variant.py'
       - 'test/td_news_engine_test.dart'
       - 'test/td_system_vpn_test.dart'
+      - 'test/td_vpn_routing_test.dart'
+      - 'native/VpnRoutingPolicy.kt'
       - 'test/td_news_ui_test.dart'
       - 'test/td_inline_video_test.dart'
       - 'test/td_downloads_test.dart'
@@ -129,6 +131,8 @@ jobs:
         run: flutter test test/td_news_engine_test.dart
       - name: Verify VMess VPN profiles and preserve other protocols
         run: flutter test test/td_system_vpn_test.dart
+      - name: Verify Android VPN per-app selection bridge
+        run: flutter test test/td_vpn_routing_test.dart
       - name: Verify home and settings layout
         run: flutter test test/td_news_ui_test.dart
       - name: Verify lazy inline video and justified Persian text
