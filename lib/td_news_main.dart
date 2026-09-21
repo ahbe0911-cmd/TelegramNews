@@ -130,6 +130,9 @@ class _TdHomeState extends State<TdHome> {
   bool vpnBusy = false;
   String vpnStage = 'off';
   String vpnStatus = 'VPN خاموش است.';
+  String vpnRoutingMode = 'all';
+  Set<String> vpnSelectedApps = <String>{};
+  bool vpnUseInsideApp = true;
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
@@ -145,6 +148,11 @@ class _TdHomeState extends State<TdHome> {
   }
 
   Future<void> loadVpnState() async {
+    vpnRoutingMode = widget.news.prefs.getString('device_vpn_routing_mode') == 'selected'
+        ? 'selected' : 'all';
+    vpnSelectedApps = (widget.news.prefs.getStringList('device_vpn_selected_apps')
+        ?? const <String>[]).toSet();
+    vpnUseInsideApp = widget.news.prefs.getBool('device_vpn_internal_telegram') ?? true;
     try {
       final saved = await const FlutterSecureStorage()
           .read(key: 'device_xray_config');
@@ -172,12 +180,31 @@ class _TdHomeState extends State<TdHome> {
                         ? 'راه‌اندازی موتور VPN ناموفق بود؛ کانفیگ یا نسخه موتور را بررسی کنید.'
                         : 'VPN خاموش است.';
       });
-      if (stage == 'running') {
+      if (stage == 'running' && vpnUseInsideApp) {
         try {
           await widget.news.enableSystemVpnForTelegram();
         } catch (_) {
-          if (mounted) message('VPN فعال است اما اتصال داخلی تلگرام به SOCKS برقرار نشد.');
+          // Separate TDLib/SOCKS failure from the native Android VPN state.
         }
+        if (mounted && widget.news.vpnSocksInstalled) {
+          setState(() {
+            vpnStatus = 'VPN گوشی فعال است؛ اتصال داخلی تلگرام به Xray برقرار شد.';
+          });
+        } else if (mounted && widget.news.vpnSocksError != null) {
+          setState(() {
+            vpnStatus = 'VPN گوشی فعال است؛ اتصال داخلی تلگرام برقرار نشد. '
+                'روی «بررسی وضعیت VPN» بزنید.';
+          });
+        } else if (mounted) {
+          setState(() {
+            vpnStatus = 'VPN گوشی فعال است؛ پس از ورود تلگرام، اتصال داخلی '
+                'برنامه هم خودکار برقرار می‌شود.';
+          });
+        }
+      } else if (stage == 'running' && !vpnUseInsideApp) {
+        try { await widget.news.disableSystemVpnForTelegram(); } catch (_) {}
+      } else if (stage == 'off' && widget.news.vpnSocksWanted) {
+        try { await widget.news.disableSystemVpnForTelegram(); } catch (_) {}
       }
     } catch (_) {
       if (mounted) setState(() { vpnStatus = 'موتور VPN هنوز نصب یا در دسترس نیست.'; });
@@ -192,7 +219,13 @@ class _TdHomeState extends State<TdHome> {
       final config = buildFullDeviceXrayConfig(raw);
       await const FlutterSecureStorage().write(
           key: 'device_xray_config', value: raw);
-      await SystemVpnBridge.start(config);
+      if (vpnRoutingMode == 'selected' && vpnSelectedApps.isEmpty) {
+        throw const FormatException(
+          'حداقل یک برنامه را از «انتخاب برنامه‌ها» مشخص کنید، '
+          'یا حالت «همه برنامه‌ها» را انتخاب کنید.');
+      }
+      await SystemVpnBridge.start(config, mode: vpnRoutingMode,
+          packages: vpnSelectedApps.toList());
       await refreshVpnStatus();
       // The system consent dialog is asynchronous; never report running until
       // the native Xray service has established Android's TUN descriptor.
@@ -226,6 +259,151 @@ class _TdHomeState extends State<TdHome> {
     }
   }
 
+  Future<void> chooseVpnApps() async {
+    List<Map<String, String>> apps;
+    try {
+      apps = await SystemVpnBridge.installedApps();
+    } catch (_) {
+      message('فهرست برنامه‌های نصب‌شده دریافت نشد.');
+      return;
+    }
+    if (!mounted) return;
+    var mode = vpnRoutingMode;
+    final chosen = Set<String>.from(vpnSelectedApps);
+    var filter = '';
+    final appSearch = TextEditingController();
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (sheetContext, setSheet) {
+            final shown = apps.where((app) =>
+                (app['label'] ?? '').toLowerCase().contains(filter) ||
+                (app['package'] ?? '').toLowerCase().contains(filter)).toList();
+            return SafeArea(child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16,
+                  MediaQuery.viewInsetsOf(sheetContext).bottom + 12),
+              child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('انتخاب برنامه‌های استفاده‌کننده از VPN',
+                      style: TextStyle(fontSize: 17,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('برنامه‌های دارای آیکون در فهرست نمایش داده می‌شوند. '
+                      'برنامهٔ میزبان VPN برای جلوگیری از چرخه اتصال، جداگانه '
+                      'از طریق SOCKS داخلی مدیریت می‌شود.',
+                      style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 12),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'all', label: Text('همه برنامه‌ها')),
+                      ButtonSegment(value: 'selected',
+                          label: Text('فقط انتخاب‌شده‌ها')),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (choice) {
+                      setSheet(() { mode = choice.first; });
+                    },
+                  ),
+                  if (mode == 'selected') ...[
+                    const SizedBox(height: 9),
+                    TextField(
+                      controller: appSearch,
+                      onChanged: (text) {
+                        setSheet(() { filter = text.toLowerCase().trim(); });
+                      },
+                      decoration: const InputDecoration(
+                        hintText: 'جست‌وجوی نام برنامه',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(chosen.length.toString() + ' برنامه انتخاب شده است',
+                        style: const TextStyle(fontSize: 12)),
+                    SizedBox(
+                      height: MediaQuery.sizeOf(sheetContext).height * .40,
+                      child: shown.isEmpty
+                          ? const Center(child: Text('برنامه‌ای پیدا نشد.'))
+                          : ListView.builder(
+                              itemCount: shown.length,
+                              itemBuilder: (_, index) {
+                                final app = shown[index];
+                                final package = app['package']!;
+                                return CheckboxListTile(
+                                  dense: true,
+                                  key: ValueKey('vpn-app-' + package),
+                                  title: Text(app['label']!),
+                                  subtitle: Text(package,
+                                      textDirection: TextDirection.ltr,
+                                      style: const TextStyle(fontSize: 10)),
+                                  value: chosen.contains(package),
+                                  onChanged: (yes) {
+                                    setSheet(() {
+                                      if (yes == true) {
+                                        chosen.add(package);
+                                      } else {
+                                        chosen.remove(package);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                  const SizedBox(height: 9),
+                  FilledButton(
+                    onPressed: mode == 'selected' && chosen.isEmpty
+                        ? null : () async {
+                      await widget.news.prefs.setString(
+                          'device_vpn_routing_mode', mode);
+                      await widget.news.prefs.setStringList(
+                          'device_vpn_selected_apps', chosen.toList());
+                      if (!mounted) return;
+                      setState(() {
+                        vpnRoutingMode = mode;
+                        vpnSelectedApps = chosen;
+                      });
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                      if (vpnStage == 'running') {
+                        message('برای اعمال فهرست جدید، VPN را قطع و دوباره وصل کنید.');
+                      }
+                    },
+                    child: const Text('ذخیره انتخاب برنامه‌ها'),
+                  ),
+                ],
+              ),
+            ));
+          },
+        ),
+      );
+    } finally {
+      appSearch.dispose();
+    }
+  }
+
+  Future<void> toggleInternalTelegramVpn(bool enabled) async {
+    await widget.news.prefs.setBool('device_vpn_internal_telegram', enabled);
+    if (!mounted) return;
+    setState(() { vpnUseInsideApp = enabled; });
+    if (vpnStage != 'running') return;
+    try {
+      if (enabled) {
+        await widget.news.enableSystemVpnForTelegram();
+      } else {
+        await widget.news.disableSystemVpnForTelegram();
+      }
+    } catch (_) {}
+    await refreshVpnStatus();
+  }
+
   Widget vpnPanel() {
     final colors = Theme.of(context).colorScheme;
     final running = vpnStage == 'running';
@@ -253,6 +431,28 @@ class _TdHomeState extends State<TdHome> {
           decoration: decoratedInput('لینک vmess://، vless://، trojan:// یا JSON Xray',
               icon: Icons.link_rounded)),
         const SizedBox(height: 11),
+        OutlinedButton.icon(
+          onPressed: vpnBusy ? null : chooseVpnApps,
+          icon: const Icon(Icons.apps_rounded),
+          label: Text(vpnRoutingMode == 'all'
+              ? 'انتخاب برنامه‌ها: همه برنامه‌ها'
+              : 'انتخاب برنامه‌ها: فقط ' +
+                  vpnSelectedApps.length.toString() + ' برنامه'),
+        ),
+        const SizedBox(height: 3),
+        SwitchListTile.adaptive(
+          key: const ValueKey('vpn-internal-telegram'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          value: vpnUseInsideApp,
+          onChanged: vpnBusy ? null : toggleInternalTelegramVpn,
+          title: const Text('تلگرام داخل همین برنامه هم از VPN استفاده کند'),
+          subtitle: const Text(
+            'اتصال داخلی از SOCKS موتور Xray انجام می‌شود؛ '
+            'برنامهٔ میزبان VPN برای جلوگیری از چرخه شبکه وارد تونل اندروید نمی‌شود.',
+            style: TextStyle(fontSize: 11),
+          ),
+        ),
         Row(children: [
           Expanded(child: FilledButton.icon(
             key: const ValueKey('xray-vpn-connect'),
