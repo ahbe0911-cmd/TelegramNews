@@ -596,3 +596,504 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
+  String get serverLabel =>
+      selectedProfile >= 0 && selectedProfile < profiles.length
+          ? profiles[selectedProfile].name : 'کانفیگ جدید';
+
+  Widget _eyebrow(IconData icon, String title, {Color? color}) => Row(
+    children: [
+      Icon(icon, color: color ?? GozarPalette.cyan, size: 20),
+      const SizedBox(width: 9),
+      Expanded(child: Text(title, style: const TextStyle(
+          color: GozarPalette.text, fontWeight: FontWeight.w800,
+          fontSize: 16))),
+    ],
+  );
+
+  Widget _hero() {
+    final connected = stage == 'running';
+    final ready = stage != 'starting' && stage != 'consent';
+    return GozarPanel(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
+      glow: connected ? GozarPalette.cyan : GozarPalette.blue,
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.shield_rounded, color: GozarPalette.cyan, size: 26),
+          const SizedBox(width: 8),
+          const Text('گذر VPN', style: TextStyle(
+              color: GozarPalette.text, fontSize: 25,
+              fontWeight: FontWeight.w900)),
+        ]),
+        const SizedBox(height: 4),
+        const Text('اتصال امن و مستقل برای اینترنت گوشی',
+            textAlign: TextAlign.center, style: TextStyle(
+              color: GozarPalette.muted, fontSize: 12)),
+        const SizedBox(height: 20),
+        GozarPowerButton(
+          key: const ValueKey('gozar-power'),
+          connected: connected, busy: busy || !ready,
+          label: connected ? 'برای قطع اتصال لمس کنید'
+              : ready ? 'برای اتصال لمس کنید' : 'منتظر راه‌اندازی',
+          onPressed: busy || !ready ? null
+              : connected ? disconnect : connect,
+        ),
+        const SizedBox(height: 15),
+        Text(detail, key: const ValueKey('gozar-vpn-status'),
+          textAlign: TextAlign.center,
+          style: TextStyle(color: connected
+              ? GozarPalette.cyan : GozarPalette.muted, fontSize: 12)),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: const Color(0xff071a33).withOpacity(.72),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.dns_rounded, color: GozarPalette.cyan, size: 19),
+            const SizedBox(width: 8),
+            Expanded(child: Text(serverLabel,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: GozarPalette.text,
+                fontWeight: FontWeight.w600))),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: () => setState(() { currentPage = 1; }),
+              child: const Text('تغییر سرور',
+                  style: TextStyle(color: GozarPalette.cyan)),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _connectActions() => Row(children: [
+    Expanded(child: FilledButton.icon(
+      key: const ValueKey('gozar-connect'),
+      onPressed: busy || stage == 'running' ||
+          stage == 'starting' || stage == 'consent' ? null : connect,
+      style: FilledButton.styleFrom(
+        backgroundColor: GozarPalette.blue,
+        foregroundColor: GozarPalette.text,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+      ),
+      icon: const Icon(Icons.power_settings_new_rounded),
+      label: const Text('اتصال VPN'),
+    )),
+    const SizedBox(width: 9),
+    Expanded(child: OutlinedButton.icon(
+      key: const ValueKey('gozar-disconnect'),
+      onPressed: busy || stage == 'off' ? null : disconnect,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: GozarPalette.text,
+        side: const BorderSide(color: GozarPalette.purple),
+        padding: const EdgeInsets.symmetric(vertical: 13),
+      ),
+      icon: const Icon(Icons.stop_circle_outlined),
+      label: const Text('قطع اتصال'),
+    )),
+  ]);
+
+  Widget _profileInput() => GozarPanel(
+    glow: GozarPalette.purple,
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _eyebrow(Icons.link_rounded, 'کانفیگ سرور',
+            color: GozarPalette.purple),
+        const SizedBox(height: 7),
+        const Text('VMess / VLESS / Trojan / Xray JSON',
+          textDirection: TextDirection.ltr,
+          style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+        const SizedBox(height: 11),
+        TextField(
+          key: const ValueKey('gozar-config'),
+          controller: profile,
+          obscureText: hideProfile,
+          maxLines: hideProfile ? 1 : 3,
+          autocorrect: false,
+          enableSuggestions: false,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+          style: const TextStyle(color: GozarPalette.text),
+          decoration: InputDecoration(
+            hintText: 'vmess:// …',
+            hintStyle: const TextStyle(color: GozarPalette.muted),
+            fillColor: const Color(0xff07132b).withOpacity(.80),
+            filled: true,
+            suffixIcon: IconButton(
+              tooltip: hideProfile ? 'نمایش کانفیگ' : 'پنهان کردن کانفیگ',
+              onPressed: () => setState(() { hideProfile = !hideProfile; }),
+              icon: Icon(hideProfile
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: busy ? null : () => unawaited(saveProfile()),
+          icon: const Icon(Icons.save_outlined),
+          label: Text(selectedProfile < 0
+              ? 'ذخیره سرور جدید' : 'ذخیره تغییرات سرور'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: GozarPalette.cyan,
+            side: const BorderSide(color: Color(0xff2b7795)),
+          ),
+        ),
+        const SizedBox(height: 6),
+        _connectActions(),
+      ],
+    ),
+  );
+
+  Widget _traffic() => GozarPanel(
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _eyebrow(Icons.show_chart_rounded, 'عملکرد لحظه‌ای'),
+      const SizedBox(height: 6),
+      const Text('برآورد بر اساس ترافیک UID برنامه گذر؛ نه سرعت '
+          'قطعی سرور یا همهٔ بسته‌های تونل.',
+          style: TextStyle(color: GozarPalette.muted, fontSize: 10)),
+      const SizedBox(height: 11),
+      if (receivedSeries.isEmpty && sentSeries.isEmpty)
+        const SizedBox(height: 90,
+          child: Center(child: Text('پس از اتصال و تبادل داده، نمودار ظاهر می‌شود.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: GozarPalette.muted, fontSize: 12))))
+      else GozarLineChart(
+        incoming: List<double>.of(receivedSeries),
+        outgoing: List<double>.of(sentSeries),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        GozarMetric(icon: Icons.south_rounded, caption: 'دریافت تقریبی',
+            value: _speed(receivedMbps)),
+        const SizedBox(width: 8),
+        GozarMetric(icon: Icons.north_rounded, caption: 'ارسال تقریبی',
+            value: _speed(sentMbps), accent: GozarPalette.purple),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        GozarMetric(icon: Icons.download_rounded, caption: 'دریافت در این نشست',
+            value: _volume(receivedSession)),
+        const SizedBox(width: 8),
+        GozarMetric(icon: Icons.upload_rounded, caption: 'ارسال در این نشست',
+            value: _volume(sentSession), accent: GozarPalette.purple),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        const Icon(Icons.timer_outlined,
+            color: GozarPalette.muted, size: 15),
+        const SizedBox(width: 5),
+        Expanded(child: Text(
+          connectedObservedAt == null ? 'اتصال فعال نیست'
+              : 'مدت نمایش اتصال: ' +
+                DateTime.now().difference(connectedObservedAt!)
+                    .inMinutes.toString() + ' دقیقه',
+          style: const TextStyle(color: GozarPalette.muted, fontSize: 11),
+        )),
+      ]),
+    ]),
+  );
+
+  Widget _home() => ListView(
+    key: const ValueKey('gozar-home'),
+    padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+    children: [
+      _hero(),
+      const SizedBox(height: 13),
+      _profileInput(),
+      const SizedBox(height: 13),
+      OutlinedButton.icon(
+        key: const ValueKey('gozar-choose-apps'),
+        onPressed: busy ? null : chooseApps,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: GozarPalette.cyan,
+          side: const BorderSide(color: Color(0xff327da2)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        icon: const Icon(Icons.apps_rounded),
+        label: Text(mode == 'all'
+          ? 'انتخاب برنامه‌ها: همه برنامه‌ها'
+          : 'انتخاب برنامه‌ها: ' +
+              packages.length.toString() + ' برنامه'),
+      ),
+      const SizedBox(height: 13),
+      _traffic(),
+      const SizedBox(height: 10),
+      GozarPanel(glow: GozarPalette.purple,
+        child: Column(children: [
+          _eyebrow(Icons.speed_outlined, 'آزمایش دسترسی به سرور',
+              color: GozarPalette.purple),
+          const SizedBox(height: 8),
+          Text(tcpLatencyMs == null ? 'تاخیر: —'
+              : 'تاخیر اتصال TCP: ' + tcpLatencyMs.toString() + ' ms',
+            key: const ValueKey('gozar-tcp-latency'),
+            style: const TextStyle(color: GozarPalette.text)),
+          const SizedBox(height: 6),
+          const Text('این عدد زمان اتصال مستقیم TCP به سرور است، '
+              'نه پینگ از داخل VPN.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+          TextButton.icon(
+            onPressed: checkingTcp ? null : checkTcpLatency,
+            icon: const Icon(Icons.wifi_tethering_outlined),
+            label: const Text('بررسی تاخیر TCP'),
+          ),
+        ]),
+      ),
+    ],
+  );
+
+  Widget _serverCard(int index) {
+    final item = profiles[index];
+    final selected = selectedProfile == index;
+    return GozarPanel(
+      glow: selected ? GozarPalette.cyan : GozarPalette.purple,
+      child: Column(children: [
+        Row(children: [
+          Icon(selected ? Icons.check_circle_rounded
+              : Icons.dns_rounded,
+              color: selected ? GozarPalette.cyan : GozarPalette.purple),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.name, style: const TextStyle(
+                  color: GozarPalette.text,
+                  fontSize: 15, fontWeight: FontWeight.w800)),
+              const Text('کانفیگ ذخیره‌شده • آدرس پنهان',
+                style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+            ],
+          )),
+          if (selected) const Icon(Icons.verified_outlined,
+              color: GozarPalette.cyan, size: 20),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: FilledButton(
+            onPressed: () => selectProfile(index),
+            child: Text(selected ? 'ویرایش / مشاهده' : 'انتخاب این سرور'),
+          )),
+          IconButton(
+            tooltip: 'ویرایش نام',
+            onPressed: () => unawaited(renameProfile(index)),
+            icon: const Icon(Icons.edit_outlined,
+                color: GozarPalette.muted),
+          ),
+          IconButton(
+            tooltip: 'حذف سرور',
+            onPressed: stage == 'running'
+                ? null : () => unawaited(deleteProfile(index)),
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: GozarPalette.purple),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _servers() => ListView(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+    children: [
+      GozarPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _eyebrow(Icons.dns_outlined, 'سرورهای من'),
+          const SizedBox(height: 8),
+          const Text('سرورها و لینک‌ها فقط از خودتان دریافت می‌شوند؛ '
+            'فهرست یا موقعیت جغرافیایی ساختگی نمایش داده نمی‌شود.',
+            style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+          const SizedBox(height: 13),
+          FilledButton.icon(
+            key: const ValueKey('gozar-add-profile'),
+            onPressed: addProfile,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('افزودن سرور جدید'),
+          ),
+        ],
+      )),
+      const SizedBox(height: 13),
+      if (profiles.isEmpty)
+        const GozarPanel(child: Text('هنوز سروری ذخیره نکرده‌اید. '
+            'سرور جدید را اضافه کنید و لینک اختصاصی خود را وارد کنید.',
+            style: TextStyle(color: GozarPalette.muted)))
+      else ...[
+        for (var i = 0; i < profiles.length; i++) ...[
+          _serverCard(i),
+          const SizedBox(height: 10),
+        ],
+      ],
+    ],
+  );
+
+  Widget _apps() => ListView(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+    children: [
+      GozarPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _eyebrow(Icons.apps_rounded, 'انتخاب برنامه‌ها'),
+          const SizedBox(height: 9),
+          const Text('مشخص کنید کدام برنامه‌های گوشی از VPN گذر '
+              'استفاده کنند. کافی‌نت و نبض خبر هم در این فهرست هستند.',
+              style: TextStyle(color: GozarPalette.muted)),
+          const SizedBox(height: 16),
+          Text(mode == 'all' ? 'حالت فعلی: تمام برنامه‌های گوشی'
+              : 'حالت فعلی: ' + packages.length.toString() +
+                  ' برنامه انتخاب‌شده',
+              style: const TextStyle(color: GozarPalette.cyan,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: chooseApps,
+            icon: const Icon(Icons.tune_rounded),
+            label: const Text('مدیریت دسترسی برنامه‌ها'),
+          ),
+          const SizedBox(height: 7),
+          const Text('پس از تغییر فهرست، VPN را یک‌بار قطع و دوباره '
+              'وصل کنید تا انتخاب جدید در اندروید اعمال شود.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+        ],
+      )),
+    ],
+  );
+
+  Widget _security() => ListView(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+    children: [
+      GozarPanel(glow: GozarPalette.purple,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _eyebrow(Icons.shield_rounded, 'امنیت اتصال',
+                color: GozarPalette.purple),
+            const SizedBox(height: 11),
+            const Text('Kill Switch از طریق تنظیمات رسمی اندروید',
+              style: TextStyle(color: GozarPalette.text,
+                  fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text('در تنظیمات VPN اندروید، گذر را انتخاب کنید '
+              'و در صورت وجود گزینه‌ها، «VPN همیشه روشن» و '
+              '«مسدودکردن اتصال‌های بدون VPN» را فعال کنید. '
+              'این گزینه‌ها تحت کنترل خود اندروید هستند.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+            const SizedBox(height: 13),
+            FilledButton.icon(
+              key: const ValueKey('gozar-vpn-settings'),
+              onPressed: () async {
+                try {
+                  await SystemVpnBridge.openVpnSettings();
+                } catch (_) {
+                  notice('تنظیمات VPN اندروید باز نشد؛ '
+                    'آن را از تنظیمات گوشی باز کنید.');
+                }
+              },
+              icon: const Icon(Icons.settings_outlined),
+              label: const Text('بازکردن تنظیمات VPN اندروید'),
+            ),
+          ],
+        )),
+      const SizedBox(height: 12),
+      GozarPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _eyebrow(Icons.privacy_tip_outlined, 'حریم خصوصی'),
+          const SizedBox(height: 10),
+          const Text('گذر تاریخچه وب‌گردی را در رابط خود ذخیره نمی‌کند. '
+              'کانفیگ‌های شما در فضای امن گوشی نگهداری می‌شوند. '
+              'سیاست نگهداری داده توسط ارائه‌دهنده سرور، مستقل از این '
+              'برنامه است و قابل تضمین از طرف گذر نیست.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+          const SizedBox(height: 10),
+          const Text('وضعیت «تونل فعال» به‌معنی تایید سرعت یا '
+              'امنیت سرور نیست؛ برای اطمینان، اتصال واقعی اینترنت '
+              'برنامه‌های انتخاب‌شده را آزمایش کنید.',
+              style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+        ],
+      )),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final views = <Widget>[_home(), _servers(), _apps(), _security()];
+    return Scaffold(
+      backgroundColor: GozarPalette.base,
+      body: Stack(children: [
+        const AuroraBackdrop(),
+        SafeArea(child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
+            child: Row(children: [
+              const Icon(Icons.shield_outlined,
+                color: GozarPalette.cyan, size: 27),
+              const SizedBox(width: 7),
+              const Text('گذر', style: TextStyle(
+                color: GozarPalette.text,
+                fontSize: 22, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: (stage == 'running'
+                    ? GozarPalette.cyan : GozarPalette.purple)
+                      .withOpacity(.13),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: (stage == 'running'
+                    ? GozarPalette.cyan : GozarPalette.purple)
+                      .withOpacity(.34)),
+                ),
+                child: Text(stage == 'running' ? '●  تونل فعال'
+                    : stage == 'starting' || stage == 'consent'
+                        ? '●  در حال اتصال'
+                        : '●  خاموش',
+                    style: TextStyle(fontSize: 11,
+                        color: stage == 'running'
+                            ? GozarPalette.cyan : GozarPalette.muted)),
+              ),
+              IconButton(
+                tooltip: 'به‌روزرسانی وضعیت',
+                onPressed: refresh,
+                icon: const Icon(Icons.refresh_rounded,
+                    color: GozarPalette.muted, size: 20),
+              ),
+            ]),
+          ),
+          Expanded(child: views[currentPage]),
+          NavigationBar(
+            height: 68,
+            backgroundColor: const Color(0xff08172e),
+            indicatorColor: const Color(0xff154264),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            selectedIndex: currentPage,
+            onDestinationSelected: (index) {
+              setState(() { currentPage = index; });
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded,
+                    color: GozarPalette.cyan),
+                label: 'خانه'),
+              NavigationDestination(
+                icon: Icon(Icons.dns_outlined),
+                selectedIcon: Icon(Icons.dns_rounded,
+                    color: GozarPalette.cyan),
+                label: 'سرورها'),
+              NavigationDestination(
+                icon: Icon(Icons.apps_outlined),
+                selectedIcon: Icon(Icons.apps_rounded,
+                    color: GozarPalette.cyan),
+                label: 'برنامه‌ها'),
+              NavigationDestination(
+                icon: Icon(Icons.shield_outlined),
+                selectedIcon: Icon(Icons.shield_rounded,
+                    color: GozarPalette.cyan),
+                label: 'امنیت'),
+            ],
+          ),
+        ])),
+      ]),
+    );
+  }
+}
