@@ -46,7 +46,7 @@ class SystemVpnService : VpnService() {
             return START_NOT_STICKY
         }
         // Android may redeliver a start while the same service is running.
-        if (stage == "starting" || stage == "running") return START_NOT_STICKY
+        if (startupThread != null) return START_NOT_STICKY
         val config = intent?.getStringExtra(EXTRA_CONFIG)
         val routing = try {
             VpnRoutingPolicy(
