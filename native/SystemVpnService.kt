@@ -115,6 +115,11 @@ class SystemVpnService : VpnService() {
                 // stopVpn() closes the fd immediately and calls stopLoop() on
                 // another thread, even when startLoop() has not returned yet.
                 controller.startLoop(config, fd.fd)
+                if (stopping) {
+                    // stopLoop may have raced just before startLoop entered.
+                    try { controller.stopLoop() } catch (_: Throwable) { }
+                    return@Thread
+                }
                 synchronized(resourceLock) {
                     if (!stopping) {
                         stage = "running"
