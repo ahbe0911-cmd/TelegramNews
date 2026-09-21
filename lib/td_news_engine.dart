@@ -288,9 +288,10 @@ class TdNewsController extends ChangeNotifier {
   Future<void>? _vpnProxyAttempt;
   String telegramConnectionState = 'unknown';
 
-  /// The VPN host's package is intentionally outside Android's TUN so native
-  /// Xray outbound sockets cannot loop. TDLib must use Xray's local SOCKS
-  /// inbound instead. Remember the request across Telegram login transitions.
+  /// The VPN-owning app is excluded from Android's TUN to avoid recursion.
+  /// A SECOND process runs its own SOCKS-only Xray controller on port 10809,
+  /// independent of the device TUN core; TDLib uses this private loopback.
+  /// Keep the request across Telegram authorization transitions.
   Future<void> enableSystemVpnForTelegram() {
     vpnSocksWanted = true;
     vpnSocksError = null;
@@ -372,16 +373,26 @@ class TdNewsController extends ChangeNotifier {
 
   Future<void> _installSystemVpnProxy() async {
     try {
-      // TDLib's addProxy call accepts loopback only when a listener exists.
-      // Report local-SOCKS readiness separately from Telegram auth/server.
-      final socket = await Socket.connect('127.0.0.1', 10808,
-          timeout: const Duration(seconds: 2));
+      // The dedicated core has its own listener; verify a COMPLETE SOCKS5
+      // handshake. A TCP read can legally contain only the first reply byte.
+      final socket = await Socket.connect('127.0.0.1', 10809,
+          timeout: const Duration(seconds: 3));
       try {
-        // Verify an actual SOCKS5 listener, not just an unrelated open port.
-        socket.add([0x05, 0x01, 0x00]);
-        final reply = await socket.first.timeout(const Duration(seconds: 2));
-        if (reply.length < 2 || reply[0] != 0x05 || reply[1] != 0x00) {
-          throw StateError('Local SOCKS5 authentication handshake failed');
+        final stream = StreamIterator<List<int>>(socket);
+        try {
+          socket.add([0x05, 0x01, 0x00]);
+          final reply = <int>[];
+          while (reply.length < 2) {
+            final ready = await stream.moveNext().timeout(
+                const Duration(seconds: 3));
+            if (!ready) throw StateError('SOCKS5 closed without a response');
+            reply.addAll(stream.current);
+          }
+          if (reply[0] != 0x05 || reply[1] != 0x00) {
+            throw StateError('SOCKS5 refused no-auth handshake');
+          }
+        } finally {
+          await stream.cancel();
         }
       } finally {
         socket.destroy();
@@ -394,7 +405,7 @@ class TdNewsController extends ChangeNotifier {
       int? proxyId;
       if (known is List) {
         for (final item in known.whereType<Map>()) {
-          if (item['server'] == '127.0.0.1' && item['port'] == 10808 &&
+          if (item['server'] == '127.0.0.1' && item['port'] == 10809 &&
               item['id'] is int) {
             proxyId = item['id'] as int;
             break;
@@ -403,7 +414,7 @@ class TdNewsController extends ChangeNotifier {
       }
       if (proxyId == null) {
         final response = await bridge.request({
-          '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10808,
+          '@type': 'addProxy', 'server': '127.0.0.1', 'port': 10809,
           'enable': true, 'type': {
             '@type': 'proxyTypeSocks5', 'username': '', 'password': '',
           },
@@ -427,7 +438,7 @@ class TdNewsController extends ChangeNotifier {
     } catch (error) {
       vpnSocksInstalled = false;
       vpnSocksError = error is SocketException || error is TimeoutException
-          ? 'سرویس SOCKS موتور Xray در دسترس نیست؛ VPN را قطع و دوباره وصل کنید.'
+          ? 'سرویس مستقل SOCKS تلگرام آماده نیست؛ «تعمیر اتصال داخلی» را بزنید.'
           : 'فعال‌سازی پروکسی تلگرام ناموفق بود؛ «تعمیر اتصال داخلی» را بزنید.';
       changed();
       rethrow;
