@@ -50,4 +50,38 @@ void main() {
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  for (final initialStage in ['starting', 'running']) {
+    testWidgets('power button stops native VPN while $initialStage',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      var nativeStage = initialStage;
+      var stopCalls = 0;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+        if (call.method == 'status') {
+          return {'stage': nativeStage, 'detail': nativeStage};
+        }
+        if (call.method == 'stop') {
+          stopCalls++;
+          nativeStage = 'off';
+          return null;
+        }
+        if (call.method == 'networkCounters') return {'rx': 100, 'tx': 100};
+        return null;
+      });
+      addTearDown(() =>
+          messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+      await tester.pumpWidget(GozarApp(
+          preferences: await SharedPreferences.getInstance()));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('برای قطع اتصال لمس کنید'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gozar-power')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(stopCalls, 1);
+      expect(find.text('VPN خاموش است.'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
 }
