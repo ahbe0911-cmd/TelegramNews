@@ -37,6 +37,22 @@ class SystemVpnBridge {
     await channel.invokeMethod<void>('stop');
   }
 
+  /// Approximate device counters of Gozar's own Android UID, not total
+  /// forwarded VPN traffic and not a measurement of remote server speed.
+  static Future<Map<String, int>> networkCounters() async {
+    final data = await channel.invokeMapMethod<String, dynamic>(
+        'networkCounters');
+    return {
+      'rx': (data?['rx'] as num?)?.toInt() ?? -1,
+      'tx': (data?['tx'] as num?)?.toInt() ?? -1,
+    };
+  }
+
+  /// Opens Android's system VPN settings. Always-on and "Block connections
+  /// without VPN" are user-controlled OS settings, not fake in-app toggles.
+  static Future<void> openVpnSettings() =>
+      channel.invokeMethod<void>('openVpnSettings');
+
   /// A separate Android process hosts SOCKS-only Xray. It has no TUN fd and
   /// cannot intercept its own outbound traffic; it reuses the selected server.
   static Future<void> startInternal(String config) async {
