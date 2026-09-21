@@ -913,37 +913,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ],
   );
 
-  Widget _apps() => ListView(
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-    children: [
-      GozarPanel(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _eyebrow(Icons.apps_rounded, 'انتخاب برنامه‌ها'),
-          const SizedBox(height: 9),
-          const Text('مشخص کنید کدام برنامه‌های گوشی از VPN گذر '
-              'استفاده کنند. کافی‌نت و نبض خبر هم در این فهرست هستند.',
-              style: TextStyle(color: GozarPalette.muted)),
-          const SizedBox(height: 16),
-          Text(mode == 'all' ? 'حالت فعلی: تمام برنامه‌های گوشی'
-              : 'حالت فعلی: ' + packages.length.toString() +
-                  ' برنامه انتخاب‌شده',
-              style: const TextStyle(color: GozarPalette.cyan,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: chooseApps,
-            icon: const Icon(Icons.tune_rounded),
-            label: const Text('مدیریت دسترسی برنامه‌ها'),
-          ),
-          const SizedBox(height: 7),
-          const Text('پس از تغییر فهرست، VPN را یک‌بار قطع و دوباره '
-              'وصل کنید تا انتخاب جدید در اندروید اعمال شود.',
-              style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
-        ],
-      )),
-    ],
-  );
-
   Widget _security() => ListView(
     key: const ValueKey('gozar-settings-page'),
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
