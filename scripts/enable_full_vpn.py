@@ -33,7 +33,7 @@ class MainActivity : FlutterActivity() {
     }
 ''', 1)
 activity.write_text(code)
-for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt', 'InternalTelegramProxyService.kt'):
+for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt', 'AutomaticBypassPolicy.kt', 'InternalTelegramProxyService.kt'):
     (activity.parent / name).write_bytes((ROOT / 'native' / name).read_bytes())
 
 manifest = host / 'app/src/main/AndroidManifest.xml'
