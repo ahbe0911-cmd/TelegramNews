@@ -27,6 +27,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('گذر'), findsWidgets);
     expect(find.byKey(const ValueKey('gozar-config')), findsOneWidget);
+    // The redesigned homepage is intentionally scrollable on a phone.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('gozar-choose-apps')),
+      230,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-connect')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-disconnect')), findsOneWidget);

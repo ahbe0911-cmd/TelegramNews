@@ -733,7 +733,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
-          onPressed: busy ? null : () => unawaited(saveProfile()),
+          onPressed: busy ? null : () =>
+              unawaited(saveProfile().catchError((Object _) {})),
           icon: const Icon(Icons.save_outlined),
           label: Text(selectedProfile < 0
               ? 'ذخیره سرور جدید' : 'ذخیره تغییرات سرور'),
