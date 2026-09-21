@@ -322,23 +322,14 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
                     const SizedBox(height: 6),
                     Text(
                       widget.busy
-                          ? 'در حال انجام…'
+                          ? (widget.label == 'در حال قطع اتصال' ? 'در حال قطع' : 'لغو اتصال')
                           : widget.connected
-                          ? 'متصل'
+                          ? 'قطع اتصال'
                           : 'اتصال',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         color: GozarPalette.text,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.label,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: GozarPalette.muted,
                       ),
                     ),
                   ],

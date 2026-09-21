@@ -740,7 +740,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ],
   );
 
-  Widget _hero({bool compact = false}) {
+  Widget _hero({bool compact = false, bool tight = false}) {
     final connected = stage == 'running';
     final transitioning =
         busy ||
@@ -767,6 +767,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 ? disconnect
                 : connect,
           ),
+          if (!tight) ...[
           SizedBox(height: compact ? 4 : 10),
           Text(
             detail,
@@ -777,6 +778,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               fontSize: 12,
             ),
           ),
+          ],
           SizedBox(height: compact ? 4 : 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -1040,7 +1042,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     key: const ValueKey('gozar-home'),
     builder: (context, constraints) {
       final compact = constraints.maxHeight < 650;
-      final hero = _hero(compact: compact);
+      final hero = _hero(compact: compact, tight: constraints.maxHeight < 320);
       final metrics = GozarPanel(
         padding: const EdgeInsets.all(10),
         child: Column(
