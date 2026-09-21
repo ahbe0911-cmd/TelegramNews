@@ -15,18 +15,46 @@ abstract final class GozarPalette {
   static const muted = Color(0xffabbdd7);
 }
 
-class AuroraBackdrop extends StatelessWidget {
+class AuroraBackdrop extends StatefulWidget {
   const AuroraBackdrop({super.key});
+
+  @override
+  State<AuroraBackdrop> createState() => _AuroraBackdropState();
+}
+
+class _AuroraBackdropState extends State<AuroraBackdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController drift;
+
+  @override
+  void initState() {
+    super.initState();
+    drift = AnimationController(vsync: this,
+        duration: const Duration(seconds: 11))..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    drift.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Positioned.fill(
     child: IgnorePointer(
-      child: CustomPaint(painter: _AuroraPainter()),
+      child: RepaintBoundary(child: AnimatedBuilder(
+        animation: drift,
+        builder: (_, __) => CustomPaint(
+          painter: _AuroraPainter(drift.value),
+        ),
+      )),
     ),
   );
 }
 
 class _AuroraPainter extends CustomPainter {
+  final double phase;
+  _AuroraPainter(this.phase);
   @override
   void paint(Canvas canvas, Size size) {
     final background = Paint()
@@ -38,7 +66,7 @@ class _AuroraPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, background);
 
     for (var i = 0; i < 5; i++) {
-      final x = size.width * (.04 + i * .23);
+      final x = size.width * (.04 + i * .23 + phase * (i.isEven ? .07 : -.05));
       final halo = Paint()
         ..shader = RadialGradient(
           colors: [
@@ -47,7 +75,7 @@ class _AuroraPainter extends CustomPainter {
             Colors.transparent,
           ],
         ).createShader(Rect.fromCircle(
-            center: Offset(x, size.height * .19),
+            center: Offset(x, size.height * (.16 + phase * .06)),
             radius: size.width * .52));
       canvas.drawCircle(Offset(x, size.height * .19),
           size.width * .52, halo);
@@ -99,7 +127,7 @@ class _AuroraPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _AuroraPainter oldDelegate) => oldDelegate.phase != phase;
 }
 
 class GozarPanel extends StatelessWidget {
@@ -134,7 +162,7 @@ class GozarPanel extends StatelessWidget {
   );
 }
 
-class GozarPowerButton extends StatelessWidget {
+class GozarPowerButton extends StatefulWidget {
   final bool connected;
   final bool busy;
   final VoidCallback? onPressed;
@@ -145,23 +173,47 @@ class GozarPowerButton extends StatelessWidget {
   });
 
   @override
+  State<GozarPowerButton> createState() => _GozarPowerButtonState();
+}
+
+class _GozarPowerButtonState extends State<GozarPowerButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController glow;
+
+  @override
+  void initState() {
+    super.initState();
+    glow = AnimationController(vsync: this,
+      duration: const Duration(milliseconds: 2400))
+        ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    glow.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final color = connected ? GozarPalette.cyan : GozarPalette.blue;
-    return Center(child: Semantics(
-      button: true, label: label,
+    final color = widget.connected ? GozarPalette.cyan : GozarPalette.blue;
+    return AnimatedBuilder(
+      animation: glow,
+      builder: (context, _) => Center(child: Semantics(
+      button: true, label: widget.label,
       child: InkWell(
-        onTap: onPressed,
+        onTap: widget.onPressed,
         customBorder: const CircleBorder(),
         child: Container(
           width: 204, height: 204,
           padding: const EdgeInsets.all(9),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: color.withOpacity(.42), width: 2),
+            border: Border.all(color: color.withOpacity(.36 + glow.value * .48), width: 2),
             boxShadow: [BoxShadow(
-              color: color.withOpacity(connected ? .26 : .12),
-              blurRadius: connected ? 45 : 23,
-              spreadRadius: connected ? 8 : 3,
+              color: color.withOpacity((widget.connected ? .14 : .08) + glow.value * .18),
+              blurRadius: 24 + glow.value * 26,
+              spreadRadius: 1 + glow.value * 7,
             )],
           ),
           child: Container(
@@ -172,8 +224,8 @@ class GozarPowerButton extends StatelessWidget {
                 colors: [Color(0xff0e4260), Color(0xff07162f)],
               ),
               boxShadow: [
-                BoxShadow(color: color.withOpacity(.60),
-                    blurRadius: 15, spreadRadius: 1),
+                BoxShadow(color: color.withOpacity(.30 + glow.value * .42),
+                    blurRadius: 9 + glow.value * 15, spreadRadius: 1 + glow.value * 2),
                 const BoxShadow(color: Color(0xbb000818),
                     blurRadius: 14, offset: Offset(0, 7)),
               ],
@@ -181,16 +233,19 @@ class GozarPowerButton extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.power_settings_new_rounded, size: 59,
+                Transform.scale(
+                  scale: 1.0 + (widget.connected ? .04 : .018) * glow.value,
+                  child: Icon(Icons.power_settings_new_rounded, size: 59,
                     color: color),
+                ),
                 const SizedBox(height: 6),
-                Text(busy ? 'در حال انجام…' :
-                    connected ? 'متصل' : 'اتصال',
+                Text(widget.busy ? 'در حال انجام…' :
+                    widget.connected ? 'متصل' : 'اتصال',
                   style: const TextStyle(fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: GozarPalette.text)),
                 const SizedBox(height: 3),
-                Text(label,
+                Text(widget.label,
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 11,
                       color: GozarPalette.muted)),
@@ -199,7 +254,8 @@ class GozarPowerButton extends StatelessWidget {
           ),
         ),
       ),
-    ));
+    )),
+    );
   }
 }
 
