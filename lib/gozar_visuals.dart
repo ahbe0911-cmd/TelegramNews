@@ -11,6 +11,8 @@ abstract final class GozarPalette {
   static const cyan = Color(0xff36eaff);
   static const blue = Color(0xff2798fa);
   static const purple = Color(0xff9c6bff);
+  static const green = Color(0xff38e087);
+  static const red = Color(0xffff5268);
   static const text = Color(0xfff3f8ff);
   static const muted = Color(0xffabbdd7);
 }
@@ -196,7 +198,7 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.connected ? GozarPalette.cyan : GozarPalette.blue;
+    final color = widget.connected ? GozarPalette.green : GozarPalette.red;
     return AnimatedBuilder(
       animation: glow,
       builder: (context, _) => Center(child: Semantics(
