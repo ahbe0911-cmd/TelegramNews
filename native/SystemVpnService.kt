@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import java.util.concurrent.Executors
 import go.Seq
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
@@ -25,15 +26,20 @@ class SystemVpnService : VpnService() {
         const val EXTRA_PACKAGES = "vpn_routing_packages"
         @Volatile var stage = "off"
         @Volatile var detail = "VPN خاموش است."
+        // Serializes start/stop of the process-wide Go core, including across
+        // service instances. Never wait for the Go engine on Android's UI thread.
+        private val engineWorker = Executors.newSingleThreadExecutor()
         private const val NOTIFICATION_CHANNEL = "xray_device_vpn"
         private const val NOTIFICATION_ID = 19741
     }
 
     @Volatile private var stopped = false
+    private val lifecycleLock = Any()
     private var tunnel: ParcelFileDescriptor? = null
     private var core: CoreController? = null
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+        if (stopped || core != null) return START_NOT_STICKY
         val config = intent?.getStringExtra(EXTRA_CONFIG)
         val routing = try {
             VpnRoutingPolicy(
@@ -56,8 +62,9 @@ class SystemVpnService : VpnService() {
         createForegroundNotification()
         stage = "starting"
         detail = "Initializing Xray-core and Android TUN"
-        Thread {
+        engineWorker.execute {
             try {
+                if (stopped) return@execute
                 Seq.setContext(applicationContext)
                 Libv2ray.initCoreEnv(filesDir.absolutePath, "")
                 val builder = Builder()
@@ -85,11 +92,13 @@ class SystemVpnService : VpnService() {
                 }
                 val fd = builder.establish()
                     ?: throw IllegalStateException("Android did not establish TUN")
-                if (stopped) {
-                    fd.close()
-                    return@Thread
+                synchronized(lifecycleLock) {
+                    if (stopped) {
+                        fd.close()
+                        return@execute
+                    }
+                    tunnel = fd
                 }
-                tunnel = fd
                 val controller = Libv2ray.newCoreController(object : CoreCallbackHandler {
                     override fun startup(): Long = 0
                     override fun shutdown(): Long = 0
@@ -97,18 +106,22 @@ class SystemVpnService : VpnService() {
                 })
                 core = controller
                 controller.startLoop(config, fd.fd)
-                if (stopped) {
-                    controller.stopLoop()
-                    return@Thread
+                synchronized(lifecycleLock) {
+                    if (!stopped) {
+                        stage = "running"
+                        detail = "Xray TUN active; test the actual server separately"
+                    }
                 }
-                stage = "running"
-                detail = "Xray TUN active; test the actual server separately"
             } catch (error: Throwable) {
-                stage = "error"
-                detail = "Xray core failed: " + error.javaClass.simpleName
-                stopSelf()
+                synchronized(lifecycleLock) {
+                    if (!stopped) {
+                        stage = "error"
+                        detail = "Xray core failed: " + error.javaClass.simpleName
+                        stopSelf()
+                    }
+                }
             }
-        }.start()
+        }
         return START_NOT_STICKY
     }
 
@@ -141,24 +154,32 @@ class SystemVpnService : VpnService() {
     }
 
     override fun onRevoke() {
-        stage = "off"
-        detail = "Android revoked the VPN permission"
         stopSelf()
         super.onRevoke()
     }
 
     override fun onDestroy() {
-        stopped = true
-        val active = core
-        core = null
-        try { tunnel?.close() } catch (_: Exception) { }
-        tunnel = null
-        Thread {
-            try { active?.stopLoop() } catch (_: Throwable) { }
-        }.start()
-        if (stage != "error") {
-            stage = "off"
-            detail = "VPN خاموش است."
+        val failed: Boolean
+        synchronized(lifecycleLock) {
+            stopped = true
+            failed = stage == "error"
+            stage = "stopping"
+            if (!failed) detail = "Stopping Android VPN"
+            // Closing TUN immediately releases Android routing, even if the
+            // core startup has not returned yet.
+            try { tunnel?.close() } catch (_: Exception) { }
+            tunnel = null
+        }
+        engineWorker.execute {
+            try { core?.stopLoop() } catch (_: Throwable) { }
+            core = null
+            // No new start is accepted while stage is stopping.
+            if (failed) {
+                stage = "error"
+            } else {
+                detail = "VPN خاموش است."
+                stage = "off"
+            }
         }
         super.onDestroy()
     }

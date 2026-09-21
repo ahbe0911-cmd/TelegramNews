@@ -35,6 +35,9 @@ flutter:
           weight: 400
         - asset: assets/fonts/Vazirmatn-Bold.ttf
           weight: 700
+    - family: Rooznameh
+      fonts:
+        - asset: assets/fonts/Rooznameh.ttf
 ''')
 host = root / 'android/app/src/main'
 activity = next((host / 'kotlin').rglob('MainActivity.kt'))
