@@ -286,6 +286,7 @@ class TdNewsController extends ChangeNotifier {
   bool vpnSocksInstalled = false;
   String? vpnSocksError;
   Future<void>? _vpnProxyAttempt;
+  String telegramConnectionState = 'unknown';
 
   /// The VPN host's package is intentionally outside Android's TUN so native
   /// Xray outbound sockets cannot loop. TDLib must use Xray's local SOCKS
@@ -296,6 +297,64 @@ class TdNewsController extends ChangeNotifier {
     changed();
     return _applySystemVpnForTelegram();
   }
+
+  /// Re-establish the local proxy even if the previous TDLib response was
+  /// successful. A successful addProxy call alone does not prove Telegram
+  /// has an active connection to its data centres.
+  Future<String> repairInternalTelegramVpn() async {
+    vpnSocksWanted = true;
+    if (bridge.sender == null || state == 'setup' || state == 'failed' ||
+        state == 'authorizationStateWaitTdlibParameters') {
+      return 'موتور تلگرام هنوز آماده نیست؛ ابتدا ورود تلگرام را کامل کنید.';
+    }
+    final pending = _vpnProxyAttempt;
+    if (pending != null) {
+      try { await pending.timeout(const Duration(seconds: 8)); } catch (_) {}
+    }
+    vpnSocksInstalled = false;
+    vpnSocksError = null;
+    changed();
+    try {
+      await _applySystemVpnForTelegram().timeout(
+          const Duration(seconds: 10));
+      return await probeTelegramVpnConnection();
+    } catch (_) {
+      return vpnSocksError ??
+          'ارتباط تلگرام با SOCKS محلی برقرار نشد؛ اتصال VPN را دوباره راه‌اندازی کنید.';
+    }
+  }
+
+  /// Distinguish a live local SOCKS proxy from Telegram server connectivity.
+  Future<String> probeTelegramVpnConnection() async {
+    if (bridge.sender == null) {
+      return 'موتور تلگرام راه‌اندازی نشده است.';
+    }
+    if (!vpnSocksInstalled) {
+      return 'پروکسی داخلی تلگرام هنوز فعال نشده است.';
+    }
+    try {
+      final result = await bridge.request(
+          {'@type': 'getConnectionState'}).timeout(
+          const Duration(seconds: 7));
+      final type = result['@type']?.toString() ?? '';
+      telegramConnectionState = type;
+      changed();
+      return switch (type) {
+        'connectionStateReady' => 'تلگرام به سرور متصل است؛ خبرها را تازه‌سازی کنید.',
+        'connectionStateUpdating' => 'تلگرام متصل است و در حال همگام‌سازی پیام‌هاست.',
+        'connectionStateConnectingToProxy' =>
+          'تلگرام در حال اتصال به پروکسی داخلی است؛ چند لحظه بعد دوباره بررسی کنید.',
+        'connectionStateConnecting' =>
+          'تلگرام از طریق پروکسی در حال اتصال به سرور است.',
+        'connectionStateWaitingForNetwork' =>
+          'تلگرام هنوز شبکه را در دسترس نمی‌بیند؛ VPN را قطع و دوباره وصل کنید.',
+        _ => 'وضعیت اتصال تلگرام هنوز مشخص نیست؛ دوباره بررسی کنید.',
+      };
+    } catch (_) {
+      return 'وضعیت سرور تلگرام دریافت نشد؛ اتصال VPN و ورود تلگرام را بررسی کنید.';
+    }
+  }
+
 
   Future<void> _applySystemVpnForTelegram() {
     if (!vpnSocksWanted || vpnSocksInstalled ||
@@ -317,7 +376,16 @@ class TdNewsController extends ChangeNotifier {
       // Report local-SOCKS readiness separately from Telegram auth/server.
       final socket = await Socket.connect('127.0.0.1', 10808,
           timeout: const Duration(seconds: 2));
-      socket.destroy();
+      try {
+        // Verify an actual SOCKS5 listener, not just an unrelated open port.
+        socket.add([0x05, 0x01, 0x00]);
+        final reply = await socket.first.timeout(const Duration(seconds: 2));
+        if (reply.length < 2 || reply[0] != 0x05 || reply[1] != 0x00) {
+          throw StateError('Local SOCKS5 authentication handshake failed');
+        }
+      } finally {
+        socket.destroy();
+      }
       if (!vpnSocksWanted) return;
       // Avoid creating a duplicate proxy when reconnecting after a stop or
       // app restart. TDLib keeps local proxy entries in its database.
@@ -353,9 +421,14 @@ class TdNewsController extends ChangeNotifier {
       vpnSocksInstalled = true;
       vpnSocksError = null;
       changed();
-    } catch (_) {
+      // Notifier exposes an intermediate state; Telegram may still be
+      // connecting to its remote data centres.
+      unawaited(probeTelegramVpnConnection());
+    } catch (error) {
       vpnSocksInstalled = false;
-      vpnSocksError = 'اتصال تلگرام به SOCKS محلی برقرار نشد؛ دوباره تلاش کنید.';
+      vpnSocksError = error is SocketException || error is TimeoutException
+          ? 'سرویس SOCKS موتور Xray در دسترس نیست؛ VPN را قطع و دوباره وصل کنید.'
+          : 'فعال‌سازی پروکسی تلگرام ناموفق بود؛ «تعمیر اتصال داخلی» را بزنید.';
       changed();
       rethrow;
     }
@@ -364,6 +437,7 @@ class TdNewsController extends ChangeNotifier {
   Future<void> disableSystemVpnForTelegram() async {
     vpnSocksWanted = false;
     vpnSocksError = null;
+    telegramConnectionState = 'unknown';
     if (bridge.sender != null && vpnSocksInstalled) {
       try {
         await bridge.request({'@type': 'disableProxy'});
@@ -512,13 +586,15 @@ class TdNewsController extends ChangeNotifier {
       listener = bridge.updates.stream.listen(onEvent);
       await bridge.start();
       await onAuthorization(await bridge.request({'@type': 'getAuthorizationState'}));
-      // Remove any proxy left configured by an older application version.
-      // A direct connection should not depend on the deleted proxy settings.
+      // IMPORTANT: do not disable an active local SOCKS proxy installed
+      // while TDLib parameters / authorization were loading. This used to
+      // undo the app's own VPN proxy after Android reported VPN running.
       if (parametersSetup != null) await parametersSetup;
-      try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
-      vpnSocksInstalled = false;
-      if (vpnSocksWanted && state == 'authorizationStateReady') {
+      if (vpnSocksWanted) {
         unawaited(_applySystemVpnForTelegram().catchError((Object _) {}));
+      } else {
+        try { await bridge.request({'@type': 'disableProxy'}); } catch (_) {}
+        vpnSocksInstalled = false;
       }
     } catch (_) {
       state = 'failed';
@@ -529,6 +605,13 @@ class TdNewsController extends ChangeNotifier {
 
   void onEvent(Map<String, dynamic> event) {
     switch (event['@type']) {
+      case 'updateConnectionState':
+        final connection = event['state'];
+        if (connection is Map) {
+          telegramConnectionState =
+              connection['@type']?.toString() ?? 'unknown';
+          changed();
+        }
       case 'updateAuthorizationState':
         if (event['authorization_state'] is Map) {
           unawaited(onAuthorization(Map<String, dynamic>.from(event['authorization_state'] as Map)));
