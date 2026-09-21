@@ -144,6 +144,9 @@ class _TdHomeState extends State<TdHome> {
   String vpnRoutingMode = 'all';
   Set<String> vpnSelectedApps = <String>{};
   bool vpnUseInsideApp = true;
+  bool _internalCoreRequested = false;
+  Future<void>? _internalCoreStarting;
+  String? _activeVpnConfig;
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
@@ -174,6 +177,52 @@ class _TdHomeState extends State<TdHome> {
     await refreshVpnStatus();
   }
 
+  /// Separate native process: no second core overwrites the system TUN fd.
+  Future<void> ensureInternalTelegramCore({bool restart = false}) async {
+    final pending = _internalCoreStarting;
+    if (pending != null) {
+      await pending;
+      if (!restart) return;
+    }
+    if (_internalCoreRequested && !restart) return;
+    final task = () async {
+      if (restart) {
+        await SystemVpnBridge.stopInternal();
+        _internalCoreRequested = false;
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+      final fullConfig = _activeVpnConfig ??
+          buildFullDeviceXrayConfig(vpnProfile.text.trim());
+      await SystemVpnBridge.startInternal(
+          buildInternalTelegramXrayConfig(fullConfig));
+      _internalCoreRequested = true;
+    }();
+    _internalCoreStarting = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_internalCoreStarting, task)) {
+        _internalCoreStarting = null;
+      }
+    }
+  }
+
+  Future<void> attachTelegramToInternalCore() async {
+    // Wait for the separate process to bind its local SOCKS listener.
+    // A successful startService is not proof that Xray is listening.
+    for (var attempt = 0; attempt < 3 && mounted; attempt++) {
+      if (vpnStage != 'running' || !vpnUseInsideApp) return;
+      try {
+        await widget.news.enableSystemVpnForTelegram()
+            .timeout(const Duration(seconds: 7));
+        if (widget.news.vpnSocksInstalled) return;
+      } catch (_) {}
+      if (attempt < 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
+    }
+  }
+
   Future<void> refreshVpnStatus() async {
     try {
       final state = await SystemVpnBridge.status();
@@ -193,14 +242,20 @@ class _TdHomeState extends State<TdHome> {
       });
       if (stage == 'running' && vpnUseInsideApp) {
         try {
-          await widget.news.enableSystemVpnForTelegram()
-              .timeout(const Duration(seconds: 6));
+          await ensureInternalTelegramCore();
+          await attachTelegramToInternalCore();
         } catch (_) {
-          // A delayed TDLib request must not freeze the settings page.
+          if (mounted) {
+            setState(() {
+              vpnInternalCheck = 'موتور مستقل تلگرام آماده نشد؛ '
+                  'روی «تعمیر اتصال داخلی» بزنید.';
+            });
+          }
         }
         if (mounted && widget.news.vpnSocksInstalled) {
           setState(() {
-            vpnStatus = 'VPN گوشی فعال است؛ اتصال داخلی تلگرام به Xray برقرار شد.';
+            vpnStatus = 'VPN گوشی فعال است؛ پروکسی مستقل تلگرام تنظیم شد. '
+                'وضعیت سرور را در پایین بررسی کنید.';
           });
         } else if (mounted && widget.news.vpnSocksError != null) {
           setState(() {
@@ -215,8 +270,19 @@ class _TdHomeState extends State<TdHome> {
         }
       } else if (stage == 'running' && !vpnUseInsideApp) {
         try { await widget.news.disableSystemVpnForTelegram(); } catch (_) {}
-      } else if (stage == 'off' && widget.news.vpnSocksWanted) {
-        try { await widget.news.disableSystemVpnForTelegram(); } catch (_) {}
+        if (_internalCoreRequested) {
+          await SystemVpnBridge.stopInternal();
+          _internalCoreRequested = false;
+        }
+      } else if (stage == 'off') {
+        if (widget.news.vpnSocksWanted) {
+          try { await widget.news.disableSystemVpnForTelegram(); } catch (_) {}
+        }
+        if (_internalCoreRequested) {
+          try { await SystemVpnBridge.stopInternal(); } catch (_) {}
+          _internalCoreRequested = false;
+        }
+        _activeVpnConfig = null;
       }
     } catch (_) {
       if (mounted) setState(() { vpnStatus = 'موتور VPN هنوز نصب یا در دسترس نیست.'; });
@@ -238,6 +304,7 @@ class _TdHomeState extends State<TdHome> {
       }
       await SystemVpnBridge.start(config, mode: vpnRoutingMode,
           packages: vpnSelectedApps.toList());
+      _activeVpnConfig = config;
       await refreshVpnStatus();
       // The system consent dialog is asynchronous; never report running until
       // the native Xray service has established Android's TUN descriptor.
@@ -261,8 +328,11 @@ class _TdHomeState extends State<TdHome> {
     if (vpnBusy) return;
     setState(() { vpnBusy = true; });
     try {
-      await SystemVpnBridge.stop();
       await widget.news.disableSystemVpnForTelegram();
+      await SystemVpnBridge.stopInternal();
+      _internalCoreRequested = false;
+      await SystemVpnBridge.stop();
+      _activeVpnConfig = null;
     } catch (_) {
       message('قطع اتصال VPN کامل نشد؛ دوباره تلاش کنید.');
     } finally {
@@ -408,11 +478,16 @@ class _TdHomeState extends State<TdHome> {
     if (vpnStage != 'running') return;
     try {
       if (enabled) {
-        await widget.news.enableSystemVpnForTelegram();
+        await ensureInternalTelegramCore();
+        await attachTelegramToInternalCore();
       } else {
         await widget.news.disableSystemVpnForTelegram();
+        await SystemVpnBridge.stopInternal();
+        _internalCoreRequested = false;
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) message('موتور مستقل تلگرام آماده نشد؛ تعمیر اتصال را بزنید.');
+    }
     await refreshVpnStatus();
   }
 
@@ -420,9 +495,11 @@ class _TdHomeState extends State<TdHome> {
     if (vpnRepairBusy || vpnStage != 'running') return;
     setState(() {
       vpnRepairBusy = true;
-      vpnInternalCheck = 'در حال بررسی SOCKS و بازیابی اتصال تلگرام…';
+      vpnInternalCheck = 'در حال راه‌اندازی موتور مستقل Xray و بازیابی اتصال تلگرام…';
     });
     try {
+      await ensureInternalTelegramCore(restart: true);
+      await Future<void>.delayed(const Duration(milliseconds: 650));
       final check = await widget.news.repairInternalTelegramVpn()
           .timeout(const Duration(seconds: 18));
       if (mounted) setState(() { vpnInternalCheck = check; });
@@ -505,8 +582,8 @@ class _TdHomeState extends State<TdHome> {
           onChanged: vpnBusy ? null : toggleInternalTelegramVpn,
           title: const Text('تلگرام داخل همین برنامه هم از VPN استفاده کند'),
           subtitle: const Text(
-            'اتصال داخلی از SOCKS موتور Xray انجام می‌شود؛ '
-            'برنامهٔ میزبان VPN برای جلوگیری از چرخه شبکه وارد تونل اندروید نمی‌شود.',
+            'یک موتور Xray مستقل مخصوص تلگرام از همان کانفیگ استفاده می‌کند؛ '
+            'هسته VPN گوشی وارد تونل خودش نمی‌شود.',
             style: TextStyle(fontSize: 11),
           ),
         ),
