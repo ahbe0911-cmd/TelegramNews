@@ -1192,18 +1192,18 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       glow: connected ? GozarPalette.green : GozarPalette.blue,
       child: Column(children: [
-        SizedBox(height: 219, child: Row(children: [
+        SizedBox(height: 178, child: Row(children: [
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
             child: const SizedBox(
-              width: 166, height: 216,
+              width: 142, height: 175,
               child: GozarLiveClock(),
             ),
           )),
           const SizedBox(width: 3),
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: SizedBox(width: 204, height: 204,
+            child: SizedBox(width: 158, height: 158,
               child: GozarPowerButton(
                 key: const ValueKey('gozar-power'),
                 connected: connected,
