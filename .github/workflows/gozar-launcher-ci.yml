@@ -83,4 +83,14 @@ jobs:
           python3 scripts/verify_apk_variant.py gozar
           test -s build/app/outputs/flutter-apk/app-release.apk
           sha256sum build/app/outputs/flutter-apk/app-release.apk
-          echo 'Gozar APK compiled; artifact upload omitted while Actions quota is exhausted.'
+          echo 'Gozar APK compiled and verified; attempting to publish the installable file.'
+      - name: Publish verified Gozar launcher APK
+        # Quota exhaustion must not misreport compilation/test success as failure.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gozar-Launcher-A54
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
