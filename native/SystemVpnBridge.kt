@@ -68,6 +68,71 @@ object SystemVpnBridge {
                             InternalTelegramProxyService::class.java))
                         result.success(null)
                     }
+                    "openShortcutApp" -> {
+                        val pkg = call.argument<String>("package")
+                        val launch = if (!pkg.isNullOrBlank()) {
+                            activity.packageManager.getLaunchIntentForPackage(pkg)
+                        } else null
+                        if (launch == null) {
+                            result.error("SHORTCUT_UNAVAILABLE",
+                                "This Android app is not installed or launchable", null)
+                        } else {
+                            try {
+                                activity.startActivity(launch)
+                                result.success(null)
+                            } catch (_: Exception) {
+                                result.error("SHORTCUT_LAUNCH_FAILED",
+                                    "Android could not open this app", null)
+                            }
+                        }
+                    }
+                    "openShortcutWeb" -> {
+                        val raw = call.argument<String>("url")
+                        val address = try {
+                            android.net.Uri.parse(raw)
+                        } catch (_: Exception) { null }
+                        if (address?.scheme != "https" ||
+                            address.host.isNullOrBlank() ||
+                            !address.userInfo.isNullOrEmpty()) {
+                            result.error("UNSAFE_SHORTCUT", "Only HTTPS links are supported", null)
+                        } else {
+                            try {
+                                val title = call.argument<String>("title") ?: "وب"
+                                activity.startActivity(
+                                    Intent(activity, GozarWebActivity::class.java)
+                                        .putExtra(GozarWebActivity.EXTRA_URL, raw)
+                                        .putExtra(GozarWebActivity.EXTRA_TITLE, title.take(48))
+                                )
+                                result.success(null)
+                            } catch (_: Exception) {
+                                result.error("WEB_SHORTCUT_FAILED",
+                                    "Cannot open the in-app browser", null)
+                            }
+                        }
+                    }
+                    "appIcon" -> {
+                        val pkg = call.argument<String>("package")
+                        try {
+                            if (pkg.isNullOrBlank()) {
+                                result.success(null)
+                            } else {
+                                val drawable = activity.packageManager.getApplicationIcon(pkg)
+                                val bitmap = android.graphics.Bitmap.createBitmap(
+                                    72, 72, android.graphics.Bitmap.Config.ARGB_8888)
+                                val canvas = android.graphics.Canvas(bitmap)
+                                drawable.setBounds(0, 0, 72, 72)
+                                drawable.draw(canvas)
+                                val bytes = java.io.ByteArrayOutputStream()
+                                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,
+                                    100, bytes)
+                                result.success(bytes.toByteArray())
+                                bitmap.recycle()
+                                bytes.close()
+                            }
+                        } catch (_: Exception) {
+                            result.success(null)
+                        }
+                    }
                     "installedApps" -> {
                         val launcher = Intent(Intent.ACTION_MAIN)
                             .addCategory(Intent.CATEGORY_LAUNCHER)
