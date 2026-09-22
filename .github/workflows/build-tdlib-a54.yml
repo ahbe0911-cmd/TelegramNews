@@ -175,6 +175,13 @@ jobs:
       - name: Verify saved user shortcuts and HTTPS validation
         if: matrix.variant == 'gozar'
         run: flutter test --reporter expanded test/gozar_shortcuts_test.dart
+      - name: Verify Android shortcut launcher fallback is packaged
+        if: matrix.variant == 'gozar'
+        run: |
+          grep -q 'CATEGORY_LAUNCHER' native/SystemVpnBridge.kt
+          grep -q 'FLAG_ACTIVITY_RESET_TASK_IF_NEEDED' native/SystemVpnBridge.kt
+          grep -q 'getLaunchIntentForPackage' native/SystemVpnBridge.kt
+          grep -q 'component' lib/gozar_shortcuts.dart
       - name: Verify standalone Gozar has no Telegram features
         if: matrix.variant == 'gozar'
         run: flutter test --reporter expanded test/td_gozar_app_test.dart
