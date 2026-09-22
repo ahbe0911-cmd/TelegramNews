@@ -15,6 +15,32 @@ Map<String, dynamic> outbound(String link) =>
     Map<String, dynamic>.from((config(link)['outbounds'] as List).first as Map);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('installed Android shortcuts keep their selected launcher alias',
+      () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'installedApps') {
+        return [
+          {
+            'package': 'com.example.installed',
+            'label': 'برنامه من',
+            'component': 'com.example.installed.LauncherAlias',
+          },
+        ];
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    final installed = await SystemVpnBridge.installedApps();
+    expect(installed.single['component'],
+        'com.example.installed.LauncherAlias');
+    expect(installed.single['package'], 'com.example.installed');
+  });
+
   test('VMess share link decodes base64url with missing padding; WS + TLS',
       () {
     final link = makeVmess({
