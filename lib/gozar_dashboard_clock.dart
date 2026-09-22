@@ -57,28 +57,26 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
     final day = _weekdays[now.weekday - 1];
     final date = persianDigits(jalali.day) + ' ' +
         _months[jalali.month - 1] + ' ' + persianDigits(jalali.year);
-    // The date and dial share one intrinsic canvas. Fit the whole canvas
-    // into the compact dashboard slot instead of clipping Persian date text.
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: SizedBox(
-        width: 174, height: 218,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
-            width: 136, height: 136,
-            child: CustomPaint(painter: _ClockPainter(now)),
-          ),
-          const SizedBox(height: 4),
-          Text(day + '، ' + persianDigits(jalali.day),
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: GozarPalette.text,
-                fontSize: 13, fontWeight: FontWeight.w800)),
-          Text(date, maxLines: 1, overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
-        ]),
-      ),
+    // Match the power button's physical 154dp outer diameter. Keep date
+    // underneath instead of shrinking the whole clock+date in a FittedBox.
+    return SizedBox(
+      width: 154,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          key: const ValueKey('gozar-clock-dial'),
+          width: 154, height: 154,
+          child: CustomPaint(painter: _ClockPainter(now)),
+        ),
+        const SizedBox(height: 4),
+        Text(day + '، ' + persianDigits(jalali.day),
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: GozarPalette.text,
+              fontSize: 13, fontWeight: FontWeight.w800)),
+        Text(date, maxLines: 1, overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
+      ]),
     );
   }
 }
