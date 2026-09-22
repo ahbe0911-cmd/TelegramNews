@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'gozar_visuals.dart';
 import 'gozar_subscription.dart';
+import 'gozar_shortcuts.dart';
+import 'gozar_dashboard_clock.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -97,6 +99,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   int currentPage = 0;
   int selectedProfile = -1;
   List<GozarProfile> profiles = [];
+  List<GozarShortcut> shortcuts = [];
+  String shortcutQuery = '';
   Timer? countersTimer;
   bool samplingCounters = false;
   DateTime? connectedObservedAt;
@@ -124,6 +128,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    shortcuts = GozarShortcutStore.load(widget.preferences);
     mode = widget.preferences.getString('gozar_routing_mode') == 'selected'
         ? 'selected' : 'all';
     packages = (widget.preferences.getStringList('gozar_selected_packages')
