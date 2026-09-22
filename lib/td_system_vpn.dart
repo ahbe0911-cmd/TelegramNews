@@ -45,6 +45,16 @@ class SystemVpnBridge {
         ? milliseconds.toInt() : null;
   }
 
+  /// A native installed app is opened through Android's own launcher.
+  static Future<void> openShortcutApp(String packageName) =>
+      channel.invokeMethod<void>('openShortcutApp', {'package': packageName});
+
+  /// User-saved HTTPS site opens in Gozar's private browser activity.
+  static Future<void> openShortcutWeb(String url, String title) =>
+      channel.invokeMethod<void>('openShortcutWeb', {
+        'url': url, 'title': title,
+      });
+
   static Future<void> stop() async {
     await channel.invokeMethod<void>('stop');
   }
