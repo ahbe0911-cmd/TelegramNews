@@ -29,6 +29,28 @@ void main() {
     expect(restored.last.target, 'org.telegram.messenger');
   });
 
+  test('keeps separate Android launcher aliases and migrates old shortcuts',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    const main = GozarShortcut(
+      kind: 'app', target: 'com.example.launcher',
+      component: 'com.example.launcher.MainActivity', title: 'اصلی');
+    const alias = GozarShortcut(
+      kind: 'app', target: 'com.example.launcher',
+      component: 'com.example.launcher.SecondActivity', title: 'دوم');
+    expect(await GozarShortcutStore.save(preferences, [main, alias]), isTrue);
+    final restored = GozarShortcutStore.load(preferences);
+    expect(restored.length, 2);
+    expect(restored.first.component, main.component);
+    expect(restored.last.component, alias.component);
+    await preferences.setString(GozarShortcutStore.key, jsonEncode([
+      {'kind': 'app', 'target': 'com.example.legacy', 'title': 'قبلی'},
+    ]));
+    final legacy = GozarShortcutStore.load(preferences).single;
+    expect(legacy.component, isEmpty);
+    expect(legacy.target, 'com.example.legacy');
+  });
+
   test('only HTTPS without embedded user credentials is accepted', () {
     expect(GozarShortcut.validWebUrl('https://example.org/search?q=test'),
         isNotNull);
