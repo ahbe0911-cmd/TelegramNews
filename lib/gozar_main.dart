@@ -1149,8 +1149,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       _eyebrow(Icons.apps_rounded, 'میانبر برنامه‌ها'),
       const SizedBox(height: 8),
       const Text(
-        'حداکثر ۱۰ برنامه یا سایت دلخواه را برای دسترسی سریع '
-        'در خانه اضافه، حذف یا جابه‌جا کنید.',
+        'برنامه‌ها و سایت‌های دلخواه را اضافه کنید، نام آن‌ها را تغییر دهید '
+        'و با نگه‌داشتن و کشیدن دستگیره، ترتیب نمایش در صفحه اصلی را بچینید.',
         style: TextStyle(color: GozarPalette.muted, fontSize: 12),
       ),
       const SizedBox(height: 12),
@@ -1175,45 +1175,55 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         const Padding(padding: EdgeInsets.symmetric(vertical: 12),
           child: Text('فهرست میانبرها خالی است.',
             style: TextStyle(color: GozarPalette.muted))),
-      for (var i = 0; i < shortcuts.length; i++)
-        ListTile(
-          key: ValueKey('gozar-manage-shortcut-' + shortcuts[i].key),
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          leading: GozarShortcutIcon(shortcut: shortcuts[i], size: 36),
-          title: Text(shortcuts[i].title, maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-          subtitle: Text(shortcuts[i].kind == 'web' ? 'سایت' : 'برنامه اندروید',
-            style: const TextStyle(color: GozarPalette.muted, fontSize: 11)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            IconButton(
-              tooltip: 'انتقال به بالا',
-              onPressed: i == 0 ? null : () {
-                final updated = List<GozarShortcut>.from(shortcuts);
-                final element = updated.removeAt(i);
-                updated.insert(i - 1, element);
-                _saveShortcuts(updated);
-              },
-              icon: const Icon(Icons.arrow_upward_rounded, size: 19)),
-            IconButton(
-              tooltip: 'انتقال به پایین',
-              onPressed: i == shortcuts.length - 1 ? null : () {
-                final updated = List<GozarShortcut>.from(shortcuts);
-                final element = updated.removeAt(i);
-                updated.insert(i + 1, element);
-                _saveShortcuts(updated);
-              },
-              icon: const Icon(Icons.arrow_downward_rounded, size: 19)),
-            IconButton(
-              tooltip: 'حذف میانبر',
-              onPressed: () => _saveShortcuts([
-                for (var n = 0; n < shortcuts.length; n++)
-                  if (n != i) shortcuts[n],
+      if (shortcuts.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        ReorderableListView.builder(
+          key: const ValueKey('gozar-reorder-shortcuts'),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: shortcuts.length,
+          onReorder: (oldIndex, newIndex) => _saveShortcuts(
+            GozarShortcutStore.reordered(shortcuts, oldIndex, newIndex)),
+          itemBuilder: (context, index) {
+            final shortcut = shortcuts[index];
+            return ListTile(
+              key: ValueKey('gozar-manage-shortcut-' + shortcut.key),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: GozarShortcutIcon(shortcut: shortcut, size: 34),
+              title: Text(shortcut.title, maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              subtitle: Text(shortcut.kind == 'web'
+                  ? 'سایت' : 'برنامه اندروید',
+                  style: const TextStyle(
+                    color: GozarPalette.muted, fontSize: 10)),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  key: ValueKey('gozar-rename-' + shortcut.key),
+                  tooltip: 'ویرایش نام میانبر',
+                  onPressed: () => _renameShortcut(shortcut),
+                  icon: const Icon(Icons.edit_outlined,
+                    color: GozarPalette.cyan, size: 19)),
+                IconButton(
+                  tooltip: 'حذف میانبر',
+                  onPressed: () => _saveShortcuts([
+                    for (final item in shortcuts)
+                      if (item.key != shortcut.key) item,
+                  ]),
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: GozarPalette.red, size: 19)),
+                ReorderableDragStartListener(
+                  index: index,
+                  child: const SizedBox(width: 38, height: 48,
+                    child: Center(child: Icon(Icons.drag_handle_rounded,
+                        color: GozarPalette.muted, size: 23))),
+                ),
               ]),
-              icon: const Icon(Icons.delete_outline_rounded,
-                  color: GozarPalette.red, size: 20)),
-          ]),
+            );
+          },
         ),
+      ],
       const SizedBox(height: 9),
       const Text(
         'سایت‌ها داخل مرورگر گذر باز می‌شوند؛ برنامه‌های نصب‌شده '
