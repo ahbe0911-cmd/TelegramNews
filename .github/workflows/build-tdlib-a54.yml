@@ -8,10 +8,12 @@ on:
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_subscription.dart'
       - 'lib/gozar_visuals.dart'
       - 'lib/td_vmess_parser.dart'
       - 'native/SystemVpnBridge.kt'
       - 'native/SystemVpnService.kt'
+      - 'native/AutomaticBypassPolicy.kt'
       - 'native/InternalTelegramProxyService.kt'
       - 'scripts/enable_full_vpn.py'
       - 'scripts/configure_gozar_standalone.py'
@@ -28,6 +30,7 @@ on:
       - 'test/td_system_vpn_test.dart'
       - 'test/td_internal_vpn_test.dart'
       - 'test/td_gozar_app_test.dart'
+      - 'test/gozar_subscription_test.dart'
       - 'test/td_vpn_routing_test.dart'
       - 'native/VpnRoutingPolicy.kt'
       - 'test/td_news_ui_test.dart'
@@ -155,13 +158,16 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Gozar standalone VPN source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
       - name: Verify VMess VPN profiles and preserve other protocols
         if: matrix.variant == 'gozar'
         run: flutter test test/td_system_vpn_test.dart
+      - name: Verify Gozar subscription import and server selection
+        if: matrix.variant == 'gozar'
+        run: flutter test test/gozar_subscription_test.dart
       - name: Verify standalone Gozar has no Telegram features
         if: matrix.variant == 'gozar'
         run: flutter test test/td_gozar_app_test.dart
