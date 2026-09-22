@@ -836,6 +836,65 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     await _saveShortcuts([...shortcuts, shortcut]);
   }
 
+  Future<void> _renameShortcut(GozarShortcut shortcut) async {
+    final controller = TextEditingController(text: shortcut.title);
+    try {
+      final renamed = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('ویرایش نام میانبر'),
+          content: TextField(
+            key: const ValueKey('gozar-edit-shortcut-name'),
+            controller: controller,
+            maxLength: 48,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'نام نمایشی',
+              helperText: 'نام برنامه یا نشانی سایت تغییر نمی‌کند.',
+            ),
+            onSubmitted: (value) {
+              final trimmed = value.trim();
+              if (trimmed.isNotEmpty) {
+                Navigator.pop(dialogContext, trimmed);
+              }
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('انصراف')),
+            FilledButton(
+              key: const ValueKey('gozar-apply-shortcut-name'),
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isEmpty || trimmed.length > 48) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text(
+                      'نام میانبر باید بین ۱ تا ۴۸ نویسه باشد.')));
+                  return;
+                }
+                Navigator.pop(dialogContext, trimmed);
+              },
+              child: const Text('ذخیره نام'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || renamed == null || renamed == shortcut.title) return;
+      // Recompute the index against the latest list: the target's immutable
+      // package/activity or URL identifies it even after a reorder.
+      final index = shortcuts.indexWhere((item) => item.key == shortcut.key);
+      if (index == -1) return;
+      final updated = List<GozarShortcut>.from(shortcuts);
+      updated[index] = updated[index].renamed(renamed);
+      await _saveShortcuts(updated);
+    } finally {
+      // Do not dispose controllers until the route's closing transition ends.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      controller.dispose();
+    }
+  }
+
   Future<void> _chooseShortcutApp() async {
     if (shortcuts.length >= GozarShortcutStore.maxCount) {
       notice('برای افزودن میانبر، ابتدا یکی را حذف کنید.');
