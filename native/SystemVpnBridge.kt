@@ -19,6 +19,13 @@ object SystemVpnBridge {
     private var waitingConfig: String? = null
     private var waitingRouting: VpnRoutingPolicy? = null
 
+    private fun launcherActivities(activity: Activity):
+        List<android.content.pm.ResolveInfo> {
+        val intent = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+        return activity.packageManager.queryIntentActivities(intent, 0)
+    }
+
     fun attach(activity: MainActivity, engine: FlutterEngine) {
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -70,19 +77,43 @@ object SystemVpnBridge {
                     }
                     "openShortcutApp" -> {
                         val pkg = call.argument<String>("package")
-                        val launch = if (!pkg.isNullOrBlank()) {
-                            activity.packageManager.getLaunchIntentForPackage(pkg)
-                        } else null
-                        if (launch == null) {
-                            result.error("SHORTCUT_UNAVAILABLE",
-                                "This Android app is not installed or launchable", null)
+                        val component = call.argument<String>("component")
+                        if (pkg.isNullOrBlank()) {
+                            result.error("SHORTCUT_UNAVAILABLE", "Missing Android package", null)
                         } else {
                             try {
-                                activity.startActivity(launch)
-                                result.success(null)
-                            } catch (_: Exception) {
+                                val pm = activity.packageManager
+                                // The package-only launcher API may return null on
+                                // Android 11+ even when the launcher picker can see
+                                // an activity. Re-resolve the MAIN/LAUNCHER component
+                                // selected by the user and launch that exact alias.
+                                val entries = launcherActivities(activity)
+                                    .filter { it.activityInfo.packageName == pkg }
+                                val selected = entries.firstOrNull {
+                                    it.activityInfo.name == component
+                                } ?: entries.firstOrNull()
+                                val launch = if (selected != null) {
+                                    Intent.makeMainActivity(
+                                        android.content.ComponentName(
+                                            selected.activityInfo.packageName,
+                                            selected.activityInfo.name
+                                        )
+                                    )
+                                } else {
+                                    pm.getLaunchIntentForPackage(pkg)
+                                }
+                                if (launch == null) {
+                                    result.error("SHORTCUT_UNAVAILABLE",
+                                        "No launchable Android activity found for $pkg", null)
+                                } else {
+                                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    activity.startActivity(launch)
+                                    result.success(null)
+                                }
+                            } catch (error: Exception) {
                                 result.error("SHORTCUT_LAUNCH_FAILED",
-                                    "Android could not open this app", null)
+                                    "Android could not open $pkg: " +
+                                        error.javaClass.simpleName, null)
                             }
                         }
                     }
@@ -112,15 +143,26 @@ object SystemVpnBridge {
                     }
                     "appIcon" -> {
                         val pkg = call.argument<String>("package")
+                        val component = call.argument<String>("component")
                         try {
                             if (pkg.isNullOrBlank()) {
                                 result.success(null)
                             } else {
-                                val drawable = activity.packageManager.getApplicationIcon(pkg)
+                                // Use the visible launcher activity's own icon:
+                                // aliases may have a different icon from the
+                                // package icon, and package icon lookup can be
+                                // restricted by Android package visibility.
+                                val pm = activity.packageManager
+                                val launcher = launcherActivities(activity)
+                                    .firstOrNull { it.activityInfo.packageName == pkg &&
+                                        (component.isNullOrEmpty() ||
+                                         it.activityInfo.name == component) }
+                                val drawable = launcher?.loadIcon(pm)
+                                    ?: pm.getApplicationIcon(pkg)
                                 val bitmap = android.graphics.Bitmap.createBitmap(
-                                    72, 72, android.graphics.Bitmap.Config.ARGB_8888)
+                                    80, 80, android.graphics.Bitmap.Config.ARGB_8888)
                                 val canvas = android.graphics.Canvas(bitmap)
-                                drawable.setBounds(0, 0, 72, 72)
+                                drawable.setBounds(0, 0, 80, 80)
                                 drawable.draw(canvas)
                                 val bytes = java.io.ByteArrayOutputStream()
                                 bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,
@@ -134,19 +176,19 @@ object SystemVpnBridge {
                         }
                     }
                     "installedApps" -> {
-                        val launcher = Intent(Intent.ACTION_MAIN)
-                            .addCategory(Intent.CATEGORY_LAUNCHER)
-                        // Only launchable apps are visible on Android 11+.
-                        val entries = activity.packageManager.queryIntentActivities(
-                            launcher, 0
-                        ).mapNotNull { info ->
-                            val pkg = info.activityInfo.packageName
-                            if (pkg == activity.packageName) null else mapOf(
-                                "package" to pkg,
-                                "label" to info.loadLabel(activity.packageManager).toString()
-                            )
-                        }.distinctBy { it["package"] }
-                            .sortedBy { it["label"]?.lowercase() }
+                        // Retain the actual activity name instead of discarding
+                        // distinct launch aliases within the same package.
+                        val entries = launcherActivities(activity)
+                            .mapNotNull { info ->
+                                val pkg = info.activityInfo.packageName
+                                if (pkg == activity.packageName) null else mapOf(
+                                    "package" to pkg,
+                                    "component" to info.activityInfo.name,
+                                    "label" to info.loadLabel(
+                                        activity.packageManager).toString()
+                                )
+                            }.distinctBy { it["package"] + "/" + it["component"] }
+                             .sortedBy { it["label"]?.lowercase() }
                         result.success(entries)
                     }
                     "measureConnection" -> {
