@@ -1023,7 +1023,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           border: Border.all(color: GozarPalette.blue.withOpacity(.42)),
         ),
         child: Center(child: GozarShortcutIcon(
-            shortcut: shortcut, size: 37)),
+            shortcut: shortcut, size: 44)),
       )),
       const SizedBox(height: 4),
       Text(shortcut.title, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -1085,8 +1085,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               textAlign: TextAlign.center,
               style: TextStyle(color: GozarPalette.muted))),
         ] else LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 410 ? 5
-              : constraints.maxWidth >= 295 ? 4 : 3;
+          final columns = constraints.maxWidth >= 420 ? 5
+              : constraints.maxWidth >= 300 ? 4 : 3;
           return GridView.builder(
             key: const ValueKey('gozar-user-shortcut-grid'),
             physics: const NeverScrollableScrollPhysics(),
@@ -1094,8 +1094,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             itemCount: filtered.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
-              mainAxisSpacing: 10, crossAxisSpacing: 8,
-              childAspectRatio: .86,
+              mainAxisSpacing: 8, crossAxisSpacing: 7,
+              childAspectRatio: .98,
             ),
             itemBuilder: (context, index) => _shortcutTile(filtered[index]),
           );
@@ -1192,18 +1192,18 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       glow: connected ? GozarPalette.green : GozarPalette.blue,
       child: Column(children: [
-        SizedBox(height: 178, child: Row(children: [
+        SizedBox(height: 154, child: Row(children: [
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
             child: const SizedBox(
-              width: 142, height: 175,
+              width: 126, height: 151,
               child: GozarLiveClock(),
             ),
           )),
           const SizedBox(width: 3),
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: SizedBox(width: 158, height: 158,
+            child: SizedBox(width: 138, height: 138,
               child: GozarPowerButton(
                 key: const ValueKey('gozar-power'),
                 connected: connected,
