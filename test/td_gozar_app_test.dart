@@ -30,6 +30,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('گذر'), findsWidgets);
     expect(find.byKey(const ValueKey('gozar-power')), findsOneWidget);
+    final dial = find.byKey(const ValueKey('gozar-clock-dial'));
+    expect(dial, findsOneWidget);
+    final dialRect = tester.getRect(dial);
+    final powerRect = tester.getRect(
+        find.byKey(const ValueKey('gozar-power')));
+    expect((dialRect.width - powerRect.width).abs(), lessThan(1.0));
+    expect((dialRect.top - powerRect.top).abs(), lessThan(1.0));
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
