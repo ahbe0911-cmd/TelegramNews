@@ -24,6 +24,12 @@ class GozarShortcut {
 
   String get key => '$kind:$target:$component';
 
+  /// Rename only the displayed label; never mutate the launcher component or URL.
+  GozarShortcut renamed(String newTitle) => GozarShortcut(
+    kind: kind, target: target, title: newTitle.trim(),
+    component: component,
+  );
+
   Map<String, String> toJson() =>
       {'kind': kind, 'target': target, 'title': title,
        'component': kind == 'app' ? component : ''};
@@ -61,6 +67,19 @@ class GozarShortcut {
 class GozarShortcutStore {
   static const key = 'gozar_user_shortcuts_v1';
   static const maxCount = 10;
+
+  /// Flutter's reorder callback supplies the insertion index *before* removal.
+  static List<GozarShortcut> reordered(
+      List<GozarShortcut> items, int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= items.length ||
+        newIndex < 0 || newIndex > items.length) {
+      return List<GozarShortcut>.from(items);
+    }
+    final output = List<GozarShortcut>.from(items);
+    final moved = output.removeAt(oldIndex);
+    output.insert(newIndex > oldIndex ? newIndex - 1 : newIndex, moved);
+    return output;
+  }
 
   static List<GozarShortcut> load(SharedPreferences preferences) {
     try {
