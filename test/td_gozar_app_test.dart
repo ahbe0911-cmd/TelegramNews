@@ -138,12 +138,16 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
     final rename = find.byKey(ValueKey('gozar-rename-' + selected.key));
-    await tester.scrollUntilVisible(rename, 150,
+    await tester.scrollUntilVisible(rename, 180,
+      // Position controls above the fixed bottom navigation bar: merely
+      // revealing them at the viewport bottom makes taps hit the nav bar.
+      alignment: 0.25,
       scrollable: find.descendant(
         of: find.byKey(const ValueKey('gozar-settings-page')),
         matching: find.byType(Scrollable),
       ).first,
     );
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(rename);
     await tester.pump(const Duration(milliseconds: 200));
     await tester.enterText(
