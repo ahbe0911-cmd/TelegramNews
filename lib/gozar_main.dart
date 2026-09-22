@@ -811,6 +811,377 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ],
   );
 
+  Future<void> _saveShortcuts(List<GozarShortcut> updated) async {
+    final previous = shortcuts;
+    if (updated.length > GozarShortcutStore.maxCount) {
+      notice('حداکثر ۱۰ میانبر در صفحه اصلی قابل ثبت است.');
+      return;
+    }
+    setState(() { shortcuts = updated; });
+    final saved = await GozarShortcutStore.save(widget.preferences, updated);
+    if (!saved && mounted) {
+      setState(() { shortcuts = previous; });
+      notice('میانبر ذخیره نشد؛ دوباره تلاش کنید.');
+    }
+  }
+
+  Future<void> _addShortcut(GozarShortcut shortcut) async {
+    if (shortcuts.any((item) => item.key == shortcut.key)) {
+      notice('این میانبر قبلاً اضافه شده است.');
+      return;
+    }
+    if (shortcuts.length >= GozarShortcutStore.maxCount) {
+      notice('حداکثر ۱۰ میانبر مجاز است؛ ابتدا یکی را حذف کنید.');
+      return;
+    }
+    await _saveShortcuts([...shortcuts, shortcut]);
+  }
+
+  Future<void> _chooseShortcutApp() async {
+    if (shortcuts.length >= GozarShortcutStore.maxCount) {
+      notice('برای افزودن میانبر، ابتدا یکی را حذف کنید.');
+      return;
+    }
+    List<Map<String, String>> installed;
+    try {
+      installed = await SystemVpnBridge.installedApps();
+    } catch (_) {
+      notice('فهرست برنامه‌های نصب‌شده دریافت نشد.');
+      return;
+    }
+    if (!mounted) return;
+    var filter = '';
+    final chosen = await showModalBottomSheet<GozarShortcut>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: GozarPalette.navy,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setPickerState) {
+          final matching = installed.where((app) =>
+            (app['label'] ?? '').toLowerCase().contains(filter) ||
+            (app['package'] ?? '').toLowerCase().contains(filter)).toList();
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+              ),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * .73,
+                child: Column(children: [
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('انتخاب برنامه برای میانبر',
+                      style: TextStyle(color: GozarPalette.text,
+                        fontWeight: FontWeight.w800, fontSize: 17)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: TextField(
+                      key: const ValueKey('gozar-app-shortcut-search'),
+                      onChanged: (value) => setPickerState(() {
+                        filter = value.trim().toLowerCase();
+                      }),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'نام برنامه را جستجو کنید',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  Expanded(child: matching.isEmpty
+                    ? const Center(child: Text(
+                        'برنامه‌ای پیدا نشد.',
+                        style: TextStyle(color: GozarPalette.muted)))
+                    : ListView.builder(
+                        itemCount: matching.length,
+                        itemBuilder: (context, index) {
+                          final app = matching[index];
+                          final shortcut = GozarShortcut(
+                            kind: 'app',
+                            target: app['package'] ?? '',
+                            title: app['label'] ?? '',
+                          );
+                          final exists = shortcuts.any(
+                              (item) => item.key == shortcut.key);
+                          return ListTile(
+                            leading: GozarShortcutIcon(shortcut: shortcut),
+                            title: Text(shortcut.title),
+                            subtitle: Text(shortcut.target,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: exists
+                              ? const Icon(Icons.check_circle,
+                                  color: GozarPalette.green)
+                              : const Icon(Icons.add_circle_outline,
+                                  color: GozarPalette.cyan),
+                            onTap: exists ? null : () =>
+                              Navigator.pop(sheetContext, shortcut),
+                          );
+                        },
+                      )),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (chosen != null && mounted) await _addShortcut(chosen);
+  }
+
+  Future<void> _addWebShortcut() async {
+    if (shortcuts.length >= GozarShortcutStore.maxCount) {
+      notice('برای افزودن میانبر، ابتدا یکی را حذف کنید.');
+      return;
+    }
+    final name = TextEditingController();
+    final link = TextEditingController();
+    try {
+      final chosen = await showDialog<GozarShortcut>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('افزودن میانبر سایت'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              key: const ValueKey('gozar-web-shortcut-title'),
+              controller: name, maxLength: 48,
+              decoration: const InputDecoration(hintText: 'نام میانبر'),
+            ),
+            TextField(
+              key: const ValueKey('gozar-web-shortcut-url'),
+              controller: link,
+              keyboardType: TextInputType.url,
+              textDirection: TextDirection.ltr,
+              decoration: const InputDecoration(
+                hintText: 'https://example.com'),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('انصراف')),
+            FilledButton(
+              key: const ValueKey('gozar-save-web-shortcut'),
+              onPressed: () {
+                final title = name.text.trim();
+                final entered = link.text.trim();
+                final full = entered.startsWith('https://')
+                    ? entered : 'https://' + entered;
+                final url = GozarShortcut.validWebUrl(full);
+                if (title.isEmpty || title.length > 48 || url == null ||
+                    full.length > 2048) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text(
+                      'نام و نشانی معتبر HTTPS وارد کنید.')));
+                  return;
+                }
+                Navigator.pop(dialogContext, GozarShortcut(
+                    kind: 'web', target: full, title: title));
+              },
+              child: const Text('ذخیره'),
+            ),
+          ],
+        ),
+      );
+      if (chosen != null && mounted) await _addShortcut(chosen);
+    } finally {
+      // Allow the closing dialog animation to finish before controllers die.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      name.dispose();
+      link.dispose();
+    }
+  }
+
+  Future<void> _openShortcut(GozarShortcut shortcut) async {
+    try {
+      if (shortcut.kind == 'web') {
+        await SystemVpnBridge.openShortcutWeb(
+            shortcut.target, shortcut.title);
+      } else {
+        await SystemVpnBridge.openShortcutApp(shortcut.target);
+      }
+    } catch (_) {
+      notice(shortcut.kind == 'web'
+          ? 'سایت در مرورگر داخلی باز نشد.'
+          : 'این برنامه نصب نیست یا از طریق اندروید باز نمی‌شود.');
+    }
+  }
+
+  Widget _shortcutTile(GozarShortcut shortcut) => InkWell(
+    key: ValueKey('gozar-shortcut-' + shortcut.key),
+    borderRadius: BorderRadius.circular(20),
+    onTap: () => _openShortcut(shortcut),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Expanded(child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(19),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xff153b62), Color(0xff0b213b)]),
+          border: Border.all(color: GozarPalette.blue.withOpacity(.42)),
+        ),
+        child: Center(child: GozarShortcutIcon(
+            shortcut: shortcut, size: 43)),
+      )),
+      const SizedBox(height: 4),
+      Text(shortcut.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: GozarPalette.text,
+          fontSize: 11, fontWeight: FontWeight.w600)),
+    ]),
+  );
+
+  Widget _shortcutPanel() {
+    final filtered = shortcuts.where((item) =>
+        item.title.toLowerCase().contains(shortcutQuery)).toList();
+    return GozarPanel(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 15),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(Icons.apps_rounded, color: GozarPalette.cyan, size: 27),
+          const SizedBox(width: 7),
+          const Expanded(child: Text('میانبر برنامه‌ها',
+            style: TextStyle(color: GozarPalette.text,
+              fontSize: 18, fontWeight: FontWeight.w800))),
+          Text(persianDigits(shortcuts.length) + '/۱۰',
+            style: const TextStyle(color: GozarPalette.muted)),
+          IconButton(
+            key: const ValueKey('gozar-shortcut-settings'),
+            tooltip: 'مدیریت میانبرها',
+            onPressed: () => setState(() { currentPage = 3; }),
+            icon: const Icon(Icons.tune_rounded, color: GozarPalette.cyan)),
+        ]),
+        TextField(
+          key: const ValueKey('gozar-shortcut-search'),
+          onChanged: (text) => setState(() {
+            shortcutQuery = text.trim().toLowerCase();
+          }),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search_rounded),
+            hintText: 'جستجو در میانبرهای من…',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 13),
+        if (shortcuts.isEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.all(14),
+            child: Text(
+              'هنوز میانبری ثبت نکرده‌اید. برنامه‌ها و سایت‌های دلخواهتان را '
+              'از تنظیمات اضافه کنید.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: GozarPalette.muted, fontSize: 12))),
+          OutlinedButton.icon(
+            key: const ValueKey('gozar-manage-shortcuts-empty'),
+            onPressed: () => setState(() { currentPage = 3; }),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('افزودن میانبر'),
+          ),
+        ] else if (filtered.isEmpty) ...[
+          const Padding(padding: EdgeInsets.all(18),
+            child: Text('میانبری با این نام پیدا نشد.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: GozarPalette.muted))),
+        ] else LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 470 ? 5
+              : constraints.maxWidth >= 340 ? 4 : 3;
+          return GridView.builder(
+            key: const ValueKey('gozar-user-shortcut-grid'),
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: filtered.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 9, crossAxisSpacing: 7,
+              childAspectRatio: .78,
+            ),
+            itemBuilder: (context, index) => _shortcutTile(filtered[index]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _shortcutSettings() => GozarPanel(
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _eyebrow(Icons.apps_rounded, 'میانبر برنامه‌ها'),
+      const SizedBox(height: 8),
+      const Text(
+        'حداکثر ۱۰ برنامه یا سایت دلخواه را برای دسترسی سریع '
+        'در خانه اضافه، حذف یا جابه‌جا کنید.',
+        style: TextStyle(color: GozarPalette.muted, fontSize: 12),
+      ),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
+          key: const ValueKey('gozar-add-app-shortcut'),
+          onPressed: shortcuts.length >= GozarShortcutStore.maxCount
+              ? null : _chooseShortcutApp,
+          icon: const Icon(Icons.apps_rounded),
+          label: const Text('برنامه نصب‌شده'),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
+          key: const ValueKey('gozar-add-web-shortcut'),
+          onPressed: shortcuts.length >= GozarShortcutStore.maxCount
+              ? null : _addWebShortcut,
+          icon: const Icon(Icons.public_rounded),
+          label: const Text('سایت'),
+        )),
+      ]),
+      if (shortcuts.isEmpty)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text('فهرست میانبرها خالی است.',
+            style: TextStyle(color: GozarPalette.muted))),
+      for (var i = 0; i < shortcuts.length; i++)
+        ListTile(
+          key: ValueKey('gozar-manage-shortcut-' + shortcuts[i].key),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: GozarShortcutIcon(shortcut: shortcuts[i], size: 36),
+          title: Text(shortcuts[i].title, maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          subtitle: Text(shortcuts[i].kind == 'web' ? 'سایت' : 'برنامه اندروید',
+            style: const TextStyle(color: GozarPalette.muted, fontSize: 11)),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(
+              tooltip: 'انتقال به بالا',
+              onPressed: i == 0 ? null : () {
+                final updated = List<GozarShortcut>.from(shortcuts);
+                final element = updated.removeAt(i);
+                updated.insert(i - 1, element);
+                _saveShortcuts(updated);
+              },
+              icon: const Icon(Icons.arrow_upward_rounded, size: 19)),
+            IconButton(
+              tooltip: 'انتقال به پایین',
+              onPressed: i == shortcuts.length - 1 ? null : () {
+                final updated = List<GozarShortcut>.from(shortcuts);
+                final element = updated.removeAt(i);
+                updated.insert(i + 1, element);
+                _saveShortcuts(updated);
+              },
+              icon: const Icon(Icons.arrow_downward_rounded, size: 19)),
+            IconButton(
+              tooltip: 'حذف میانبر',
+              onPressed: () => _saveShortcuts([
+                for (var n = 0; n < shortcuts.length; n++)
+                  if (n != i) shortcuts[n],
+              ]),
+              icon: const Icon(Icons.delete_outline_rounded,
+                  color: GozarPalette.red, size: 20)),
+          ]),
+        ),
+      const SizedBox(height: 9),
+      const Text(
+        'سایت‌ها داخل مرورگر گذر باز می‌شوند؛ برنامه‌های نصب‌شده '
+        'در محیط خودشان اجرا می‌شوند. به‌دلیل مستثنا بودن خود گذر از '
+        'تونل VPN، ترافیک مرورگر داخلی لزوماً از VPN عبور نمی‌کند.',
+        style: TextStyle(color: GozarPalette.muted, fontSize: 10),
+      ),
+    ]),
+  );
+
   Widget _hero() {
     final connected = stage == 'running';
     final canStop = busy || connected || stage == 'starting' ||
