@@ -81,10 +81,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-real-connection-result')),
         findsNothing);
+    await tester.ensureVisible(find.byKey(const ValueKey('gozar-test-real-connection')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const ValueKey('gozar-test-real-connection')));
     await tester.pump(const Duration(milliseconds: 250));
     expect(probeCalls, 1);
     expect(find.textContaining('63 ms'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('gozar-power')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const ValueKey('gozar-power')));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const ValueKey('gozar-real-connection-result')),
@@ -112,6 +116,8 @@ void main() {
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.ensureVisible(find.byKey(const ValueKey('gozar-test-real-connection')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const ValueKey('gozar-test-real-connection')));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.textContaining('آزمون اتصال موفق نبود'), findsOneWidget);
