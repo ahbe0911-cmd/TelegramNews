@@ -104,6 +104,22 @@ jobs:
       - name: Remove all Telegram components from standalone Gozar
         if: matrix.variant == 'gozar'
         run: python3 scripts/configure_gozar_standalone.py
+      - name: Verify shortcut launch and icon handlers in generated Android host
+        if: matrix.variant == 'gozar'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          folder = Path('android/app/src/main')
+          bridge = next((folder / 'kotlin').rglob('SystemVpnBridge.kt')).read_text()
+          for method in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
+              assert bridge.count(f'"{method}" ->') == 1, method
+          assert 'InternalTelegramProxyService' not in bridge
+          assert '"component" to info.activityInfo.name' in bridge
+          manifest = (folder / 'AndroidManifest.xml').read_text()
+          assert '.GozarWebActivity' in manifest
+          assert 'android.intent.category.LAUNCHER' in manifest
+          print('Verified launch, icon, picker and in-app web handlers in the actual Gozar host')
+          PY
       - name: Install verified Xray TUN engine for arm64 Android
         if: matrix.variant == 'gozar'
         run: |
