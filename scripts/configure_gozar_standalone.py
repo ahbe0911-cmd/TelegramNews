@@ -22,6 +22,7 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: ^9.2.4
   shared_preferences: 2.3.2
+  shamsi_date: ^1.0.4
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -58,6 +59,10 @@ class MainActivity : FlutterActivity() {
 }
 ''')
 # Gozar has no TDLib, Telegram sign-in or private Telegram SOCKS process.
+# This activity exists only in the standalone VPN build, never in news/cafe.
+(activity.parent / 'GozarWebActivity.kt').write_bytes(
+    (root / 'native/GozarWebActivity.kt').read_bytes()
+)
 internal = activity.parent / 'InternalTelegramProxyService.kt'
 assert internal.is_file()
 internal.unlink()
@@ -73,6 +78,13 @@ source, count = re.subn(
     '', source, count=1,
 )
 assert count == 1, 'Unexpected native service manifest'
+# Unexported internal browser for user-saved HTTPS shortcuts.
+source = source.replace('</application>', '''
+        <activity
+            android:name=".GozarWebActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+    </application>''', 1)
 manifest.write_text(source)
 assert 'InternalTelegramProxyService' not in manifest.read_text()
 assert 'BIND_VPN_SERVICE' in manifest.read_text()
