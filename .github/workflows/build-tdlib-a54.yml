@@ -10,8 +10,11 @@ on:
       - 'lib/gozar_main.dart'
       - 'lib/gozar_subscription.dart'
       - 'lib/gozar_visuals.dart'
+      - 'lib/gozar_shortcuts.dart'
+      - 'lib/gozar_dashboard_clock.dart'
       - 'lib/td_vmess_parser.dart'
       - 'native/SystemVpnBridge.kt'
+      - 'native/GozarWebActivity.kt'
       - 'native/SystemVpnService.kt'
       - 'native/AutomaticBypassPolicy.kt'
       - 'native/InternalTelegramProxyService.kt'
@@ -30,6 +33,7 @@ on:
       - 'test/td_system_vpn_test.dart'
       - 'test/td_internal_vpn_test.dart'
       - 'test/td_gozar_app_test.dart'
+      - 'test/gozar_shortcuts_test.dart'
       - 'test/gozar_subscription_test.dart'
       - 'test/td_vpn_routing_test.dart'
       - 'native/VpnRoutingPolicy.kt'
@@ -158,7 +162,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Gozar standalone VPN source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart test/td_gozar_app_test.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_shortcuts.dart lib/gozar_dashboard_clock.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
@@ -168,6 +172,9 @@ jobs:
       - name: Verify Gozar subscription import and server selection
         if: matrix.variant == 'gozar'
         run: flutter test test/gozar_subscription_test.dart
+      - name: Verify saved user shortcuts and HTTPS validation
+        if: matrix.variant == 'gozar'
+        run: flutter test --reporter expanded test/gozar_shortcuts_test.dart
       - name: Verify standalone Gozar has no Telegram features
         if: matrix.variant == 'gozar'
         run: flutter test --reporter expanded test/td_gozar_app_test.dart
