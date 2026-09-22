@@ -1591,6 +1591,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         ],
       )),
       const SizedBox(height: 13),
+      _shortcutSettings(),
+      const SizedBox(height: 13),
       GozarPanel(glow: GozarPalette.purple,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1645,7 +1647,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final views = <Widget>[_home(), _servers(), _security()];
+    final views = <Widget>[_home(), _statusPage(), _servers(), _security()];
     return Scaffold(
       backgroundColor: GozarPalette.base,
       body: Stack(children: [
@@ -1706,6 +1708,11 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 selectedIcon: Icon(Icons.home_rounded,
                     color: GozarPalette.cyan),
                 label: 'خانه'),
+              NavigationDestination(
+                icon: Icon(Icons.bar_chart_rounded),
+                selectedIcon: Icon(Icons.bar_chart_rounded,
+                    color: GozarPalette.cyan),
+                label: 'وضعیت و آمار'),
               NavigationDestination(
                 icon: Icon(Icons.dns_outlined),
                 selectedIcon: Icon(Icons.dns_rounded,
