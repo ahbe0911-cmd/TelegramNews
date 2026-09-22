@@ -68,9 +68,20 @@ assert internal.is_file()
 internal.unlink()
 bridge = activity.parent / 'SystemVpnBridge.kt'
 code = bridge.read_text()
+# Remove only the Telegram SOCKS actions. Earlier builds accidentally deleted
+# the intervening app/web launcher and icon MethodChannel handlers as well,
+# causing all shortcuts to display but never open in the standalone APK.
 begin = code.index('                    "startInternal" -> {')
-end = code.index('                    "installedApps" -> {', begin)
-bridge.write_text(code[:begin] + code[end:])
+end = code.index('                    "openShortcutApp" -> {', begin)
+standalone_bridge = code[:begin] + code[end:]
+assert '"startInternal" ->' not in standalone_bridge
+assert '"stopInternal" ->' not in standalone_bridge
+for method in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
+    assert f'"{method}" ->' in standalone_bridge, (
+        f'Standalone Gozar lost the {method} native handler'
+    )
+assert 'InternalTelegramProxyService' not in standalone_bridge
+bridge.write_text(standalone_bridge)
 manifest = host / 'AndroidManifest.xml'
 source = manifest.read_text()
 source, count = re.subn(
