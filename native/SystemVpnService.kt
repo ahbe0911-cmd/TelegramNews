@@ -25,6 +25,18 @@ class SystemVpnService : VpnService() {
         const val ACTION_STOP = "ir.channel.telegram_news.ACTION_STOP_VPN"
         @Volatile var stage = "off"
         @Volatile var detail = "VPN خاموش است."
+        @Volatile private var activeService: SystemVpnService? = null
+
+        // A successful TUN start does not prove the selected remote proxy works.
+        // The active Xray core performs a real outbound HTTP probe on demand.
+        fun measureActiveConnection(done: (Long?) -> Unit) {
+            val service = activeService
+            if (stage != "running" || service == null) {
+                done(null)
+                return
+            }
+            service.measureConnection(done)
+        }
         private const val NOTIFICATION_CHANNEL = "xray_device_vpn"
         private const val NOTIFICATION_ID = 19741
     }
@@ -34,6 +46,29 @@ class SystemVpnService : VpnService() {
     private var tunnel: ParcelFileDescriptor? = null
     private var core: CoreController? = null
     private var startupThread: Thread? = null
+
+    private fun measureConnection(done: (Long?) -> Unit) {
+        val selectedCore = synchronized(resourceLock) {
+            if (stopping || stage != "running") null else core
+        }
+        if (selectedCore == null) {
+            done(null)
+            return
+        }
+        Thread({
+            val delay = try {
+                selectedCore.measureDelay("https://www.gstatic.com/generate_204")
+                    .takeIf { it >= 0L }
+            } catch (_: Throwable) {
+                null
+            }
+            // A response from a previous session must not repaint a new VPN.
+            val current = synchronized(resourceLock) {
+                !stopping && stage == "running" && core === selectedCore
+            }
+            done(if (current) delay else null)
+        }, "gozar-vpn-health").start()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -67,6 +102,7 @@ class SystemVpnService : VpnService() {
             return START_NOT_STICKY
         }
         createForegroundNotification()
+        activeService = this
         stage = "starting"
         detail = "Initializing Xray-core and Android TUN"
         startupThread = Thread({
@@ -222,6 +258,7 @@ class SystemVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        if (activeService === this) activeService = null
         stopVpn("Android VPN service destroyed")
         super.onDestroy()
     }
