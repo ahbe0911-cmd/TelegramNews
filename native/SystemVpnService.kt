@@ -192,11 +192,18 @@ class SystemVpnService : VpnService() {
      */
     private fun stopVpn(reason: String) {
         val startup: Thread?
+        // A failed startup must remain visible after Android destroys
+        // the service; otherwise refresh() silently replaces the error by OFF.
+        val failureDetail: String?
         synchronized(resourceLock) {
             if (stopping) return
+            failureDetail = if (stage == "error" &&
+                reason != "Disconnect requested") detail else null
             stopping = true
-            stage = "stopping"
-            detail = reason
+            if (failureDetail == null) {
+                stage = "stopping"
+                detail = reason
+            }
             startup = startupThread
             try { tunnel?.close() } catch (_: Exception) { }
             tunnel = null
@@ -217,8 +224,8 @@ class SystemVpnService : VpnService() {
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             } finally {
-                stage = "off"
-                detail = "VPN خاموش است."
+                stage = if (failureDetail != null) "error" else "off"
+                detail = failureDetail ?: "VPN خاموش است."
             }
         }, "gozar-vpn-stop").start()
     }
