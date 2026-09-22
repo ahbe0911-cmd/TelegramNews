@@ -158,7 +158,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Gozar standalone VPN source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart test/td_gozar_app_test.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
@@ -170,7 +170,7 @@ jobs:
         run: flutter test test/gozar_subscription_test.dart
       - name: Verify standalone Gozar has no Telegram features
         if: matrix.variant == 'gozar'
-        run: flutter test test/td_gozar_app_test.dart
+        run: flutter test --reporter expanded test/td_gozar_app_test.dart
       - name: Verify Android VPN per-app selection bridge
         if: matrix.variant == 'gozar'
         run: flutter test test/td_vpn_routing_test.dart
