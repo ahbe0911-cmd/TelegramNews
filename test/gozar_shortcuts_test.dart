@@ -1,0 +1,71 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:telegram_news/gozar_shortcuts.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const app = GozarShortcut(
+    kind: 'app', target: 'org.telegram.messenger', title: 'تلگرام');
+  const site = GozarShortcut(
+    kind: 'web', target: 'https://example.org/', title: 'سایت من');
+
+  setUp(() { SharedPreferences.setMockInitialValues({}); });
+
+  test('starts empty: no demo or unwanted app shortcuts', () async {
+    final preferences = await SharedPreferences.getInstance();
+    expect(GozarShortcutStore.load(preferences), isEmpty);
+  });
+
+  test('persists actual user-selected apps and HTTPS sites in order',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    expect(await GozarShortcutStore.save(preferences, [site, app]), isTrue);
+    final restored = GozarShortcutStore.load(preferences);
+    expect(restored.map((s) => s.title).toList(), ['سایت من', 'تلگرام']);
+    expect(restored.map((s) => s.kind).toList(), ['web', 'app']);
+    expect(restored.last.target, 'org.telegram.messenger');
+  });
+
+  test('only HTTPS without embedded user credentials is accepted', () {
+    expect(GozarShortcut.validWebUrl('https://example.org/search?q=test'),
+        isNotNull);
+    expect(GozarShortcut.validWebUrl('http://example.org'), isNull);
+    expect(GozarShortcut.validWebUrl('javascript:alert(1)'), isNull);
+    expect(GozarShortcut.validWebUrl('file:///etc/passwd'), isNull);
+    expect(GozarShortcut.validWebUrl('https://user:secret@example.org'),
+        isNull);
+    expect(GozarShortcut.validWebUrl('https://'), isNull);
+  });
+
+  test('rejects duplicates and more than ten shortcuts without overwriting',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    expect(await GozarShortcutStore.save(preferences, [app]), isTrue);
+    expect(await GozarShortcutStore.save(preferences, [app, app]), isFalse);
+    final eleven = List<GozarShortcut>.generate(11, (i) =>
+        GozarShortcut(kind: 'app',
+          target: 'org.example.app' + i.toString(),
+          title: 'برنامه ' + i.toString()));
+    expect(await GozarShortcutStore.save(preferences, eleven), isFalse);
+    expect(GozarShortcutStore.load(preferences).single.title, 'تلگرام');
+  });
+
+  test('malformed saved entries cannot inject unsafe shortcut targets',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(GozarShortcutStore.key, jsonEncode([
+      site.toJson(),
+      site.toJson(),
+      {'kind': 'web', 'target': 'file:///secrets', 'title': 'unsafe'},
+      {'kind': 'app', 'target': '../private', 'title': 'unsafe'},
+      app.toJson(),
+    ]));
+    final shortcuts = GozarShortcutStore.load(preferences);
+    expect(shortcuts.length, 2);
+    expect(shortcuts.first.title, 'سایت من');
+    expect(shortcuts.last.title, 'تلگرام');
+  });
+}
