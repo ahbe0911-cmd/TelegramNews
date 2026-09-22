@@ -114,6 +114,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   final Set<String> checkingTcpProfiles = {};
   bool importingSubscription = false;
   bool choosingBestServer = false;
+  bool testingProxy = false;
+  bool? proxyVerified;
+  int? proxyLatencyMs;
+  int proxyTestId = 0;
 
   @override
   void initState() {
@@ -521,14 +525,52 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           'error' => 'موتور VPN راه‌اندازی نشد؛ کانفیگ و مجوز اندروید را بررسی کنید.',
           _ => 'VPN خاموش است.',
         };
-      if (status != stage || nextDetail != detail) {
+      final clearProbe = status != 'running' &&
+          (testingProxy || proxyVerified != null || proxyLatencyMs != null);
+      if (status != stage || nextDetail != detail || clearProbe) {
         setState(() {
           stage = status;
           detail = nextDetail;
+          if (clearProbe) {
+            proxyTestId++;
+            testingProxy = false;
+            proxyVerified = null;
+            proxyLatencyMs = null;
+          }
         });
       }
     } catch (_) {
       if (mounted) setState(() { detail = 'سرویس VPN در دسترس نیست.'; });
+    }
+  }
+
+  /// A manual end-to-end test through Xray's selected outbound.
+  /// A blocked probe endpoint is inconclusive, not proof that the VPN is off.
+  Future<void> testProxyConnection() async {
+    if (!mounted || stage != 'running' || testingProxy) return;
+    final testId = ++proxyTestId;
+    setState(() {
+      testingProxy = true;
+      proxyVerified = null;
+      proxyLatencyMs = null;
+    });
+    try {
+      final delay = await SystemVpnBridge.measureConnection();
+      if (!mounted || stage != 'running' || testId != proxyTestId) return;
+      setState(() {
+        proxyVerified = delay != null;
+        proxyLatencyMs = delay;
+      });
+    } catch (_) {
+      if (!mounted || stage != 'running' || testId != proxyTestId) return;
+      setState(() {
+        proxyVerified = false;
+        proxyLatencyMs = null;
+      });
+    } finally {
+      if (mounted && testId == proxyTestId) {
+        setState(() { testingProxy = false; });
+      }
     }
   }
 
@@ -540,7 +582,13 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   Future<void> connect() async {
     if (busy || disconnecting || stage == 'stopping') return;
     final requestId = ++operationId;
-    setState(() { busy = true; });
+    setState(() {
+      busy = true;
+      proxyTestId++;
+      testingProxy = false;
+      proxyVerified = null;
+      proxyLatencyMs = null;
+    });
     try {
       if (mode == 'selected' && packages.isEmpty) {
         throw const FormatException(
@@ -590,6 +638,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       busy = false;
       stage = 'stopping';
       detail = 'در حال بستن تونل و توقف موتور VPN…';
+      proxyTestId++;
+      testingProxy = false;
+      proxyVerified = null;
+      proxyLatencyMs = null;
     });
     try {
       await SystemVpnBridge.stop();
@@ -780,6 +832,34 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           textAlign: TextAlign.center,
           style: TextStyle(color: connected
               ? GozarPalette.cyan : GozarPalette.muted, fontSize: 12)),
+        if (connected) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            key: const ValueKey('gozar-test-real-connection'),
+            onPressed: testingProxy ? null : testProxyConnection,
+            icon: testingProxy
+                ? const SizedBox(width: 17, height: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.public_rounded),
+            label: Text(testingProxy
+                ? 'در حال آزمایش اینترنت سرور…'
+                : 'آزمایش اینترنت از مسیر سرور'),
+          ),
+          if (proxyVerified != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              proxyVerified!
+                  ? 'آزمون اتصال سرور موفق: ${proxyLatencyMs} ms'
+                  : 'آزمون اتصال موفق نبود؛ سرور یا مقصد آزمایش ممکن است در دسترس نباشد.',
+              key: const ValueKey('gozar-real-connection-result'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: proxyVerified! ? GozarPalette.green : GozarPalette.red,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
         const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
