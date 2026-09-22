@@ -50,6 +50,73 @@ void main() {
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('real proxy probe is separate from VPN service state',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    var nativeStage = 'running';
+    var probeCalls = 0;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        return {'stage': nativeStage, 'detail': nativeStage};
+      }
+      if (call.method == 'measureConnection') {
+        probeCalls++;
+        return {'ok': true, 'latencyMs': 63};
+      }
+      if (call.method == 'stop') {
+        nativeStage = 'off';
+        return null;
+      }
+      if (call.method == 'networkCounters') return {'rx': 100, 'tx': 100};
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(
+        preferences: await SharedPreferences.getInstance()));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-real-connection-result')),
+        findsNothing);
+    await tester.tap(find.byKey(const ValueKey('gozar-test-real-connection')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(probeCalls, 1);
+    expect(find.textContaining('63 ms'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('gozar-power')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const ValueKey('gozar-real-connection-result')),
+        findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('failed proxy probe never reports verified connectivity',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        return {'stage': 'running', 'detail': 'tunnel active'};
+      }
+      if (call.method == 'measureConnection') {
+        return {'ok': false, 'latencyMs': null};
+      }
+      if (call.method == 'networkCounters') return {'rx': 100, 'tx': 100};
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(
+        preferences: await SharedPreferences.getInstance()));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byKey(const ValueKey('gozar-test-real-connection')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.textContaining('آزمون اتصال موفق نبود'), findsOneWidget);
+    expect(find.textContaining('آزمون اتصال سرور موفق'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final initialStage in ['starting', 'running']) {
     testWidgets('power button stops native VPN while $initialStage',
         (tester) async {
