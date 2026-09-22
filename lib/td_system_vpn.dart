@@ -33,6 +33,18 @@ class SystemVpnBridge {
         app['package']!.isNotEmpty && app['label']!.isNotEmpty).toList();
   }
 
+  /// Probes a remote HTTP endpoint THROUGH the active Xray outbound, not
+  /// through the VPN app's excluded Android UID. A failed probe is inconclusive
+  /// (the target may be blocked); it is never reported as a working tunnel.
+  static Future<int?> measureConnection() async {
+    final data = await channel.invokeMapMethod<String, dynamic>(
+        'measureConnection');
+    if (data?['ok'] != true) return null;
+    final milliseconds = data?['latencyMs'];
+    return milliseconds is num && milliseconds >= 0
+        ? milliseconds.toInt() : null;
+  }
+
   static Future<void> stop() async {
     await channel.invokeMethod<void>('stop');
   }
