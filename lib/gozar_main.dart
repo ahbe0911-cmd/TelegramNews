@@ -1187,91 +1187,79 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     final canStop = busy || connected || stage == 'starting' ||
         stage == 'consent' || stage == 'stopping';
     return GozarPanel(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
-      glow: connected ? GozarPalette.cyan : GozarPalette.blue,
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+      glow: connected ? GozarPalette.green : GozarPalette.blue,
       child: Column(children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.shield_rounded, color: GozarPalette.cyan, size: 26),
-          const SizedBox(width: 8),
-          const Text('گذر VPN', style: TextStyle(
-              color: GozarPalette.text, fontSize: 25,
-              fontWeight: FontWeight.w900)),
-        ]),
+        SizedBox(height: 219, child: Row(children: [
+          Expanded(child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: const SizedBox(
+              width: 166, height: 216,
+              child: GozarLiveClock(),
+            ),
+          )),
+          const SizedBox(width: 3),
+          Expanded(child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(width: 204, height: 204,
+              child: GozarPowerButton(
+                key: const ValueKey('gozar-power'),
+                connected: connected,
+                busy: busy || disconnecting || stage == 'starting' ||
+                    stage == 'consent' || stage == 'stopping',
+                label: canStop
+                    ? 'برای قطع اتصال لمس کنید'
+                    : 'برای اتصال لمس کنید',
+                onPressed: disconnecting ? null
+                    : canStop ? disconnect : connect,
+              ),
+            ),
+          )),
+        ])),
         const SizedBox(height: 4),
-        const Text('اتصال امن و مستقل برای اینترنت گوشی',
-            textAlign: TextAlign.center, style: TextStyle(
-              color: GozarPalette.muted, fontSize: 12)),
-        const SizedBox(height: 20),
-        GozarPowerButton(
-          key: const ValueKey('gozar-power'),
-          connected: connected, busy: busy || disconnecting ||
-              stage == 'starting' || stage == 'consent' || stage == 'stopping',
-          label: canStop ? 'برای قطع اتصال لمس کنید'
-              : 'برای اتصال لمس کنید',
-          onPressed: disconnecting ? null
-              : canStop ? disconnect : connect,
-        ),
-        const SizedBox(height: 15),
         Text(detail, key: const ValueKey('gozar-vpn-status'),
           textAlign: TextAlign.center,
           style: TextStyle(color: connected
-              ? GozarPalette.cyan : GozarPalette.muted, fontSize: 12)),
+              ? GozarPalette.cyan : GozarPalette.muted, fontSize: 11)),
         if (connected) ...[
-          const SizedBox(height: 10),
-          const Text(
-            'این آزمایش یک درخواست اینترنتی را از مسیر سرور منتخب ارسال می‌کند.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: GozarPalette.muted, fontSize: 10),
-          ),
+          const SizedBox(height: 6),
           OutlinedButton.icon(
             key: const ValueKey('gozar-test-real-connection'),
             onPressed: testingProxy ? null : testProxyConnection,
             icon: testingProxy
-                ? const SizedBox(width: 17, height: 17,
+                ? const SizedBox(width: 16, height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.public_rounded),
-            label: Text(testingProxy
-                ? 'در حال آزمایش اینترنت سرور…'
-                : 'آزمایش اینترنت از مسیر سرور'),
+                : const Icon(Icons.public_rounded, size: 18),
+            label: Text(testingProxy ? 'آزمایش اینترنت سرور…'
+                : 'آزمایش اینترنت از مسیر سرور',
+                style: const TextStyle(fontSize: 11)),
           ),
-          if (proxyVerified != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              proxyVerified!
-                  ? 'آزمون اتصال سرور موفق: ${proxyLatencyMs} ms'
-                  : 'آزمون اتصال موفق نبود؛ سرور یا مقصد آزمایش ممکن است در دسترس نباشد.',
-              key: const ValueKey('gozar-real-connection-result'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: proxyVerified! ? GozarPalette.green : GozarPalette.red,
-                fontSize: 11,
-              ),
-            ),
-          ],
+          if (proxyVerified != null)
+            Text(proxyVerified!
+                ? 'آزمون اتصال سرور موفق: ' +
+                    proxyLatencyMs.toString() + ' ms'
+                : 'آزمون اتصال موفق نبود؛ سرور یا مقصد آزمایش '
+                    'ممکن است در دسترس نباشد.',
+                key: const ValueKey('gozar-real-connection-result'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: proxyVerified!
+                    ? GozarPalette.green : GozarPalette.red, fontSize: 11)),
         ],
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: const Color(0xff071a33).withOpacity(.72),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
+        const SizedBox(height: 5),
+        Row(children: [
+          const Icon(Icons.dns_rounded, size: 15,
+              color: GozarPalette.cyan),
+          const SizedBox(width: 5),
+          Expanded(child: Text(serverLabel,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: GozarPalette.text, fontSize: 11))),
+          TextButton(
+            onPressed: () => setState(() { currentPage = 2; }),
+            child: const Text('تغییر سرور', style: TextStyle(
+              color: GozarPalette.cyan, fontSize: 11)),
           ),
-          child: Row(children: [
-            const Icon(Icons.dns_rounded, color: GozarPalette.cyan, size: 19),
-            const SizedBox(width: 8),
-            Expanded(child: Text(serverLabel,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: GozarPalette.text,
-                fontWeight: FontWeight.w600))),
-            const SizedBox(width: 6),
-            TextButton(
-              onPressed: () => setState(() { currentPage = 1; }),
-              child: const Text('تغییر سرور',
-                  style: TextStyle(color: GozarPalette.cyan)),
-            ),
-          ]),
-        ),
+        ]),
       ]),
     );
   }
@@ -1412,8 +1400,36 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
     children: [
       _hero(),
-      const SizedBox(height: 13),
+      const SizedBox(height: 12),
+      const Text('با گذر، فراتر از محدودیت‌ها…',
+        textAlign: TextAlign.start,
+        style: TextStyle(color: GozarPalette.text,
+          fontSize: 16, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 12),
+      _shortcutPanel(),
+    ],
+  );
+
+  Widget _statusPage() => ListView(
+    key: const ValueKey('gozar-status-page'),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+    children: [
       _traffic(),
+      const SizedBox(height: 12),
+      GozarPanel(child: Column(children: [
+        _eyebrow(Icons.shield_outlined, 'وضعیت اتصال'),
+        const SizedBox(height: 12),
+        Text(detail, textAlign: TextAlign.center,
+          style: const TextStyle(color: GozarPalette.muted)),
+        const SizedBox(height: 8),
+        Text('سرور انتخابی: ' + serverLabel,
+          style: const TextStyle(color: GozarPalette.text)),
+        const SizedBox(height: 6),
+        const Text('مقادیر ترافیک تقریبی هستند و '
+          'سرعت واقعی تونل را نشان نمی‌دهند.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+      ])),
     ],
   );
 
