@@ -84,6 +84,18 @@ object SystemVpnBridge {
                             .sortedBy { it["label"]?.lowercase() }
                         result.success(entries)
                     }
+                    "measureConnection" -> {
+                        // The core measures an outbound request through its
+                        // selected proxy, never through the VPN app's direct UID.
+                        SystemVpnService.measureActiveConnection { delay ->
+                            activity.runOnUiThread {
+                                result.success(mapOf(
+                                    "ok" to (delay != null),
+                                    "latencyMs" to delay
+                                ))
+                            }
+                        }
+                    }
                     "status" -> result.success(mapOf(
                         "stage" to SystemVpnService.stage,
                         "detail" to SystemVpnService.detail
