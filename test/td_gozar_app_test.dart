@@ -107,6 +107,63 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('editing a shortcut name updates home without changing launcher',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    const selected = GozarShortcut(
+      kind: 'app', target: 'com.example.installed',
+      title: 'Instagram',
+      component: 'com.example.installed.LauncherAlias');
+    expect(await GozarShortcutStore.save(preferences, [selected]), isTrue);
+    Map<dynamic, dynamic>? opened;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        return {'stage': 'off', 'detail': 'off'};
+      }
+      if (call.method == 'appIcon') return null;
+      if (call.method == 'openShortcutApp') {
+        opened = Map<dynamic, dynamic>.from(call.arguments as Map);
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(preferences: preferences));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byKey(const ValueKey('gozar-shortcut-search')), findsNothing);
+    expect(find.textContaining('با گذر، فراتر'), findsNothing);
+    await tester.tap(find.text('تنظیمات'));
+    await tester.pump(const Duration(milliseconds: 250));
+    final rename = find.byKey(ValueKey('gozar-rename-' + selected.key));
+    await tester.scrollUntilVisible(rename, 150,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('gozar-settings-page')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.tap(rename);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.enterText(
+        find.byKey(const ValueKey('gozar-edit-shortcut-name')), 'اینستاگرام من');
+    await tester.tap(find.byKey(const ValueKey('gozar-apply-shortcut-name')));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.tap(find.text('خانه'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('اینستاگرام من'), findsOneWidget);
+    final shortcut = find.byKey(ValueKey('gozar-shortcut-' + selected.key));
+    await tester.ensureVisible(shortcut);
+    await tester.tap(shortcut);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(opened?['package'], selected.target);
+    expect(opened?['component'], selected.component);
+    expect(GozarShortcutStore.load(preferences).single.title,
+        'اینستاگرام من');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('real proxy probe is separate from VPN service state',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
