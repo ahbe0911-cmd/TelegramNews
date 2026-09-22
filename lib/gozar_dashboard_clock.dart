@@ -57,19 +57,29 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
     final day = _weekdays[now.weekday - 1];
     final date = persianDigits(jalali.day) + ' ' +
         _months[jalali.month - 1] + ' ' + persianDigits(jalali.year);
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox(
-        width: 136, height: 136,
-        child: CustomPaint(painter: _ClockPainter(now)),
+    // The date and dial share one intrinsic canvas. Fit the whole canvas
+    // into the compact dashboard slot instead of clipping Persian date text.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: SizedBox(
+        width: 174, height: 218,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(
+            width: 136, height: 136,
+            child: CustomPaint(painter: _ClockPainter(now)),
+          ),
+          const SizedBox(height: 4),
+          Text(day + '، ' + persianDigits(jalali.day),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: GozarPalette.text,
+                fontSize: 13, fontWeight: FontWeight.w800)),
+          Text(date, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
+        ]),
       ),
-      const SizedBox(height: 4),
-      Text(day + '، ' + persianDigits(jalali.day),
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: GozarPalette.text,
-            fontSize: 13, fontWeight: FontWeight.w800)),
-      Text(date, textAlign: TextAlign.center,
-        style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
-    ]);
+    );
   }
 }
 
