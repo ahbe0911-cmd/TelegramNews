@@ -28,7 +28,9 @@ class SystemVpnBridge {
     if (response == null) return [];
     return response.whereType<Map>().map((raw) => <String, String>{
       'package': raw['package']?.toString() ?? '',
-      'component': raw['component']?.toString() ?? '',
+      // Android can omit the component on older picker payloads.
+      if ((raw['component']?.toString() ?? '').isNotEmpty)
+        'component': raw['component'].toString(),
       'label': raw['label']?.toString() ?? '',
     }).where((app) =>
         app['package']!.isNotEmpty && app['label']!.isNotEmpty).toList();
