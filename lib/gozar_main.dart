@@ -1618,6 +1618,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     key: const ValueKey('gozar-settings-page'),
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
     children: [
+      _shortcutSettings(),
+      const SizedBox(height: 13),
       GozarPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1647,8 +1649,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           ),
         ],
       )),
-      const SizedBox(height: 13),
-      _shortcutSettings(),
       const SizedBox(height: 13),
       GozarPanel(glow: GozarPalette.purple,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
