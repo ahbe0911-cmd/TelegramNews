@@ -92,23 +92,43 @@ object SystemVpnBridge {
                                 val selected = entries.firstOrNull {
                                     it.activityInfo.name == component
                                 } ?: entries.firstOrNull()
-                                val launch = if (selected != null) {
-                                    Intent.makeMainActivity(
-                                        android.content.ComponentName(
+                                val launchers = mutableListOf<Intent>()
+                                if (selected != null) {
+                                    // Preserve the exact launcher alias chosen by
+                                    // the user. ACTION_MAIN + CATEGORY_LAUNCHER is
+                                    // friendlier to cloned/modded launchers than
+                                    // a bare explicit component intent.
+                                    launchers += Intent(Intent.ACTION_MAIN)
+                                        .addCategory(Intent.CATEGORY_LAUNCHER)
+                                        .setClassName(
                                             selected.activityInfo.packageName,
-                                            selected.activityInfo.name
-                                        )
-                                    )
-                                } else {
-                                    pm.getLaunchIntentForPackage(pkg)
+                                            selected.activityInfo.name)
                                 }
-                                if (launch == null) {
-                                    result.error("SHORTCUT_UNAVAILABLE",
-                                        "No launchable Android activity found for $pkg", null)
-                                } else {
-                                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    activity.startActivity(launch)
+                                pm.getLaunchIntentForPackage(pkg)?.let {
+                                    launchers += it
+                                }
+                                var opened = false
+                                var lastError: Exception? = null
+                                for (launch in launchers) {
+                                    try {
+                                        launch.addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                                        activity.startActivity(launch)
+                                        opened = true
+                                        break
+                                    } catch (error: Exception) {
+                                        lastError = error
+                                    }
+                                }
+                                if (opened) {
                                     result.success(null)
+                                } else {
+                                    result.error("SHORTCUT_UNAVAILABLE",
+                                        "No working launcher for $pkg" +
+                                            (lastError?.let {
+                                                ": " + it.javaClass.simpleName
+                                            } ?: ""), null)
                                 }
                             } catch (error: Exception) {
                                 result.error("SHORTCUT_LAUNCH_FAILED",
