@@ -28,6 +28,7 @@ class SystemVpnBridge {
     if (response == null) return [];
     return response.whereType<Map>().map((raw) => <String, String>{
       'package': raw['package']?.toString() ?? '',
+      'component': raw['component']?.toString() ?? '',
       'label': raw['label']?.toString() ?? '',
     }).where((app) =>
         app['package']!.isNotEmpty && app['label']!.isNotEmpty).toList();
