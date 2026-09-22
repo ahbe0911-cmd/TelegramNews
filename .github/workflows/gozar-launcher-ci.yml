@@ -1,0 +1,86 @@
+name: Validate Gozar Native Launcher
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [three-independent-apps]
+    paths:
+      - 'lib/gozar_launcher.dart'
+      - 'lib/gozar_main.dart'
+      - 'lib/gozar_shortcuts.dart'
+      - 'test/gozar_launcher_test.dart'
+      - 'test/td_gozar_app_test.dart'
+      - 'scripts/configure_gozar_standalone.py'
+      - '.github/workflows/gozar-launcher-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gozar-launcher-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gozar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare independent Android VPN host
+        run: |
+          python3 scripts/prepare_android.py --profile modern
+          python3 scripts/configure_variant.py gozar
+          python3 scripts/enable_full_vpn.py
+          python3 scripts/configure_gozar_standalone.py
+      - name: Install pinned Xray engine
+        run: |
+          mkdir -p android/app/libs
+          curl -fL --retry 3 --retry-delay 3 \
+            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
+            -o android/app/libs/libv2ray.aar
+          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
+      - name: Install licensed Vazirmatn assets
+        run: |
+          mkdir -p assets/fonts
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Regular.ttf -o assets/fonts/Vazirmatn-Regular.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Bold.ttf -o assets/fonts/Vazirmatn-Bold.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/OFL.txt -o assets/fonts/OFL.txt
+          test -s assets/fonts/Vazirmatn-Regular.ttf
+          test -s assets/fonts/Vazirmatn-Bold.ttf
+      - name: Verify Flutter launcher code
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart test/gozar_launcher_test.dart
+      - name: Test launcher persistence and interaction
+        run: flutter test --reporter expanded test/gozar_launcher_test.dart
+      - name: Test Gozar navigation and VPN regressions
+        run: |
+          flutter test --reporter expanded test/td_gozar_app_test.dart
+          flutter test --reporter expanded test/gozar_shortcuts_test.dart
+      - name: Verify standalone Android app launcher
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('android/app/src/main')
+          bridge = next((root / 'kotlin').rglob('SystemVpnBridge.kt')).read_text()
+          for action in ('openShortcutApp', 'appIcon', 'installedApps'):
+              assert bridge.count(f'"{action}" ->') == 1, action
+          assert 'InternalTelegramProxyService' not in bridge
+          print('Launcher handlers are present in the generated Android host.')
+          PY
+      - name: Compile Gozar ARM64 without full artifact quota
+        run: |
+          python3 scripts/configure_build.py
+          flutter build apk --release --target lib/gozar_main.dart --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=APP_VARIANT=gozar
+          python3 scripts/verify_apk_variant.py gozar
+          test -s build/app/outputs/flutter-apk/app-release.apk
+          sha256sum build/app/outputs/flutter-apk/app-release.apk
+          echo 'Gozar APK compiled; artifact upload omitted while Actions quota is exhausted.'
