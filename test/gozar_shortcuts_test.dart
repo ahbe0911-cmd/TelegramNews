@@ -51,6 +51,42 @@ void main() {
     expect(legacy.target, 'com.example.legacy');
   });
 
+  test('renaming changes only the label, retaining real app launcher', () async {
+    final preferences = await SharedPreferences.getInstance();
+    const original = GozarShortcut(
+      kind: 'app', target: 'com.example.instagram',
+      title: 'Instagram',
+      component: 'com.example.instagram.LauncherAlias',
+    );
+    final renamed = original.renamed('  اینستاگرام من  ');
+    expect(renamed.title, 'اینستاگرام من');
+    expect(renamed.key, original.key);
+    expect(renamed.target, original.target);
+    expect(renamed.component, original.component);
+    expect(await GozarShortcutStore.save(preferences, [renamed]), isTrue);
+    final restored = GozarShortcutStore.load(preferences).single;
+    expect(restored.title, 'اینستاگرام من');
+    expect(restored.component, original.component);
+  });
+
+  test('drag reorder persists list order without changing shortcut targets',
+      () async {
+    final preferences = await SharedPreferences.getInstance();
+    const secondApp = GozarShortcut(kind: 'app',
+        target: 'com.example.second', title: 'برنامه دوم',
+        component: 'com.example.second.MainActivity');
+    final ordered = GozarShortcutStore.reordered([app, site, secondApp], 0, 3);
+    expect(ordered.map((item) => item.key).toList(),
+        [site.key, secondApp.key, app.key]);
+    expect(await GozarShortcutStore.save(preferences, ordered), isTrue);
+    expect(GozarShortcutStore.load(preferences)
+        .map((item) => item.key).toList(),
+        [site.key, secondApp.key, app.key]);
+    final movedBack = GozarShortcutStore.reordered(ordered, 2, 0);
+    expect(movedBack.map((item) => item.key).toList(),
+        [app.key, site.key, secondApp.key]);
+  });
+
   test('only HTTPS without embedded user credentials is accepted', () {
     expect(GozarShortcut.validWebUrl('https://example.org/search?q=test'),
         isNotNull);
