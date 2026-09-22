@@ -40,6 +40,16 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
+    // Settings is a lazy, scrollable page: the Android VPN section may
+    // initially be below the fold now that shortcut management is above it.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('gozar-vpn-settings')),
+      220,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('gozar-settings-page')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     expect(find.byKey(const ValueKey('gozar-vpn-settings')), findsWidgets);
     await tester.tap(find.text('خانه'));
     await tester.pump(const Duration(milliseconds: 250));
