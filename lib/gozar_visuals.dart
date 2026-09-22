@@ -207,8 +207,8 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
         onTap: widget.onPressed,
         customBorder: const CircleBorder(),
         child: Container(
-          width: 204, height: 204,
-          padding: const EdgeInsets.all(9),
+          width: 154, height: 154,
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: color.withOpacity(.36 + glow.value * .48), width: 2),
@@ -237,19 +237,19 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
               children: [
                 Transform.scale(
                   scale: 1.0 + (widget.connected ? .04 : .018) * glow.value,
-                  child: Icon(Icons.power_settings_new_rounded, size: 59,
+                  child: Icon(Icons.power_settings_new_rounded, size: 45,
                     color: color),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 3),
                 Text(widget.busy ? 'در حال انجام…' :
                     widget.connected ? 'متصل' : 'اتصال',
-                  style: const TextStyle(fontSize: 20,
+                  style: const TextStyle(fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: GozarPalette.text)),
                 const SizedBox(height: 3),
                 Text(widget.label,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 11,
+                  style: const TextStyle(fontSize: 9,
                       color: GozarPalette.muted)),
               ],
             ),
