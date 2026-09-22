@@ -100,7 +100,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   int selectedProfile = -1;
   List<GozarProfile> profiles = [];
   List<GozarShortcut> shortcuts = [];
-  String shortcutQuery = '';
   Timer? countersTimer;
   bool samplingCounters = false;
   DateTime? connectedObservedAt;
@@ -1034,8 +1033,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   );
 
   Widget _shortcutPanel() {
-    final filtered = shortcuts.where((item) =>
-        item.title.toLowerCase().contains(shortcutQuery)).toList();
     return GozarPanel(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 15),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1053,18 +1050,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             onPressed: () => setState(() { currentPage = 3; }),
             icon: const Icon(Icons.tune_rounded, color: GozarPalette.cyan)),
         ]),
-        TextField(
-          key: const ValueKey('gozar-shortcut-search'),
-          onChanged: (text) => setState(() {
-            shortcutQuery = text.trim().toLowerCase();
-          }),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search_rounded),
-            hintText: 'جستجو در میانبرهای من…',
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 13),
+        const SizedBox(height: 10),
         if (shortcuts.isEmpty) ...[
           const Padding(
             padding: EdgeInsets.all(14),
@@ -1079,11 +1065,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             icon: const Icon(Icons.add_rounded),
             label: const Text('افزودن میانبر'),
           ),
-        ] else if (filtered.isEmpty) ...[
-          const Padding(padding: EdgeInsets.all(18),
-            child: Text('میانبری با این نام پیدا نشد.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: GozarPalette.muted))),
         ] else LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 420 ? 5
               : constraints.maxWidth >= 300 ? 4 : 3;
@@ -1091,13 +1072,13 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             key: const ValueKey('gozar-user-shortcut-grid'),
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
-            itemCount: filtered.length,
+            itemCount: shortcuts.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
               mainAxisSpacing: 8, crossAxisSpacing: 7,
               childAspectRatio: .98,
             ),
-            itemBuilder: (context, index) => _shortcutTile(filtered[index]),
+            itemBuilder: (context, index) => _shortcutTile(shortcuts[index]),
           );
         }),
       ]),
@@ -1412,11 +1393,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
     children: [
       _hero(),
-      const SizedBox(height: 12),
-      const Text('با گذر، فراتر از محدودیت‌ها…',
-        textAlign: TextAlign.start,
-        style: TextStyle(color: GozarPalette.text,
-          fontSize: 16, fontWeight: FontWeight.w700)),
       const SizedBox(height: 12),
       _shortcutPanel(),
     ],
