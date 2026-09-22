@@ -91,6 +91,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   bool busy = false;
   bool disconnecting = false;
   int operationId = 0;
+  int statusReadId = 0;
   Timer? statusTimer;
   bool hideProfile = true;
   int currentPage = 0;
@@ -502,9 +503,14 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   }
 
   Future<void> refresh() async {
+    final readId = ++statusReadId;
+    final operation = operationId;
     try {
       final native = await SystemVpnBridge.status();
-      if (!mounted) return;
+      // Ignore stale responses started before disconnect or a newer read.
+      if (!mounted || readId != statusReadId || operation != operationId) {
+        return;
+      }
       final status = native['stage']?.toString() ?? 'off';
       // A status read that began before a stop request must not repaint
       // "running" over the user's explicit disconnect action.
@@ -540,7 +546,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         });
       }
     } catch (_) {
-      if (mounted) setState(() { detail = 'سرویس VPN در دسترس نیست.'; });
+      if (mounted && readId == statusReadId && operation == operationId) {
+        setState(() { detail = 'سرویس VPN در دسترس نیست.'; });
+      }
     }
   }
 
@@ -834,6 +842,11 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               ? GozarPalette.cyan : GozarPalette.muted, fontSize: 12)),
         if (connected) ...[
           const SizedBox(height: 10),
+          const Text(
+            'این آزمایش یک درخواست اینترنتی را از مسیر سرور منتخب ارسال می‌کند.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: GozarPalette.muted, fontSize: 10),
+          ),
           OutlinedButton.icon(
             key: const ValueKey('gozar-test-real-connection'),
             onPressed: testingProxy ? null : testProxyConnection,
