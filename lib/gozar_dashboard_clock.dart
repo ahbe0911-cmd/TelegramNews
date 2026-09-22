@@ -59,21 +59,14 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
         _months[jalali.month - 1] + ' ' + persianDigits(jalali.year);
     return Column(mainAxisSize: MainAxisSize.min, children: [
       SizedBox(
-        width: 162, height: 162,
-        child: CustomPaint(
-          painter: _ClockPainter(now),
-          child: const Center(child: Padding(
-            padding: EdgeInsets.only(top: 77),
-            child: Text('ساعت محلی دستگاه', style: TextStyle(
-                color: GozarPalette.muted, fontSize: 8)),
-          )),
-        ),
+        width: 136, height: 136,
+        child: CustomPaint(painter: _ClockPainter(now)),
       ),
       const SizedBox(height: 4),
       Text(day + '، ' + persianDigits(jalali.day),
         textAlign: TextAlign.center,
         style: const TextStyle(color: GozarPalette.text,
-            fontSize: 15, fontWeight: FontWeight.w800)),
+            fontSize: 13, fontWeight: FontWeight.w800)),
       Text(date, textAlign: TextAlign.center,
         style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
     ]);
