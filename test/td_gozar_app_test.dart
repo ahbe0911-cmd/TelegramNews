@@ -138,18 +138,10 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
     final rename = find.byKey(ValueKey('gozar-rename-' + selected.key));
-    final outerScroller = find.descendant(
-      of: find.byKey(const ValueKey('gozar-settings-page')),
-      matching: find.byType(Scrollable),
-    ).first;
-    await tester.scrollUntilVisible(rename, 180,
-      scrollable: outerScroller,
-    );
-    // scrollUntilVisible may land behind the app's fixed bottom navbar.
-    final position = tester.state<ScrollableState>(outerScroller).position;
-    position.jumpTo((position.pixels + 170)
-        .clamp(0.0, position.maxScrollExtent).toDouble());
+    // Shortcut management is first in Settings, above the fixed bottom bar.
+    await tester.ensureVisible(rename);
     await tester.pump(const Duration(milliseconds: 250));
+    expect(rename, findsOneWidget);
     await tester.tap(rename);
     await tester.pump(const Duration(milliseconds: 200));
     await tester.enterText(
