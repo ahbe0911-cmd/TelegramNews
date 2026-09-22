@@ -12,28 +12,36 @@ class GozarShortcut {
   final String kind; // "app" (Android package) or "web" (HTTPS URL).
   final String target;
   final String title;
+  /// The selected Android launcher activity, blank for existing shortcuts.
+  final String component;
 
   const GozarShortcut({
     required this.kind,
     required this.target,
     required this.title,
+    this.component = '',
   });
 
-  String get key => '$kind:$target';
+  String get key => '$kind:$target:$component';
 
   Map<String, String> toJson() =>
-      {'kind': kind, 'target': target, 'title': title};
+      {'kind': kind, 'target': target, 'title': title,
+       'component': kind == 'app' ? component : ''};
 
   static GozarShortcut? fromJson(Object? value) {
     if (value is! Map) return null;
     final kind = value['kind']?.toString();
     final target = value['target']?.toString() ?? '';
     final title = value['title']?.toString() ?? '';
+    final component = value['component']?.toString() ?? '';
     if (title.trim().isEmpty || title.length > 48 ||
         target.isEmpty || target.length > 2048) return null;
-    if (kind == 'app' && RegExp(r'^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+$')
-        .hasMatch(target)) {
-      return GozarShortcut(kind: kind!, target: target, title: title);
+    if (kind == 'app' &&
+        RegExp(r'^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+$').hasMatch(target) &&
+        (component.isEmpty || (component.length <= 256 &&
+            RegExp(r'^[a-zA-Z0-9_.$]+$').hasMatch(component)))) {
+      return GozarShortcut(kind: kind!, target: target,
+          title: title, component: component);
     }
     if (kind == 'web' && validWebUrl(target) != null) {
       return GozarShortcut(kind: kind!, target: target, title: title);
@@ -122,10 +130,11 @@ class _GozarShortcutIconState extends State<GozarShortcutIcon> {
       _icon = Future<Uint8List?>.value(null);
       return;
     }
-    _icon = _cache.putIfAbsent(widget.shortcut.target, () async {
+    _icon = _cache.putIfAbsent(widget.shortcut.key, () async {
       try {
         return await _channel.invokeMethod<Uint8List>('appIcon', {
           'package': widget.shortcut.target,
+          'component': widget.shortcut.component,
         });
       } catch (_) {
         return null;
