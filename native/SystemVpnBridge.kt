@@ -130,8 +130,11 @@ object SystemVpnBridge {
                             return@setMethodCallHandler
                         }
                         if (SystemVpnService.stage == "running" ||
-                            SystemVpnService.stage == "starting") {
-                            result.error("VPN_BUSY", "Disconnect the existing VPN first", null)
+                            SystemVpnService.stage == "starting" ||
+                            SystemVpnService.stage == "stopping" ||
+                            SystemVpnService.stage == "consent") {
+                            result.error("VPN_BUSY",
+                                "Wait for the current VPN operation to finish", null)
                             return@setMethodCallHandler
                         }
                         val policy = try {
