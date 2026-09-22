@@ -1192,28 +1192,38 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       glow: connected ? GozarPalette.green : GozarPalette.blue,
       child: Column(children: [
-        SizedBox(height: 154, child: Row(children: [
+        // Both columns use the SAME 154dp dial at the SAME top edge.
+        // On narrower devices they are scaled down by an equal factor.
+        SizedBox(height: 198, child: Row(children: [
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
             child: const SizedBox(
-              width: 126, height: 151,
+              width: 154, height: 196,
               child: GozarLiveClock(),
             ),
           )),
           const SizedBox(width: 3),
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: SizedBox(width: 138, height: 138,
-              child: GozarPowerButton(
-                key: const ValueKey('gozar-power'),
-                connected: connected,
-                busy: busy || disconnecting || stage == 'starting' ||
-                    stage == 'consent' || stage == 'stopping',
-                label: canStop
-                    ? 'برای قطع اتصال لمس کنید'
-                    : 'برای اتصال لمس کنید',
-                onPressed: disconnecting ? null
-                    : canStop ? disconnect : connect,
+            alignment: Alignment.topCenter,
+            child: SizedBox(width: 154, height: 196,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: 154, height: 154,
+                  child: GozarPowerButton(
+                    key: const ValueKey('gozar-power'),
+                    connected: connected,
+                    busy: busy || disconnecting || stage == 'starting' ||
+                        stage == 'consent' || stage == 'stopping',
+                    label: canStop
+                        ? 'برای قطع اتصال لمس کنید'
+                        : 'برای اتصال لمس کنید',
+                    onPressed: disconnecting ? null
+                        : canStop ? disconnect : connect,
+                  ),
+                ),
               ),
             ),
           )),
