@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -114,6 +116,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.textContaining('آزمون اتصال موفق نبود'), findsOneWidget);
     expect(find.textContaining('آزمون اتصال سرور موفق'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a late native status cannot revive a stopped VPN',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final stale = Completer<Map<String, String>>();
+    var nativeStage = 'running';
+    var reads = 0;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        reads++;
+        if (reads == 2) return stale.future;
+        return {'stage': nativeStage, 'detail': nativeStage};
+      }
+      if (call.method == 'stop') {
+        nativeStage = 'off';
+        return null;
+      }
+      if (call.method == 'networkCounters') return {'rx': 100, 'tx': 100};
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(
+        preferences: await SharedPreferences.getInstance()));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('برای قطع اتصال لمس کنید'), findsOneWidget);
+    await tester.tap(find.byTooltip('به‌روزرسانی وضعیت'));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const ValueKey('gozar-power')));
+    await tester.pump(const Duration(milliseconds: 400));
+    stale.complete({'stage': 'running', 'detail': 'outdated'});
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('VPN خاموش است.'), findsWidgets);
+    expect(find.text('برای اتصال لمس کنید'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
