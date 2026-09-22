@@ -200,10 +200,9 @@ class SystemVpnService : VpnService() {
             failureDetail = if (stage == "error" &&
                 reason != "Disconnect requested") detail else null
             stopping = true
-            if (failureDetail == null) {
-                stage = "stopping"
-                detail = reason
-            }
+            // Block overlapping starts until TUN and core shutdown completes.
+            stage = "stopping"
+            detail = reason
             startup = startupThread
             try { tunnel?.close() } catch (_: Exception) { }
             tunnel = null
