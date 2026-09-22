@@ -900,6 +900,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                             kind: 'app',
                             target: app['package'] ?? '',
                             title: app['label'] ?? '',
+                            component: app['component'] ?? '',
                           );
                           final exists = shortcuts.any(
                               (item) => item.key == shortcut.key);
@@ -996,32 +997,33 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         await SystemVpnBridge.openShortcutWeb(
             shortcut.target, shortcut.title);
       } else {
-        await SystemVpnBridge.openShortcutApp(shortcut.target);
+        await SystemVpnBridge.openShortcutApp(shortcut.target,
+            component: shortcut.component);
       }
     } catch (_) {
       notice(shortcut.kind == 'web'
           ? 'سایت در مرورگر داخلی باز نشد.'
-          : 'این برنامه نصب نیست یا از طریق اندروید باز نمی‌شود.');
+          : 'برنامه باز نشد. از تنظیمات، میانبر را حذف و دوباره انتخاب کنید.');
     }
   }
 
   Widget _shortcutTile(GozarShortcut shortcut) => InkWell(
     key: ValueKey('gozar-shortcut-' + shortcut.key),
-    borderRadius: BorderRadius.circular(20),
+    borderRadius: BorderRadius.circular(16),
     onTap: () => _openShortcut(shortcut),
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Expanded(child: Container(
         width: double.infinity,
         margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(19),
+          borderRadius: BorderRadius.circular(16),
           gradient: const LinearGradient(
             begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: [Color(0xff153b62), Color(0xff0b213b)]),
           border: Border.all(color: GozarPalette.blue.withOpacity(.42)),
         ),
         child: Center(child: GozarShortcutIcon(
-            shortcut: shortcut, size: 43)),
+            shortcut: shortcut, size: 37)),
       )),
       const SizedBox(height: 4),
       Text(shortcut.title, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -1083,8 +1085,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               textAlign: TextAlign.center,
               style: TextStyle(color: GozarPalette.muted))),
         ] else LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 470 ? 5
-              : constraints.maxWidth >= 340 ? 4 : 3;
+          final columns = constraints.maxWidth >= 410 ? 5
+              : constraints.maxWidth >= 295 ? 4 : 3;
           return GridView.builder(
             key: const ValueKey('gozar-user-shortcut-grid'),
             physics: const NeverScrollableScrollPhysics(),
@@ -1092,8 +1094,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             itemCount: filtered.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
-              mainAxisSpacing: 9, crossAxisSpacing: 7,
-              childAspectRatio: .78,
+              mainAxisSpacing: 10, crossAxisSpacing: 8,
+              childAspectRatio: .86,
             ),
             itemBuilder: (context, index) => _shortcutTile(filtered[index]),
           );
