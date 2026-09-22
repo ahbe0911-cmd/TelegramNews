@@ -452,19 +452,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
-  String _speed(double? speed) =>
-      speed == null ? '—' : speed.toStringAsFixed(2) + ' Mb/s';
-
-  String _volume(int? bytes) {
-    if (bytes == null) return '—';
-    if (bytes < 1024) return bytes.toString() + ' B';
-    if (bytes < 1048576) return (bytes / 1024).toStringAsFixed(1) + ' KB';
-    if (bytes < 1073741824) {
-      return (bytes / 1048576).toStringAsFixed(1) + ' MB';
-    }
-    return (bytes / 1073741824).toStringAsFixed(2) + ' GB';
-  }
-
   Future<void> checkTcpLatency(int index) async {
     if (index < 0 || index >= profiles.length) return;
     final link = profiles[index].link;
@@ -1409,55 +1396,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ),
   );
 
-  Widget _traffic() => GozarPanel(
-    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _eyebrow(Icons.show_chart_rounded, 'عملکرد لحظه‌ای'),
-      const SizedBox(height: 6),
-      const Text('برآورد بر اساس ترافیک UID برنامه گذر؛ نه سرعت '
-          'قطعی سرور یا همهٔ بسته‌های تونل.',
-          style: TextStyle(color: GozarPalette.muted, fontSize: 10)),
-      const SizedBox(height: 11),
-      if (receivedSeries.isEmpty && sentSeries.isEmpty)
-        const SizedBox(height: 90,
-          child: Center(child: Text('پس از اتصال و تبادل داده، نمودار ظاهر می‌شود.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: GozarPalette.muted, fontSize: 12))))
-      else GozarLineChart(
-        incoming: List<double>.of(receivedSeries),
-        outgoing: List<double>.of(sentSeries),
-      ),
-      const SizedBox(height: 10),
-      Row(children: [
-        GozarMetric(icon: Icons.south_rounded, caption: 'دریافت تقریبی',
-            value: _speed(receivedMbps)),
-        const SizedBox(width: 8),
-        GozarMetric(icon: Icons.north_rounded, caption: 'ارسال تقریبی',
-            value: _speed(sentMbps), accent: GozarPalette.purple),
-      ]),
-      const SizedBox(height: 8),
-      Row(children: [
-        GozarMetric(icon: Icons.download_rounded, caption: 'دریافت در این نشست',
-            value: _volume(receivedSession)),
-        const SizedBox(width: 8),
-        GozarMetric(icon: Icons.upload_rounded, caption: 'ارسال در این نشست',
-            value: _volume(sentSession), accent: GozarPalette.purple),
-      ]),
-      const SizedBox(height: 10),
-      Row(children: [
-        const Icon(Icons.timer_outlined,
-            color: GozarPalette.muted, size: 15),
-        const SizedBox(width: 5),
-        Expanded(child: Text(
-          connectedObservedAt == null ? 'اتصال فعال نیست'
-              : 'مدت نمایش اتصال: ' +
-                DateTime.now().difference(connectedObservedAt!)
-                    .inMinutes.toString() + ' دقیقه',
-          style: const TextStyle(color: GozarPalette.muted, fontSize: 11),
-        )),
-      ]),
-    ]),
-  );
-
   Widget _home() => ListView(
     key: const ValueKey('gozar-home'),
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
@@ -1465,29 +1403,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       _hero(),
       const SizedBox(height: 12),
       _shortcutPanel(),
-    ],
-  );
-
-  Widget _statusPage() => ListView(
-    key: const ValueKey('gozar-status-page'),
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-    children: [
-      _traffic(),
-      const SizedBox(height: 12),
-      GozarPanel(child: Column(children: [
-        _eyebrow(Icons.shield_outlined, 'وضعیت اتصال'),
-        const SizedBox(height: 12),
-        Text(detail, textAlign: TextAlign.center,
-          style: const TextStyle(color: GozarPalette.muted)),
-        const SizedBox(height: 8),
-        Text('سرور انتخابی: ' + serverLabel,
-          style: const TextStyle(color: GozarPalette.text)),
-        const SizedBox(height: 6),
-        const Text('مقادیر ترافیک تقریبی هستند و '
-          'سرعت واقعی تونل را نشان نمی‌دهند.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
-      ])),
     ],
   );
 
