@@ -64,7 +64,7 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
           painter: _ClockPainter(now),
           child: const Center(child: Padding(
             padding: EdgeInsets.only(top: 77),
-            child: Text('تهران · ساعت دستگاه', style: TextStyle(
+            child: Text('ساعت محلی دستگاه', style: TextStyle(
                 color: GozarPalette.muted, fontSize: 8)),
           )),
         ),
