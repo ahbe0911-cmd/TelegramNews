@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/gozar_main.dart';
+import 'package:telegram_news/gozar_shortcuts.dart';
 import 'package:telegram_news/td_system_vpn.dart';
 
 void main() {
@@ -61,6 +62,44 @@ void main() {
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('tap user shortcut launches selected Android alias',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    const selected = GozarShortcut(
+      kind: 'app', target: 'com.example.installed',
+      title: 'برنامه من',
+      component: 'com.example.installed.LauncherAlias');
+    expect(await GozarShortcutStore.save(preferences, [selected]), isTrue);
+    Map<dynamic, dynamic>? launchArgs;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        return {'stage': 'off', 'detail': 'off'};
+      }
+      if (call.method == 'appIcon') return null;
+      if (call.method == 'openShortcutApp') {
+        launchArgs = Map<dynamic, dynamic>.from(call.arguments as Map);
+        return null;
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(preferences: preferences));
+    await tester.pump(const Duration(milliseconds: 350));
+    final shortcut = find.byKey(
+        const ValueKey('gozar-shortcut-app:com.example.installed:com.example.installed.LauncherAlias'));
+    await tester.ensureVisible(shortcut);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.tap(shortcut);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(launchArgs?['package'], 'com.example.installed');
+    expect(launchArgs?['component'], 'com.example.installed.LauncherAlias');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('real proxy probe is separate from VPN service state',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
