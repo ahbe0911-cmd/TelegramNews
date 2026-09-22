@@ -138,15 +138,17 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
     final rename = find.byKey(ValueKey('gozar-rename-' + selected.key));
+    final outerScroller = find.descendant(
+      of: find.byKey(const ValueKey('gozar-settings-page')),
+      matching: find.byType(Scrollable),
+    ).first;
     await tester.scrollUntilVisible(rename, 180,
-      // Position controls above the fixed bottom navigation bar: merely
-      // revealing them at the viewport bottom makes taps hit the nav bar.
-      alignment: 0.25,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('gozar-settings-page')),
-        matching: find.byType(Scrollable),
-      ).first,
+      scrollable: outerScroller,
     );
+    // scrollUntilVisible may land behind the app's fixed bottom navbar.
+    final position = tester.state<ScrollableState>(outerScroller).position;
+    position.jumpTo((position.pixels + 170)
+        .clamp(0.0, position.maxScrollExtent).toDouble());
     await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(rename);
     await tester.pump(const Duration(milliseconds: 200));
