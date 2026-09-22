@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'gozar_visuals.dart';
 import 'gozar_subscription.dart';
 import 'gozar_shortcuts.dart';
+import 'gozar_launcher.dart';
 import 'gozar_dashboard_clock.dart';
 
 import 'package:flutter/material.dart';
@@ -1704,7 +1705,12 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final views = <Widget>[_home(), _statusPage(), _servers(), _security()];
+    final views = <Widget>[
+      _home(),
+      GozarLauncher(preferences: widget.preferences, onOpenApp: _openShortcut),
+      _servers(),
+      _security(),
+    ];
     return Scaffold(
       backgroundColor: GozarPalette.base,
       body: Stack(children: [
@@ -1766,10 +1772,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: GozarPalette.cyan),
                 label: 'خانه'),
               NavigationDestination(
-                icon: Icon(Icons.bar_chart_rounded),
-                selectedIcon: Icon(Icons.bar_chart_rounded,
+                icon: Icon(Icons.grid_view_outlined),
+                selectedIcon: Icon(Icons.grid_view_rounded,
                     color: GozarPalette.cyan),
-                label: 'وضعیت و آمار'),
+                label: 'لانچر'),
               NavigationDestination(
                 icon: Icon(Icons.dns_outlined),
                 selectedIcon: Icon(Icons.dns_rounded,
