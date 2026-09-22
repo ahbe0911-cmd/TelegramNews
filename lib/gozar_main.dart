@@ -287,7 +287,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         currentPage = 0;
       });
       await widget.preferences.setInt('gozar_profile_index', result.index);
-      notice('بهترین سرور انتخاب شد: ' + profiles[result.index].name +
+      notice('سرور با کمترین تأخیر TCP انتخاب شد: ' + profiles[result.index].name +
           ' — ' + result.latencyMs.toString() + ' ms');
       if (stage == 'running') {
         notice('برای اعمال سرور جدید، VPN را قطع و دوباره وصل کنید.');
@@ -517,8 +517,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         _stopCounters();
       }
       final nextDetail = switch (status) {
-          'running' => 'تونل VPN اندروید فعال است. برای اطمینان از اتصال '
-              'سرور، اینترنت برنامه‌های انتخاب‌شده را آزمایش کنید.',
+          'running' => 'تونل اندروید فعال است؛ اتصال اینترنت سرور را '
+              'با دکمه آزمون جداگانه بررسی کنید.',
           'starting' => 'در حال راه‌اندازی موتور Xray و تونل اندروید…',
           'consent' => 'مجوز VPN را در پنجره سیستم تأیید کنید.',
           'stopping' => 'در حال بستن تونل و توقف موتور VPN…',
@@ -1132,7 +1132,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 ? const SizedBox(width: 18, height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.speed_rounded),
-            label: const Text('انتخاب خودکار بهترین سرور'),
+            label: const Text('انتخاب سرور با کمترین تأخیر TCP'),
           ),
         ],
       )),
