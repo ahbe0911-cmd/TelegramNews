@@ -123,6 +123,56 @@ void main() {
     expect(apps.single.component, instagram.component);
   });
 
+  testWidgets('per-app menu edits name, changes order and keeps native target',
+      (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    const section = GozarLauncherSection(id: 'apps', title: 'برنامه‌های من',
+        apps: [instagram, editor]);
+    expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'appIcon') return null;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    GozarShortcut? launched;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: GozarLauncher(preferences: prefs,
+        onOpenApp: (app) async { launched = app; }),
+    )));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byKey(
+        ValueKey('gozar-launcher-app-menu-' + instagram.key)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ویرایش نام').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(
+        const ValueKey('gozar-launcher-app-name')), 'اینستاگرام شخصی');
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-save-app-name')));
+    await tester.pump(const Duration(milliseconds: 450));
+    final savedName = GozarLauncherStore.load(prefs).single.apps.first;
+    expect(savedName.title, 'اینستاگرام شخصی');
+    expect(savedName.component, instagram.component);
+    await tester.tap(find.byKey(
+        ValueKey('gozar-launcher-app-menu-' + editor.key)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('انتقال به قبل').last);
+    await tester.pump(const Duration(milliseconds: 450));
+    final ordered = GozarLauncherStore.load(prefs).single.apps;
+    expect(ordered.map((app) => app.key).toList(),
+        [editor.key, instagram.key]);
+    await tester.tap(find.byKey(
+        ValueKey('gozar-launcher-open-' + instagram.key)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(launched?.title, 'اینستاگرام شخصی');
+    expect(launched?.target, instagram.target);
+    expect(launched?.component, instagram.component);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('launcher tab opens section dialog and saved native app',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
