@@ -305,6 +305,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         selectedProfile = result.index;
         profile.text = profiles[result.index].link;
         tcpLatencies[profiles[result.index].link] = result.latencyMs;
+        showServerSettings = false;
         currentPage = 0;
       });
       await widget.preferences.setInt('gozar_profile_index', result.index);
@@ -323,6 +324,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     setState(() {
       selectedProfile = index;
       profile.text = profiles[index].link;
+      showServerSettings = false;
       currentPage = 0;
     });
     unawaited(widget.preferences.setInt('gozar_profile_index', index));
@@ -335,7 +337,11 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     setState(() {
       selectedProfile = -1;
       profile.clear();
-      currentPage = 0;
+      // The server editor now lives inside Settings; do not route back
+      // to Home where the user cannot enter the newly selected config.
+      visitedPages.add(3);
+      showServerSettings = true;
+      currentPage = 3;
     });
   }
 
