@@ -107,8 +107,8 @@ source, count = re.subn(
 assert count == 1, 'Unexpected native service manifest'
 # Android alarms, permission consent and reboot recovery are for Gozar only.
 source = source.replace('<application',
-    '<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\\n'
-    '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\\n'
+    '<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
+    '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n'
     '    <application', 1)
 # Unexported internal browser for user-saved HTTPS shortcuts.
 source = source.replace('</application>', '''
