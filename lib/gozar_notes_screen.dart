@@ -22,7 +22,7 @@ class _NotesMountainPainter extends CustomPainter {
     final area = Offset.zero & size;
     canvas.drawRect(area, Paint()..shader = const LinearGradient(
       begin: Alignment.topLeft, end: Alignment.bottomRight,
-      colors: [Color(0xff16416e), Color(0xff0a1c35)],
+      colors: [Color(0xff8fd1fb), Color(0xffe7f8ff)],
     ).createShader(area));
     final moon = Offset(size.width * .25, size.height * .27);
     canvas.drawCircle(moon, 16,
@@ -42,7 +42,7 @@ class _NotesMountainPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
       ..close();
-    canvas.drawPath(back, Paint()..color = const Color(0xff26537d));
+    canvas.drawPath(back, Paint()..color = const Color(0xffa9d0e6));
     final front = Path()
       ..moveTo(0, size.height * .83)
       ..lineTo(size.width * .18, size.height * .7)
@@ -53,7 +53,7 @@ class _NotesMountainPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
       ..close();
-    canvas.drawPath(front, Paint()..color = const Color(0xff102d51));
+    canvas.drawPath(front, Paint()..color = const Color(0xff79b8bb));
   }
 
   @override
@@ -341,11 +341,11 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
         margin: const EdgeInsets.fromLTRB(10, 6, 10, 9),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: const Color(0xff091b34),
+          color: const Color(0xfffaffff),
           borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: const Color(0xff29547b)),
+          border: Border.all(color: const Color(0xffb8d7ef)),
           boxShadow: [
-            BoxShadow(color: const Color(0xff030c1b).withOpacity(.35),
+            BoxShadow(color: const Color(0xff639ac9).withOpacity(.35),
               blurRadius: 15, offset: const Offset(0, 6)),
           ],
         ),
@@ -357,7 +357,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
               Container(decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topRight, end: Alignment.bottomLeft,
-                  colors: [Color(0x88152c54), Color(0x11091b34)],
+                  colors: [Color(0x22ffffff), Color(0x11d2f2ff)],
                 ),
               )),
               Padding(
@@ -377,7 +377,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                         style: const TextStyle(color: GozarPalette.text,
                           fontWeight: FontWeight.w900, fontSize: 25)),
                       const Text('تقویم هجری شمسی',
-                        style: TextStyle(color: Color(0xffd0def1),
+                        style: TextStyle(color: Color(0xff4e6d88),
                           fontSize: 11)),
                     ],
                   )),
@@ -421,15 +421,15 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: column == 6 ? const Color(0xff39243d)
-                            : const Color(0xff142d49),
+                        color: column == 6 ? const Color(0xffffebf0)
+                            : const Color(0xffeaf4ff),
                         borderRadius: BorderRadius.circular(9)),
                       child: Text(
                         wide ? _weekdays[column] : _weekShort[column],
                         maxLines: 1,
                         style: TextStyle(
-                          color: column == 6 ? const Color(0xffff8399)
-                              : const Color(0xffc6d5ed),
+                          color: column == 6 ? const Color(0xffc42c55)
+                              : const Color(0xff486781),
                           fontWeight: FontWeight.w700,
                           fontSize: wide ? 12 : 11)),
                     )),
@@ -458,8 +458,8 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                                   horizontal: 2),
                               child: Material(
                                 color: chosen ? const Color(0xff48d9f2)
-                                    : today ? const Color(0xff214768)
-                                    : const Color(0xff11263e),
+                                    : today ? const Color(0xffd8efff)
+                                    : const Color(0xfff4faff),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(11),
                                   side: BorderSide(
@@ -467,7 +467,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                                         ? GozarPalette.cyan
                                         : chosen
                                             ? const Color(0xff83ebfc)
-                                            : const Color(0xff29445f)),
+                                            : const Color(0xffc4dbed)),
                                 ),
                                 child: InkWell(
                                   key: ValueKey('gozar-notes-day-' + key),
@@ -485,7 +485,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                                             color: chosen
                                                 ? const Color(0xff081e33)
                                                 : column == 6
-                                                    ? const Color(0xffff8298)
+                                                    ? const Color(0xffce3658)
                                                     : GozarPalette.text,
                                             fontSize: 14,
                                             fontWeight: chosen
@@ -520,9 +520,9 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
             padding: const EdgeInsets.symmetric(
                 horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
-              color: const Color(0xff133454),
+              color: const Color(0xffeef7ff),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xff2c5b84)),
+              border: Border.all(color: const Color(0xffb9d8f1)),
             ),
             child: Row(textDirection: TextDirection.rtl, children: [
               const Icon(Icons.calendar_month_rounded,
@@ -549,7 +549,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('افزودن', style: TextStyle(fontSize: 11)),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xff126eac),
+                  backgroundColor: const Color(0xff236fc0),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   visualDensity: VisualDensity.compact),
               ),
@@ -567,7 +567,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
     key: key, tooltip: hint, onPressed: change,
     icon: Icon(icon, color: GozarPalette.cyan, size: 26),
     style: IconButton.styleFrom(
-      backgroundColor: const Color(0xff142e4b),
+      backgroundColor: const Color(0xffe3f4ff),
       side: const BorderSide(color: Color(0xff39bad6))),
   );
 
@@ -594,7 +594,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
           margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.all(19),
           decoration: BoxDecoration(
-            color: const Color(0xff102c49),
+            color: const Color(0xffeef7ff),
             borderRadius: BorderRadius.circular(20)),
           child: const Column(children: [
             Icon(Icons.edit_calendar_rounded,
@@ -610,7 +610,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
             margin: const EdgeInsets.only(top: 9),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xff153450),
+              color: const Color(0xfff5faff),
               borderRadius: BorderRadius.circular(17),
               border: Border.all(color:
                   GozarPalette.blue.withOpacity(.36))),
