@@ -995,98 +995,14 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
-  Widget _shortcutTile(GozarShortcut shortcut) => InkWell(
-    key: ValueKey('gozar-shortcut-' + shortcut.key),
-    borderRadius: BorderRadius.circular(16),
-    onTap: () => _openShortcut(shortcut),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Expanded(child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xff153b62), Color(0xff0b213b)]),
-          border: Border.all(color: GozarPalette.blue.withOpacity(.42)),
-        ),
-        child: Center(child: GozarShortcutIcon(
-            shortcut: shortcut, size: 44)),
-      )),
-      const SizedBox(height: 4),
-      Text(shortcut.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: GozarPalette.text,
-          fontSize: 11, fontWeight: FontWeight.w600)),
-    ]),
-  );
-
-  Widget _shortcutPanel() {
-    return GozarPanel(
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 15),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          const Icon(Icons.apps_rounded, color: GozarPalette.cyan, size: 27),
-          const SizedBox(width: 7),
-          const Expanded(child: Text('میانبر برنامه‌ها',
-            style: TextStyle(color: GozarPalette.text,
-              fontSize: 18, fontWeight: FontWeight.w800))),
-          Text(persianDigits(shortcuts.length) + '/۱۰',
-            style: const TextStyle(color: GozarPalette.muted)),
-          IconButton(
-            key: const ValueKey('gozar-shortcut-settings'),
-            tooltip: 'مدیریت میانبرها',
-            onPressed: () => setState(() {
-              visitedPages.add(3);
-              currentPage = 3;
-            }),
-            icon: const Icon(Icons.tune_rounded, color: GozarPalette.cyan)),
-        ]),
-        const SizedBox(height: 10),
-        if (shortcuts.isEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.all(14),
-            child: Text(
-              'هنوز میانبری ثبت نکرده‌اید. برنامه‌ها و سایت‌های دلخواهتان را '
-              'از تنظیمات اضافه کنید.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: GozarPalette.muted, fontSize: 12))),
-          OutlinedButton.icon(
-            key: const ValueKey('gozar-manage-shortcuts-empty'),
-            onPressed: () => setState(() {
-              visitedPages.add(3);
-              currentPage = 3;
-            }),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('افزودن میانبر'),
-          ),
-        ] else LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 420 ? 5
-              : constraints.maxWidth >= 300 ? 4 : 3;
-          return GridView.builder(
-            key: const ValueKey('gozar-user-shortcut-grid'),
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            itemCount: shortcuts.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisSpacing: 8, crossAxisSpacing: 7,
-              childAspectRatio: .98,
-            ),
-            itemBuilder: (context, index) => _shortcutTile(shortcuts[index]),
-          );
-        }),
-      ]),
-    );
-  }
-
   Widget _shortcutSettings() => GozarPanel(
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _eyebrow(Icons.apps_rounded, 'میانبر برنامه‌ها'),
       const SizedBox(height: 8),
       const Text(
         'برنامه‌ها و سایت‌های دلخواه را اضافه کنید، نام آن‌ها را تغییر دهید '
-        'و با نگه‌داشتن و کشیدن دستگیره، ترتیب نمایش در صفحه اصلی را بچینید.',
+        'و با نگه‌داشتن و کشیدن دستگیره، ترتیب آن‌ها را بچینید. '
+        'برای بازکردن هر میانبر روی نام آن بزنید.',
         style: TextStyle(color: GozarPalette.muted, fontSize: 12),
       ),
       const SizedBox(height: 12),
@@ -1125,6 +1041,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             final shortcut = shortcuts[index];
             return ListTile(
               key: ValueKey('gozar-manage-shortcut-' + shortcut.key),
+              onTap: () => _openShortcut(shortcut),
               dense: true,
               contentPadding: EdgeInsets.zero,
               leading: GozarShortcutIcon(shortcut: shortcut, size: 34),
@@ -1353,16 +1270,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
     children: [
       _hero(),
-      const SizedBox(height: 11),
-      GozarTodayNotesWidget(
-        preferences: widget.preferences,
-        refresh: notesRevision,
-        onOpen: () => setState(() {
-          visitedPages.add(2);
-          currentPage = 2;
-        }),
-      ),
-      _shortcutPanel(),
     ],
   );
 
