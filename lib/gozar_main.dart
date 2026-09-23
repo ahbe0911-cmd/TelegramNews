@@ -1100,7 +1100,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           IconButton(
             key: const ValueKey('gozar-shortcut-settings'),
             tooltip: 'مدیریت میانبرها',
-            onPressed: () => setState(() { currentPage = 3; }),
+            onPressed: () => setState(() {
+              visitedPages.add(3);
+              currentPage = 3;
+            }),
             icon: const Icon(Icons.tune_rounded, color: GozarPalette.cyan)),
         ]),
         const SizedBox(height: 10),
@@ -1114,7 +1117,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               style: TextStyle(color: GozarPalette.muted, fontSize: 12))),
           OutlinedButton.icon(
             key: const ValueKey('gozar-manage-shortcuts-empty'),
-            onPressed: () => setState(() { currentPage = 3; }),
+            onPressed: () => setState(() {
+              visitedPages.add(3);
+              currentPage = 3;
+            }),
             icon: const Icon(Icons.add_rounded),
             label: const Text('افزودن میانبر'),
           ),
@@ -1311,7 +1317,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             style: const TextStyle(
               color: GozarPalette.text, fontSize: 11))),
           TextButton(
-            onPressed: () => setState(() { currentPage = 2; }),
+            onPressed: () => setState(() {
+              visitedPages.add(2);
+              currentPage = 2;
+            }),
             child: const Text('تغییر سرور', style: TextStyle(
               color: GozarPalette.cyan, fontSize: 11)),
           ),
