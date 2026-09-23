@@ -173,12 +173,19 @@ object SystemVpnBridge {
                                 // package icon, and package icon lookup can be
                                 // restricted by Android package visibility.
                                 val pm = activity.packageManager
-                                val launcher = launcherActivities(activity)
-                                    .firstOrNull { it.activityInfo.packageName == pkg &&
-                                        (component.isNullOrEmpty() ||
-                                         it.activityInfo.name == component) }
-                                val drawable = launcher?.loadIcon(pm)
-                                    ?: pm.getApplicationIcon(pkg)
+                                // Do not enumerate EVERY installed launcher for
+                                // EVERY icon on the Android main thread. Direct
+                                // component lookup keeps a large launcher smooth.
+                                val drawable = if (component.isNullOrEmpty()) {
+                                    pm.getApplicationIcon(pkg)
+                                } else {
+                                    try {
+                                        pm.getActivityIcon(
+                                            android.content.ComponentName(pkg, component))
+                                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                                        pm.getApplicationIcon(pkg)
+                                    }
+                                }
                                 val bitmap = android.graphics.Bitmap.createBitmap(
                                     80, 80, android.graphics.Bitmap.Config.ARGB_8888)
                                 val canvas = android.graphics.Canvas(bitmap)
