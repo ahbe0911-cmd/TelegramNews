@@ -792,49 +792,88 @@ class _GozarLauncherState extends State<GozarLauncher> {
     final section = sections.isEmpty ? null :
         sections[active.clamp(0, sections.length - 1)];
     return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
+      // The launcher owns the very top of its content, rather than wasting
+      // height on the VPN status toolbar from other tabs.
+      Container(
+        key: const ValueKey('gozar-launcher-top-toolbar'),
+        margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(21),
+          gradient: const LinearGradient(colors: [
+            Color(0xff123f61), Color(0xff0a203d),
+          ]),
+          border: Border.all(color: GozarPalette.blue.withOpacity(.5)),
+        ),
         child: Row(children: [
           const Icon(Icons.grid_view_rounded,
-            color: GozarPalette.cyan, size: 24),
+            color: GozarPalette.cyan, size: 23),
           const SizedBox(width: 7),
-          Expanded(child: Text(section?.title ?? 'لانچر',
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: GozarPalette.text,
-              fontSize: 19, fontWeight: FontWeight.w800))),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(section?.title ?? 'لانچر',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: GozarPalette.text,
+                  fontSize: 16, fontWeight: FontWeight.w800)),
+              Text(section == null ? 'بخش جدید بسازید'
+                : section.apps.length.toString() + ' برنامه · ' +
+                  section.columns.toString() + ' ستون',
+                style: const TextStyle(
+                  color: GozarPalette.muted, fontSize: 10)),
+            ],
+          )),
+          if (section != null) FilledButton.icon(
+            key: const ValueKey('gozar-launcher-add-apps'),
+            onPressed: () => addApps(section),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('افزودن', style: TextStyle(fontSize: 11)),
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              backgroundColor: const Color(0xff1776a1),
+            ),
+          ),
           IconButton(
             key: const ValueKey('gozar-launcher-add-section'),
-            tooltip: 'افزودن بخش جدید',
+            tooltip: 'ساخت بخش جدید',
             onPressed: sections.length >= GozarLauncherStore.maxSections
                 ? null : () => configure(),
-            icon: const Icon(Icons.add_rounded,
-              color: GozarPalette.cyan)),
+            icon: const Icon(Icons.library_add_outlined,
+              color: GozarPalette.cyan, size: 21)),
           IconButton(
             key: const ValueKey('gozar-launcher-section-settings'),
-            tooltip: 'تنظیمات بخش',
-            onPressed: section == null ? null :
-                () => configure(section: section),
-            icon: const Icon(Icons.settings_rounded,
-              color: GozarPalette.muted)),
+            tooltip: 'تنظیمات همین بخش',
+            onPressed: section == null ? null
+                : () => setState(() { showSettings = !showSettings; }),
+            icon: Icon(showSettings
+                ? Icons.tune_rounded : Icons.settings_outlined,
+              color: showSettings
+                ? GozarPalette.cyan : GozarPalette.muted, size: 21)),
         ]),
       ),
-      if (section != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Row(children: [
-            Expanded(child: Text(
-              section.apps.length.toString() + ' برنامه · ' +
-                  section.columns.toString() + ' ستون',
-              style: const TextStyle(
-                color: GozarPalette.muted, fontSize: 11))),
-            TextButton.icon(
-              key: const ValueKey('gozar-launcher-add-apps'),
-              onPressed: () => addApps(section),
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 17),
-              label: const Text('افزودن برنامه'),
-            ),
-          ]),
+      if (sections.length > 1) SizedBox(
+        height: 39,
+        child: ListView.separated(
+          key: const ValueKey('gozar-launcher-section-tabs'),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          scrollDirection: Axis.horizontal,
+          itemCount: sections.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 6),
+          itemBuilder: (context, index) => ChoiceChip(
+            key: ValueKey('gozar-launcher-select-section-' +
+                sections[index].id),
+            label: Text(sections[index].title),
+            selected: active == index,
+            onSelected: (_) => pages.animateToPage(index,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic),
+          ),
         ),
+      ),
+      if (showSettings && section != null) inlineSectionSettings(section),
       Expanded(child: sections.isEmpty
         ? Center(child: FilledButton.icon(
           key: const ValueKey('gozar-launcher-create-first'),
@@ -846,7 +885,11 @@ class _GozarLauncherState extends State<GozarLauncher> {
           key: const ValueKey('gozar-launcher-pages'),
           controller: pages,
           itemCount: sections.length,
-          onPageChanged: (index) => setState(() { active = index; }),
+          onPageChanged: (index) => setState(() {
+            active = index;
+            draftSectionTitle = sections[index].title;
+            previewIconSize = null;
+          }),
           itemBuilder: (context, index) => sectionPage(sections[index]),
         )),
       if (sections.length > 1)
