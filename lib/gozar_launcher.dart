@@ -806,13 +806,47 @@ class _GozarLauncherState extends State<GozarLauncher> {
       return GridView.builder(
         key: ValueKey('gozar-launcher-grid-' + section.id),
         padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
-        itemCount: section.apps.length,
+        // The add tile belongs to EACH section's own scrollable grid and
+        // remains available when there are already four or five app icons.
+        itemCount: section.apps.length + 1,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: columns, mainAxisSpacing: 14,
           crossAxisSpacing: 8, childAspectRatio: .76,
         ),
-        itemBuilder: (context, index) =>
-            draggableAppTile(section, section.apps[index], cellWidth),
+        itemBuilder: (context, index) {
+          if (index == section.apps.length) {
+            return InkWell(
+              key: ValueKey('gozar-launcher-grid-add-' + section.id),
+              onTap: section.apps.length >=
+                      GozarLauncherStore.maxAppsPerSection
+                  ? null : () => addApps(section),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0xff164467),
+                  border: Border.all(color: GozarPalette.cyan.withOpacity(.6)),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.add_circle_outline_rounded,
+                      color: GozarPalette.cyan, size: 27),
+                    const SizedBox(height: 4),
+                    Text(section.apps.length >=
+                          GozarLauncherStore.maxAppsPerSection
+                          ? 'ظرفیت کامل' : 'افزودن',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: GozarPalette.text, fontSize: 10)),
+                  ],
+                ),
+              ),
+            );
+          }
+          return draggableAppTile(
+              section, section.apps[index], cellWidth);
+        },
       );
     },
   );
@@ -855,17 +889,6 @@ class _GozarLauncherState extends State<GozarLauncher> {
                   color: GozarPalette.muted, fontSize: 10)),
             ],
           )),
-          if (section != null) FilledButton.icon(
-            key: const ValueKey('gozar-launcher-add-apps'),
-            onPressed: () => addApps(section),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('افزودن', style: TextStyle(fontSize: 11)),
-            style: FilledButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              backgroundColor: const Color(0xff1776a1),
-            ),
-          ),
           IconButton(
             key: const ValueKey('gozar-launcher-add-section'),
             tooltip: 'ساخت بخش جدید',
@@ -900,6 +923,27 @@ class _GozarLauncherState extends State<GozarLauncher> {
             onSelected: (_) => pages.animateToPage(index,
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic),
+          ),
+        ),
+      ),
+      if (section != null) Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            key: const ValueKey('gozar-launcher-add-apps'),
+            onPressed: section.apps.length >=
+                    GozarLauncherStore.maxAppsPerSection
+                ? null : () => addApps(section),
+            icon: const Icon(Icons.add_circle_outline_rounded, size: 19),
+            label: Text('افزودن برنامه به «' + section.title + '»',
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xff1776a1),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 13, vertical: 9),
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ),
       ),
