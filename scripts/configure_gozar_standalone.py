@@ -49,6 +49,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         SystemVpnBridge.attach(this, flutterEngine)
+        GozarReminderBridge.attach(this, flutterEngine)
     }
 
     @Suppress("DEPRECATION")
@@ -56,12 +57,27 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         SystemVpnBridge.onActivityResult(this, requestCode, resultCode)
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        GozarReminderBridge.onRequestPermissionsResult(requestCode, grantResults)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        GozarReminderBridge.onNewIntent(intent)
+    }
 }
 ''')
 # Gozar has no TDLib, Telegram sign-in or private Telegram SOCKS process.
 # This activity exists only in the standalone VPN build, never in news/cafe.
 (activity.parent / 'GozarWebActivity.kt').write_bytes(
     (root / 'native/GozarWebActivity.kt').read_bytes()
+)
+(activity.parent / 'GozarReminderBridge.kt').write_bytes(
+    (root / 'native/GozarReminderBridge.kt').read_bytes()
 )
 internal = activity.parent / 'InternalTelegramProxyService.kt'
 assert internal.is_file()
@@ -89,12 +105,28 @@ source, count = re.subn(
     '', source, count=1,
 )
 assert count == 1, 'Unexpected native service manifest'
+# Android alarms, permission consent and reboot recovery are for Gozar only.
+source = source.replace('<application',
+    '<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\\n'
+    '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\\n'
+    '    <application', 1)
 # Unexported internal browser for user-saved HTTPS shortcuts.
 source = source.replace('</application>', '''
         <activity
             android:name=".GozarWebActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar" />
+         <receiver android:name=".GozarReminderReceiver"
+             android:exported="false" />
+         <receiver android:name=".GozarReminderBootReceiver"
+             android:enabled="true" android:exported="true">
+             <intent-filter>
+                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                 <action android:name="android.intent.action.TIME_SET" />
+                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+             </intent-filter>
+         </receiver>
     </application>''', 1)
 manifest.write_text(source)
 assert 'InternalTelegramProxyService' not in manifest.read_text()
