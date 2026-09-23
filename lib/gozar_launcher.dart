@@ -136,7 +136,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
   final PageController pages = PageController();
   int active = 0;
   int serial = 0;
-  bool saving = false;
+  Future<void> pendingSave = Future<void>.value();
   bool showSettings = false;
   String draftSectionTitle = '';
   double? previewIconSize;
@@ -165,31 +165,42 @@ class _GozarLauncherState extends State<GozarLauncher> {
 
   Future<void> persist(List<GozarLauncherSection> updated,
       {int? openIndex}) async {
-    if (saving) return;
-    saving = true;
     final original = sections;
     final oldPage = active;
     final destination = updated.isEmpty ? 0 :
         (openIndex ?? active).clamp(0, updated.length - 1);
+    // Render the new icon order immediately. Queue disk writes rather than
+    // dropping rapid rename/drag/column changes while a save is in flight.
     setState(() {
       sections = updated;
       active = destination;
       draftSectionTitle = updated.isEmpty ? '' : updated[destination].title;
       previewIconSize = null;
     });
-    final ok = await GozarLauncherStore.save(widget.preferences, updated);
-    if (!ok && mounted) {
-      setState(() {
-        sections = original;
-        active = oldPage;
-        draftSectionTitle = original.isEmpty ? '' : original[oldPage].title;
-      });
-      notice('تنظیمات لانچر ذخیره نشد.');
-    }
-    saving = false;
+    final write = pendingSave.then((_) async {
+      bool saved;
+      try {
+        saved = await GozarLauncherStore.save(
+            widget.preferences, updated);
+      } catch (_) {
+        saved = false;
+      }
+      if (!saved && mounted && identical(sections, updated)) {
+        setState(() {
+          sections = original;
+          active = oldPage;
+          draftSectionTitle =
+              original.isEmpty ? '' : original[oldPage].title;
+        });
+        notice('تنظیمات لانچر ذخیره نشد.');
+      }
+    });
+    pendingSave = write;
+    await write;
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && pages.hasClients && sections.isNotEmpty) {
+      if (mounted && pages.hasClients && sections.isNotEmpty &&
+          active == destination) {
         pages.jumpToPage(active);
       }
     });
