@@ -7,7 +7,8 @@ import 'gozar_dashboard_clock.dart';
 import 'gozar_notes_store.dart';
 import 'gozar_visuals.dart';
 
-const _weekdays = <String>['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
+const _weekdays = <String>['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'];
+const _weekShort = <String>['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 
 class GozarNotesScreen extends StatefulWidget {
   final SharedPreferences preferences;
@@ -272,104 +273,253 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
   }
 
   Widget calendar() {
-    final start = Jalali(month.year, month.month);
-    final weekdayOffset = start.weekDay - 1; // Saturday = 1.
-    final count = start.monthLength;
-    final currentKey = gozarDayKey(DateTime.now());
-    final daysWithNotes = notes.map((note) => note.day).toSet();
-    return Container(
-      key: const ValueKey('gozar-notes-calendar'),
-      margin: const EdgeInsets.fromLTRB(11, 8, 11, 7),
-      padding: const EdgeInsets.fromLTRB(9, 9, 9, 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [
-          Color(0xff173c5f), Color(0xff0b1f3a)]),
-        border: Border.all(color: GozarPalette.cyan.withOpacity(.35)),
-        borderRadius: BorderRadius.circular(23),
-      ),
-      child: Column(children: [
-        Row(children: [
-          IconButton(
-            key: const ValueKey('gozar-notes-prev-month'),
-            onPressed: () => shiftMonth(-1),
-            icon: const Icon(Icons.chevron_right_rounded,
-              color: GozarPalette.cyan)),
-          Expanded(child: Column(children: [
-            Text(gozarMonthNames[month.month - 1] + ' ' +
-                persianDigits(month.year),
-              style: const TextStyle(color: GozarPalette.text,
-                fontWeight: FontWeight.w800, fontSize: 18)),
-            const Text('تقویم هجری شمسی',
-              style: TextStyle(color: GozarPalette.muted, fontSize: 10)),
-          ])),
-          TextButton(
-            key: const ValueKey('gozar-notes-today'),
-            onPressed: goToToday, child: const Text('امروز')),
-          IconButton(
-            key: const ValueKey('gozar-notes-next-month'),
-            onPressed: () => shiftMonth(1),
-            icon: const Icon(Icons.chevron_left_rounded,
-              color: GozarPalette.cyan)),
-        ]),
-        const SizedBox(height: 7),
-        Row(children: [
-          for (final day in _weekdays)
-            Expanded(child: Center(child: Text(day,
-              style: TextStyle(color: day == 'ج'
-                  ? GozarPalette.red : GozarPalette.muted,
-                fontSize: 12, fontWeight: FontWeight.bold)))),
-        ]),
-        for (var row = 0; row < (weekdayOffset + count + 6) ~/ 7; row++)
-          Row(children: [
-            for (var column = 0; column < 7; column++)
-              Expanded(child: Builder(builder: (context) {
-                final day = row * 7 + column - weekdayOffset + 1;
-                if (day < 1 || day > count) {
-                  return const SizedBox(height: 47);
-                }
-                final date = Jalali(month.year, month.month, day);
-                final key = gozarDayKey(gozarGregorianDay(date));
-                final chosen = selected.year == date.year &&
-                    selected.month == date.month && selected.day == day;
-                final today = key == currentKey;
-                return InkWell(
-                  key: ValueKey('gozar-notes-day-' + key),
-                  onTap: () => setState(() { selected = date; }),
-                  borderRadius: BorderRadius.circular(13),
-                  child: Container(
-                    height: 47,
-                    decoration: BoxDecoration(
-                      color: chosen ? GozarPalette.cyan :
-                          today ? const Color(0xff214d6b) : null,
-                      border: today && !chosen ?
-                          Border.all(color: GozarPalette.cyan) : null,
-                      borderRadius: BorderRadius.circular(13)),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+    final first = Jalali(month.year, month.month);
+    final offset = first.weekDay - 1; // shamsi_date: Saturday is 1.
+    final count = first.monthLength;
+    final todayKey = gozarDayKey(DateTime.now());
+    final selectedKey = gozarDayKey(gozarGregorianDay(selected));
+    final marked = <String, int>{};
+    for (final note in notes) {
+      marked[note.day] = (marked[note.day] ?? 0) + 1;
+    }
+    // Explicit RTL for each seven-day row: Saturday is on the far RIGHT,
+    // Friday on the far LEFT, regardless of the parent/device locale.
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        key: const ValueKey('gozar-notes-calendar'),
+        margin: const EdgeInsets.fromLTRB(10, 6, 10, 9),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: const Color(0xff091b34),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xff29547b)),
+          boxShadow: [
+            BoxShadow(color: const Color(0xff030c1b).withOpacity(.35),
+              blurRadius: 15, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: Column(children: [
+          SizedBox(
+            height: 115,
+            child: Stack(fit: StackFit.expand, children: [
+              const CustomPaint(painter: _NotesMountainPainter()),
+              Container(decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topRight, end: Alignment.bottomLeft,
+                  colors: [Color(0x88152c54), Color(0x11091b34)],
+                ),
+              )),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(textDirection: TextDirection.rtl, children: [
+                  _monthControl(
+                    key: const ValueKey('gozar-notes-next-month'),
+                    icon: Icons.chevron_right_rounded, hint: 'ماه بعد',
+                    change: () => shiftMonth(1)),
+                  Expanded(child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(gozarMonthNames[month.month - 1] + ' ' +
+                              persianDigits(month.year),
+                        key: const ValueKey('gozar-notes-month-title'),
+                        maxLines: 1, textAlign: TextAlign.center,
+                        style: const TextStyle(color: GozarPalette.text,
+                          fontWeight: FontWeight.w900, fontSize: 25)),
+                      const Text('تقویم هجری شمسی',
+                        style: TextStyle(color: Color(0xffd0def1),
+                          fontSize: 11)),
+                    ],
+                  )),
+                  _monthControl(
+                    key: const ValueKey('gozar-notes-prev-month'),
+                    icon: Icons.chevron_left_rounded, hint: 'ماه قبل',
+                    change: () => shiftMonth(-1)),
+                ]),
+              ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            child: Row(textDirection: TextDirection.rtl, children: [
+              const Expanded(child: Text('هر روز، یک شروع تازه',
+                style: TextStyle(color: GozarPalette.muted,
+                  fontSize: 11))),
+              TextButton.icon(
+                key: const ValueKey('gozar-notes-today'),
+                onPressed: goToToday,
+                icon: const Icon(Icons.today_rounded, size: 17),
+                label: const Text('امروز'),
+                style: TextButton.styleFrom(
+                  foregroundColor: GozarPalette.cyan,
+                  visualDensity: VisualDensity.compact)),
+            ]),
+          ),
+          LayoutBuilder(builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 530;
+            final cellHeight = (constraints.maxWidth / 7 * .9)
+                .clamp(38.0, 58.0);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Column(children: [
+                Row(textDirection: TextDirection.rtl, children: [
+                  for (var column = 0; column < 7; column++)
+                    Expanded(child: Container(
+                      key: ValueKey('gozar-notes-weekday-' +
+                          column.toString()),
+                      height: 30,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: column == 6 ? const Color(0xff39243d)
+                            : const Color(0xff142d49),
+                        borderRadius: BorderRadius.circular(9)),
+                      child: Text(
+                        wide ? _weekdays[column] : _weekShort[column],
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: column == 6 ? const Color(0xffff8399)
+                              : const Color(0xffc6d5ed),
+                          fontWeight: FontWeight.w700,
+                          fontSize: wide ? 12 : 11)),
+                    )),
+                ]),
+                const SizedBox(height: 5),
+                for (var row = 0; row < (offset + count + 6) ~/ 7; row++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Row(
+                      textDirection: TextDirection.rtl,
                       children: [
-                        Text(persianDigits(day),
-                          style: TextStyle(
-                            color: chosen ? const Color(0xff071a2c) :
-                                column == 6 ? GozarPalette.red :
-                                GozarPalette.text,
-                            fontSize: 13,
-                            fontWeight: chosen ? FontWeight.w900 :
-                                FontWeight.w500)),
-                        if (daysWithNotes.contains(key))
-                          Container(width: 5, height: 5,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: chosen ? const Color(0xff071a2c) :
-                                  GozarPalette.cyan)),
+                        for (var column = 0; column < 7; column++)
+                          Expanded(child: Builder(builder: (context) {
+                            final day = row * 7 + column - offset + 1;
+                            if (day < 1 || day > count) {
+                              return SizedBox(height: cellHeight);
+                            }
+                            final date = Jalali(
+                                month.year, month.month, day);
+                            final key = gozarDayKey(
+                                gozarGregorianDay(date));
+                            final chosen = key == selectedKey;
+                            final today = key == todayKey;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 2),
+                              child: Material(
+                                color: chosen ? const Color(0xff48d9f2)
+                                    : today ? const Color(0xff214768)
+                                    : const Color(0xff11263e),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(11),
+                                  side: BorderSide(
+                                    color: today && !chosen
+                                        ? GozarPalette.cyan
+                                        : chosen
+                                            ? const Color(0xff83ebfc)
+                                            : const Color(0xff29445f)),
+                                ),
+                                child: InkWell(
+                                  key: ValueKey('gozar-notes-day-' + key),
+                                  onTap: () =>
+                                      setState(() { selected = date; }),
+                                  borderRadius: BorderRadius.circular(11),
+                                  child: SizedBox(
+                                    height: cellHeight,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(persianDigits(day),
+                                          style: TextStyle(
+                                            color: chosen
+                                                ? const Color(0xff081e33)
+                                                : column == 6
+                                                    ? const Color(0xffff8298)
+                                                    : GozarPalette.text,
+                                            fontSize: 14,
+                                            fontWeight: chosen
+                                                ? FontWeight.w900
+                                                : FontWeight.w700,
+                                          )),
+                                        const SizedBox(height: 3),
+                                        if (marked.containsKey(key))
+                                          Container(width: 5, height: 5,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: chosen
+                                                  ? const Color(0xff081e33)
+                                                  : GozarPalette.cyan))
+                                        else
+                                          const SizedBox(height: 5),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          })),
                       ],
                     ),
                   ),
-                );
-              })),
-          ]),
-      ]),
+              ]),
+            );
+          }),
+          Container(
+            margin: const EdgeInsets.fromLTRB(10, 7, 10, 10),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xff133454),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xff2c5b84)),
+            ),
+            child: Row(textDirection: TextDirection.rtl, children: [
+              const Icon(Icons.calendar_month_rounded,
+                color: GozarPalette.cyan, size: 25),
+              const SizedBox(width: 8),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(gozarJalaliLabel(selected),
+                    key: const ValueKey('gozar-notes-selected-date'),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: GozarPalette.text,
+                      fontWeight: FontWeight.w800, fontSize: 12)),
+                  Text(persianDigits(marked[selectedKey] ?? 0) +
+                      ' یادداشت برای این روز',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: GozarPalette.muted, fontSize: 10)),
+                ],
+              )),
+              FilledButton.icon(
+                key: const ValueKey('gozar-notes-add'),
+                onPressed: () => configureNote(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('افزودن', style: TextStyle(fontSize: 11)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xff126eac),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  visualDensity: VisualDensity.compact),
+              ),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
+
+  Widget _monthControl({
+    required Key key, required IconData icon, required String hint,
+    required VoidCallback change,
+  }) => IconButton(
+    key: key, tooltip: hint, onPressed: change,
+    icon: Icon(icon, color: GozarPalette.cyan, size: 26),
+    style: IconButton.styleFrom(
+      backgroundColor: const Color(0xff142e4b),
+      side: const BorderSide(color: Color(0xff39bad6))),
+  );
 
   Widget dailyList() {
     final dayNotes = GozarNotesStore.forDay(
@@ -385,12 +535,7 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
           Expanded(child: Text(gozarJalaliLabel(selected),
             style: const TextStyle(color: GozarPalette.text,
               fontWeight: FontWeight.w800))),
-          FilledButton.icon(
-            key: const ValueKey('gozar-notes-add'),
-            onPressed: () => configureNote(),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('یادداشت'),
-          ),
+          const SizedBox(width: 5),
         ]),
         if (alarmHint.isNotEmpty)
           Text(alarmHint, style: const TextStyle(
