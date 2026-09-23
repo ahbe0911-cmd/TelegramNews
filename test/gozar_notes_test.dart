@@ -82,7 +82,10 @@ void main() {
         const ValueKey('gozar-note-title')), 'قرار کتابخانه');
     await tester.enterText(find.byKey(
         const ValueKey('gozar-note-body')), 'تحویل کتاب');
-    await tester.tap(find.byKey(const ValueKey('gozar-note-save')));
+    final saveButton = find.byKey(const ValueKey('gozar-note-save'));
+    await tester.ensureVisible(saveButton);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(saveButton);
     await tester.pump(const Duration(milliseconds: 450));
     expect(GozarNotesStore.load(prefs).single.title, 'قرار کتابخانه');
     expect(revisions, 1);
