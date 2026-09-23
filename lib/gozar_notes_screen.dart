@@ -759,10 +759,10 @@ class _GozarDueTodayCardState extends State<GozarDueTodayCard>
             gradient: const LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
-              colors: [Color(0xff184565), Color(0xff0c233d)],
+              colors: [Color(0xffffffff), Color(0xffeff8ff)],
             ),
             borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: GozarPalette.cyan.withOpacity(.65)),
+            border: Border.all(color: const Color(0xffa2d4ed)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -772,31 +772,31 @@ class _GozarDueTodayCardState extends State<GozarDueTodayCard>
                   width: 43, height: 46,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: const Color(0xff246280),
+                    color: const Color(0xffd9edff),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(persianDigits(date.day),
                         style: const TextStyle(
-                          color: GozarPalette.text, fontSize: 19,
+                          color: GozarPalette.daylightInk, fontSize: 19,
                           fontWeight: FontWeight.w900)),
                       Text(gozarMonthNames[date.month - 1],
                         style: const TextStyle(
-                          color: GozarPalette.cyan, fontSize: 9)),
+                          color: GozarPalette.daylightAccent, fontSize: 9)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(child: Text('یادآوری‌های امروز',
                   style: TextStyle(
-                    color: GozarPalette.text,
+                    color: GozarPalette.daylightInk,
                     fontSize: 15, fontWeight: FontWeight.w800))),
                 if (due.length > 3)
                   Text('+' + persianDigits(due.length - 3),
-                    style: const TextStyle(color: GozarPalette.cyan)),
+                    style: const TextStyle(color: GozarPalette.daylightAccent)),
                 const Icon(Icons.notifications_active_outlined,
-                  color: GozarPalette.cyan, size: 22),
+                  color: GozarPalette.daylightAccent, size: 22),
               ]),
               const SizedBox(height: 9),
               for (final note in shown)
@@ -806,20 +806,20 @@ class _GozarDueTodayCardState extends State<GozarDueTodayCard>
                     Icon(note.reminderAt == null
                         ? Icons.sticky_note_2_outlined
                         : Icons.alarm_on_rounded,
-                      color: GozarPalette.cyan, size: 17),
+                      color: GozarPalette.daylightAccent, size: 17),
                     const SizedBox(width: 7),
                     Expanded(child: Text(note.title,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: GozarPalette.text, fontSize: 12))),
+                        color: GozarPalette.daylightInk, fontSize: 12))),
                     if (note.reminderAt != null)
                       Text(_dueClock(note.reminderAt!),
                         style: const TextStyle(
-                          color: GozarPalette.cyan, fontSize: 11)),
+                          color: GozarPalette.daylightAccent, fontSize: 11)),
                   ]),
                 ),
               const Text('نمایش یادداشت‌های همین روز، پس از زمان تعیین‌شده',
-                style: TextStyle(color: GozarPalette.muted, fontSize: 10)),
+                style: TextStyle(color: GozarPalette.daylightMuted, fontSize: 10)),
             ],
           ),
         ),
