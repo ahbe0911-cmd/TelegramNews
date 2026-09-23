@@ -12,10 +12,13 @@ on:
       - 'lib/gozar_visuals.dart'
       - 'lib/gozar_shortcuts.dart'
       - 'lib/gozar_launcher.dart'
+      - 'lib/gozar_notes_store.dart'
+      - 'lib/gozar_notes_screen.dart'
       - 'lib/gozar_dashboard_clock.dart'
       - 'lib/td_vmess_parser.dart'
       - 'native/SystemVpnBridge.kt'
       - 'native/GozarWebActivity.kt'
+      - 'native/GozarReminderBridge.kt'
       - 'native/SystemVpnService.kt'
       - 'native/AutomaticBypassPolicy.kt'
       - 'native/InternalTelegramProxyService.kt'
@@ -35,6 +38,7 @@ on:
       - 'test/td_internal_vpn_test.dart'
       - 'test/td_gozar_app_test.dart'
       - 'test/gozar_shortcuts_test.dart'
+      - 'test/gozar_notes_test.dart'
       - 'test/gozar_launcher_test.dart'
       - 'test/gozar_subscription_test.dart'
       - 'test/td_vpn_routing_test.dart'
@@ -180,7 +184,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Gozar standalone VPN source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_dashboard_clock.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart lib/gozar_dashboard_clock.dart lib/gozar_subscription.dart lib/td_system_vpn.dart lib/td_vmess_parser.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart test/gozar_notes_test.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
@@ -200,6 +204,9 @@ jobs:
           grep -q 'FLAG_ACTIVITY_RESET_TASK_IF_NEEDED' native/SystemVpnBridge.kt
           grep -q 'getLaunchIntentForPackage' native/SystemVpnBridge.kt
           grep -q 'component' lib/gozar_shortcuts.dart
+      - name: Verify Persian notes and scheduled reminder model
+        if: matrix.variant == 'gozar'
+        run: flutter test --reporter expanded test/gozar_notes_test.dart
       - name: Verify saved launcher sections and Android app launch
         if: matrix.variant == 'gozar'
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
