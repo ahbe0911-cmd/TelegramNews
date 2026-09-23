@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'gozar_visuals.dart';
+import 'gozar_daylight_backdrop.dart';
 import 'gozar_subscription.dart';
 import 'gozar_shortcuts.dart';
 import 'gozar_launcher.dart';
@@ -1094,6 +1095,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     return GozarPanel(
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       glow: connected ? GozarPalette.green : GozarPalette.blue,
+      daylight: true,
       child: Column(children: [
         // Both columns use the SAME 154dp dial at the SAME top edge.
         // On narrower devices they are scaled down by an equal factor.
@@ -1103,7 +1105,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             alignment: Alignment.topCenter,
             child: SizedBox(
               width: 154, height: 196,
-              child: GozarLiveClock(active: currentPage == 0),
+              child: GozarLiveClock(active: currentPage == 0, daylight: true),
             ),
           )),
           const SizedBox(width: 3),
@@ -1118,6 +1120,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                   child: GozarPowerButton(
                     key: const ValueKey('gozar-power'),
                     connected: connected,
+                    daylight: true,
                     busy: busy || disconnecting || stage == 'starting' ||
                         stage == 'consent' || stage == 'stopping',
                     label: canStop
@@ -1135,7 +1138,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         Text(detail, key: const ValueKey('gozar-vpn-status'),
           textAlign: TextAlign.center,
           style: TextStyle(color: connected
-              ? GozarPalette.cyan : GozarPalette.muted, fontSize: 11)),
+              ? const Color(0xff117145) : GozarPalette.daylightMuted,
+              fontSize: 11)),
         if (connected) ...[
           const SizedBox(height: 6),
           OutlinedButton.icon(
@@ -1163,12 +1167,12 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         const SizedBox(height: 5),
         Row(children: [
           const Icon(Icons.dns_rounded, size: 15,
-              color: GozarPalette.cyan),
+              color: GozarPalette.daylightAccent),
           const SizedBox(width: 5),
           Expanded(child: Text(serverLabel,
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: GozarPalette.text, fontSize: 11))),
+              color: GozarPalette.daylightInk, fontSize: 11))),
           TextButton(
             onPressed: () => setState(() {
               visitedPages.add(3);
@@ -1176,7 +1180,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               currentPage = 3;
             }),
             child: const Text('تغییر سرور', style: TextStyle(
-              color: GozarPalette.cyan, fontSize: 11)),
+              color: GozarPalette.daylightAccent, fontSize: 11)),
           ),
         ]),
       ]),
