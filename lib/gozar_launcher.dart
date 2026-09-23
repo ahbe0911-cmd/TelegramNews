@@ -429,7 +429,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: const Color(0xff102642),
+        color: const Color(0xfff5fbff),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: GozarPalette.blue.withOpacity(.6)),
       ),
@@ -692,7 +692,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              color: const Color(0xff193654),
+              color: const Color(0xffffffff),
               border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
             ),
             child: Center(child: FittedBox(
@@ -824,7 +824,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  color: const Color(0xff164467),
+                  color: const Color(0xffe4f3ff),
                   border: Border.all(color: GozarPalette.cyan.withOpacity(.6)),
                 ),
                 child: Column(
@@ -865,7 +865,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(21),
           gradient: const LinearGradient(colors: [
-            Color(0xff123f61), Color(0xff0a203d),
+            Color(0xffffffff), Color(0xffeaf5ff),
           ]),
           border: Border.all(color: GozarPalette.blue.withOpacity(.5)),
         ),
@@ -939,7 +939,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
             label: Text('افزودن برنامه به «' + section.title + '»',
               maxLines: 1, overflow: TextOverflow.ellipsis),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff1776a1),
+              backgroundColor: const Color(0xff236fc0),
               padding: const EdgeInsets.symmetric(
                   horizontal: 13, vertical: 9),
               visualDensity: VisualDensity.compact,
