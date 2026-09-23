@@ -5,16 +5,17 @@ import 'package:flutter/material.dart';
 /// Purely decorative visuals: real VPN state and traffic are supplied by the
 /// native bridge, never inferred from the design.
 abstract final class GozarPalette {
-  static const base = Color(0xff050d22);
-  static const navy = Color(0xff091c37);
-  static const panel = Color(0xff112544);
-  static const cyan = Color(0xff36eaff);
-  static const blue = Color(0xff2798fa);
-  static const purple = Color(0xff9c6bff);
-  static const green = Color(0xff38e087);
-  static const red = Color(0xffff5268);
-  static const text = Color(0xfff3f8ff);
-  static const muted = Color(0xffabbdd7);
+  // Daylight visual skin. VPN / calendar / shortcut behavior is unchanged.
+  static const base = Color(0xffeaf6ff);
+  static const navy = Color(0xfff7fbff);
+  static const panel = Color(0xfff4faff);
+  static const cyan = Color(0xff1976bd);
+  static const blue = Color(0xff286ac0);
+  static const purple = Color(0xff6659ad);
+  static const green = Color(0xff13965d);
+  static const red = Color(0xffed3c62);
+  static const text = Color(0xff193752);
+  static const muted = Color(0xff59738b);
   static const daylightInk = Color(0xff153754);
   static const daylightMuted = Color(0xff587792);
   static const daylightAccent = Color(0xff2367c4);
@@ -157,18 +158,13 @@ class GozarPanel extends StatelessWidget {
         begin: Alignment.topLeft, end: Alignment.bottomRight,
         colors: daylight
           ? const [Color(0xffffffff), Color(0xfff1f8ff)]
-          : [
-              const Color(0xff18335a).withOpacity(.89),
-              const Color(0xff09172e).withOpacity(.94),
-            ],
+          : const [Color(0xffffffff), Color(0xffedf6ff)],
       ),
       border: Border.all(color: daylight
-          ? const Color(0xffe1ecfa) : glow.withOpacity(.29)),
+          ? const Color(0xffe1ecfa) : glow.withOpacity(.23)),
       boxShadow: [
-        BoxShadow(color: daylight
-            ? const Color(0xff257bc1).withOpacity(.12)
-            : glow.withOpacity(.08),
-            blurRadius: 24, offset: const Offset(0, 7)),
+        BoxShadow(color: glow.withOpacity(daylight ? .10 : .08),
+            blurRadius: 22, offset: const Offset(0, 6)),
       ],
     ),
     child: child,
