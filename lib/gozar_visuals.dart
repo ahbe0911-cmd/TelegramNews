@@ -15,6 +15,10 @@ abstract final class GozarPalette {
   static const red = Color(0xffff5268);
   static const text = Color(0xfff3f8ff);
   static const muted = Color(0xffabbdd7);
+  static const daylightInk = Color(0xff153754);
+  static const daylightMuted = Color(0xff587792);
+  static const daylightAccent = Color(0xff2367c4);
+  static const daylightCard = Color(0xfff8fcff);
 }
 
 class AuroraBackdrop extends StatefulWidget {
@@ -136,10 +140,12 @@ class GozarPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   final Color glow;
+  final bool daylight;
   const GozarPanel({
     super.key, required this.child,
     this.padding = const EdgeInsets.all(16),
     this.glow = GozarPalette.cyan,
+    this.daylight = false,
   });
 
   @override
@@ -149,14 +155,19 @@ class GozarPanel extends StatelessWidget {
       borderRadius: BorderRadius.circular(22),
       gradient: LinearGradient(
         begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [
-          const Color(0xff18335a).withOpacity(.89),
-          const Color(0xff09172e).withOpacity(.94),
-        ],
+        colors: daylight
+          ? const [Color(0xffffffff), Color(0xfff1f8ff)]
+          : [
+              const Color(0xff18335a).withOpacity(.89),
+              const Color(0xff09172e).withOpacity(.94),
+            ],
       ),
-      border: Border.all(color: glow.withOpacity(.29)),
+      border: Border.all(color: daylight
+          ? const Color(0xffe1ecfa) : glow.withOpacity(.29)),
       boxShadow: [
-        BoxShadow(color: glow.withOpacity(.08),
+        BoxShadow(color: daylight
+            ? const Color(0xff257bc1).withOpacity(.12)
+            : glow.withOpacity(.08),
             blurRadius: 24, offset: const Offset(0, 7)),
       ],
     ),
