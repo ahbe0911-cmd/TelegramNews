@@ -149,6 +149,11 @@ class _GozarShortcutIconState extends State<GozarShortcutIcon> {
       _icon = Future<Uint8List?>.value(null);
       return;
     }
+    // Small bounded cache: switching launcher sections never repeats native
+    // icon requests, while a large installed-app picker cannot grow forever.
+    if (!_cache.containsKey(widget.shortcut.key) && _cache.length >= 192) {
+      _cache.remove(_cache.keys.first);
+    }
     _icon = _cache.putIfAbsent(widget.shortcut.key, () async {
       try {
         return await _channel.invokeMethod<Uint8List>('appIcon', {
