@@ -1552,31 +1552,40 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       }
     }
     return Scaffold(
-      backgroundColor: GozarPalette.base,
+      backgroundColor: currentPage == 0
+          ? const Color(0xff8ed2ff) : GozarPalette.base,
       body: Stack(children: [
-        const AuroraBackdrop(),
+        if (currentPage == 0) const GozarDaylightBackdrop()
+        else const AuroraBackdrop(),
         SafeArea(child: Column(children: [
           if (currentPage != 1) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
-              const Icon(Icons.shield_outlined,
-                color: GozarPalette.cyan, size: 27),
+              Icon(Icons.shield_outlined,
+                color: currentPage == 0
+                    ? GozarPalette.daylightAccent : GozarPalette.cyan,
+                size: 27),
               const SizedBox(width: 7),
-              const Text('گذر', style: TextStyle(
-                color: GozarPalette.text,
+              Text('گذر', style: TextStyle(
+                color: currentPage == 0
+                    ? GozarPalette.daylightInk : GozarPalette.text,
                 fontSize: 22, fontWeight: FontWeight.w800)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
-                  color: (stage == 'running'
-                    ? GozarPalette.cyan : GozarPalette.purple)
-                      .withOpacity(.13),
+                  color: currentPage == 0
+                      ? const Color(0xe8ffffff)
+                      : (stage == 'running'
+                          ? GozarPalette.cyan : GozarPalette.purple)
+                          .withOpacity(.13),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: (stage == 'running'
-                    ? GozarPalette.cyan : GozarPalette.purple)
-                      .withOpacity(.34)),
+                  border: Border.all(color: currentPage == 0
+                      ? const Color(0x996faff0)
+                      : (stage == 'running'
+                          ? GozarPalette.cyan : GozarPalette.purple)
+                          .withOpacity(.34)),
                 ),
                 child: Text(stage == 'running' ? '●  تونل فعال'
                     : stage == 'starting' || stage == 'consent'
@@ -1584,14 +1593,18 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                         : stage == 'stopping' ? '●  در حال قطع'
                         : '●  خاموش',
                     style: TextStyle(fontSize: 11,
-                        color: stage == 'running'
-                            ? GozarPalette.cyan : GozarPalette.muted)),
+                        color: currentPage == 0
+                            ? GozarPalette.daylightInk
+                            : stage == 'running'
+                                ? GozarPalette.cyan : GozarPalette.muted)),
               ),
               IconButton(
                 tooltip: 'به‌روزرسانی وضعیت',
                 onPressed: refresh,
-                icon: const Icon(Icons.refresh_rounded,
-                    color: GozarPalette.muted, size: 20),
+                icon: Icon(Icons.refresh_rounded,
+                    color: currentPage == 0
+                        ? GozarPalette.daylightInk : GozarPalette.muted,
+                    size: 20),
               ),
             ]),
           ),
@@ -1599,10 +1612,19 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             index: currentPage,
             children: [for (var index = 0; index < 4; index++) tab(index)],
           )),
-          NavigationBar(
+          Theme(
+            data: currentPage == 0
+                ? Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: GozarPalette.daylightAccent,
+                      brightness: Brightness.light))
+                : Theme.of(context),
+            child: NavigationBar(
             height: 68,
-            backgroundColor: const Color(0xff08172e),
-            indicatorColor: const Color(0xff154264),
+            backgroundColor: currentPage == 0
+                ? const Color(0xfffcfeff) : const Color(0xff08172e),
+            indicatorColor: currentPage == 0
+                ? const Color(0xffd3edff) : const Color(0xff154264),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             selectedIndex: currentPage,
             onDestinationSelected: (index) {
@@ -1633,6 +1655,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: GozarPalette.cyan),
                 label: 'تنظیمات'),
             ],
+          ),
           ),
         ])),
       ]),
