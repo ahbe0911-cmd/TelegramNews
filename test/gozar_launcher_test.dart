@@ -173,6 +173,68 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('launcher page still adds another app after five icons',
+      (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final originalApps = List<GozarShortcut>.generate(5, (i) =>
+      GozarShortcut(kind: 'app', target: 'com.example.app$i',
+        title: 'App $i', component: 'com.example.app$i.Main'));
+    const id = 'many-apps';
+    expect(await GozarLauncherStore.save(prefs, [
+      GozarLauncherSection(id: id, title: 'برنامه‌های من',
+        apps: originalApps),
+    ]), isTrue);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'appIcon') return null;
+      if (call.method == 'installedApps') {
+        return [
+          for (var i = 0; i < 6; i++) {
+            'package': 'com.example.app$i',
+            'label': 'App $i',
+            'component': 'com.example.app$i.Main',
+          },
+        ];
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: GozarLauncher(
+        preferences: prefs, onOpenApp: (app) async {}),
+    )));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-launcher-add-apps')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-launcher-grid-add-many-apps')),
+        findsOneWidget);
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-add-apps')));
+    await tester.pump(const Duration(milliseconds: 300));
+    final pickSix = find.byKey(const ValueKey(
+        'gozar-launcher-pick-app:com.example.app5:com.example.app5.Main'));
+    await tester.enterText(find.byKey(
+        const ValueKey('gozar-launcher-app-search')), 'App 5');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(pickSix, findsOneWidget);
+    await tester.tap(pickSix);
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-save-apps')));
+    await tester.pump(const Duration(milliseconds: 450));
+    final saved = GozarLauncherStore.load(prefs).single.apps;
+    expect(saved.length, 6);
+    expect(saved.last.target, 'com.example.app5');
+    expect(saved.last.component, 'com.example.app5.Main');
+    expect(find.byKey(const ValueKey('gozar-launcher-add-apps')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-launcher-grid-add-many-apps')),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('launcher tab opens section dialog and saved native app',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
