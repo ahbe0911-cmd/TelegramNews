@@ -435,6 +435,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     statusTimer?.cancel();
+    GozarReminderBridge.channel.setMethodCallHandler(null);
+    notesRevision.dispose();
     profile.dispose();
     super.dispose();
   }
