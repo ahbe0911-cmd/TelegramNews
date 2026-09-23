@@ -43,7 +43,9 @@ void main() {
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-home-notes-widget')),
-        findsOneWidget);
+        findsNothing);
+    expect(find.byKey(const ValueKey('gozar-user-shortcut-grid')),
+        findsNothing);
     await tester.tap(find.text('یادداشت'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-notes-calendar')),
@@ -107,18 +109,22 @@ void main() {
         messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
     await tester.pumpWidget(GozarApp(preferences: preferences));
     await tester.pump(const Duration(milliseconds: 350));
-    final shortcut = find.byKey(
-        const ValueKey('gozar-shortcut-app:com.example.installed:com.example.installed.LauncherAlias'));
+    expect(find.byKey(const ValueKey('gozar-user-shortcut-grid')),
+        findsNothing);
+    await tester.tap(find.text('تنظیمات'));
+    await tester.pump(const Duration(milliseconds: 250));
+    final shortcut = find.byKey(ValueKey('gozar-manage-shortcut-' +
+        selected.key));
     await tester.ensureVisible(shortcut);
     await tester.pump(const Duration(milliseconds: 150));
-    await tester.tap(shortcut);
+    await tester.tap(find.text('برنامه من').last);
     await tester.pump(const Duration(milliseconds: 150));
     expect(launchArgs?['package'], 'com.example.installed');
     expect(launchArgs?['component'], 'com.example.installed.LauncherAlias');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('editing a shortcut name updates home without changing launcher',
+  testWidgets('editing a saved shortcut preserves its Android launcher',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -159,21 +165,12 @@ void main() {
         find.byKey(const ValueKey('gozar-edit-shortcut-name')), 'اینستاگرام من');
     await tester.tap(find.byKey(const ValueKey('gozar-apply-shortcut-name')));
     await tester.pump(const Duration(milliseconds: 450));
-    await tester.tap(find.text('خانه'));
-    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('اینستاگرام من'), findsOneWidget);
-    final shortcut = find.byKey(ValueKey('gozar-shortcut-' + selected.key));
+    final shortcut = find.byKey(ValueKey('gozar-manage-shortcut-' +
+        selected.key));
     await tester.ensureVisible(shortcut);
-    final homeScroller = find.descendant(
-      of: find.byKey(const ValueKey('gozar-home')),
-      matching: find.byType(Scrollable),
-    ).first;
-    final homePosition = tester.state<ScrollableState>(homeScroller).position;
-    // Scroll above the fixed navigation bar after the new Today widget.
-    homePosition.jumpTo((homePosition.pixels + 160)
-        .clamp(0.0, homePosition.maxScrollExtent).toDouble());
     await tester.pump(const Duration(milliseconds: 220));
-    await tester.tap(shortcut);
+    await tester.tap(find.text('اینستاگرام من').last);
     await tester.pump(const Duration(milliseconds: 150));
     expect(opened?['package'], selected.target);
     expect(opened?['component'], selected.component);
