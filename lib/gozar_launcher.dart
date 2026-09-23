@@ -65,6 +65,18 @@ class GozarLauncherStore {
   static const maxSections = 8;
   static const maxAppsPerSection = 80;
 
+  /// Drop an icon directly onto another icon to move it into that position.
+  static List<GozarShortcut> moveApp(
+      List<GozarShortcut> items, String sourceKey, String targetKey) {
+    final original = List<GozarShortcut>.from(items);
+    final from = original.indexWhere((app) => app.key == sourceKey);
+    final to = original.indexWhere((app) => app.key == targetKey);
+    if (from < 0 || to < 0 || from == to) return original;
+    final moved = original.removeAt(from);
+    original.insert(to, moved);
+    return original;
+  }
+
   static List<GozarLauncherSection> load(SharedPreferences preferences) {
     final raw = preferences.getString(key);
     if (raw == null) {
