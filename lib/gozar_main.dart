@@ -49,7 +49,7 @@ class GozarApp extends StatelessWidget {
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(
         seedColor: GozarPalette.cyan,
         brightness: Brightness.light,
@@ -1200,7 +1200,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           stage == 'stopping' ? null : connect,
       style: FilledButton.styleFrom(
         backgroundColor: GozarPalette.blue,
-        foregroundColor: GozarPalette.text,
+        foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 13),
       ),
       icon: const Icon(Icons.power_settings_new_rounded),
@@ -1245,7 +1245,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           decoration: InputDecoration(
             hintText: 'vmess:// …',
             hintStyle: const TextStyle(color: GozarPalette.muted),
-            fillColor: const Color(0xff07132b).withOpacity(.80),
+            fillColor: const Color(0xfff0f8ff),
             filled: true,
             suffixIcon: IconButton(
               tooltip: hideProfile ? 'نمایش کانفیگ' : 'پنهان کردن کانفیگ',
@@ -1561,7 +1561,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           ? const Color(0xff8ed2ff) : GozarPalette.base,
       body: Stack(children: [
         if (currentPage == 0) const GozarDaylightBackdrop()
-        else const AuroraBackdrop(),
+        else const Positioned.fill(child: ColoredBox(
+          color: Color(0xffeaf6ff))),
         SafeArea(child: Column(children: [
           if (currentPage != 1) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
@@ -1618,18 +1619,14 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             children: [for (var index = 0; index < 4; index++) tab(index)],
           )),
           Theme(
-            data: currentPage == 0
-                ? Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.fromSeed(
-                      seedColor: GozarPalette.daylightAccent,
-                      brightness: Brightness.light))
-                : Theme.of(context),
+            data: Theme.of(context).copyWith(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: GozarPalette.daylightAccent,
+                  brightness: Brightness.light)),
             child: NavigationBar(
             height: 68,
-            backgroundColor: currentPage == 0
-                ? const Color(0xfffcfeff) : const Color(0xff08172e),
-            indicatorColor: currentPage == 0
-                ? const Color(0xffd3edff) : const Color(0xff154264),
+            backgroundColor: const Color(0xfffcfeff),
+            indicatorColor: const Color(0xffd3edff),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             selectedIndex: currentPage,
             onDestinationSelected: (index) {
