@@ -27,7 +27,8 @@ String persianDigits(Object value) {
 /// Clock hands and solar Hijri date follow the phone's time and timezone.
 class GozarLiveClock extends StatefulWidget {
   final bool active;
-  const GozarLiveClock({super.key, this.active = true});
+  final bool daylight;
+  const GozarLiveClock({super.key, this.active = true, this.daylight = false});
 
   @override
   State<GozarLiveClock> createState() => _GozarLiveClockState();
@@ -86,17 +87,20 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
         SizedBox(
           key: const ValueKey('gozar-clock-dial'),
           width: 154, height: 154,
-          child: CustomPaint(painter: _ClockPainter(now)),
+          child: CustomPaint(painter: _ClockPainter(now, daylight: widget.daylight)),
         ),
         const SizedBox(height: 4),
         Text(day + '، ' + persianDigits(jalali.day),
           maxLines: 1, overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: GozarPalette.text,
+          style: TextStyle(color: widget.daylight
+              ? GozarPalette.daylightInk : GozarPalette.text,
               fontSize: 13, fontWeight: FontWeight.w800)),
         Text(date, maxLines: 1, overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: GozarPalette.muted, fontSize: 10)),
+          style: TextStyle(color: widget.daylight
+              ? GozarPalette.daylightMuted : GozarPalette.muted,
+              fontSize: 10)),
       ]),
     );
   }
@@ -104,7 +108,8 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
 
 class _ClockPainter extends CustomPainter {
   final DateTime time;
-  const _ClockPainter(this.time);
+  final bool daylight;
+  const _ClockPainter(this.time, {this.daylight = false});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -114,7 +119,8 @@ class _ClockPainter extends CustomPainter {
         Paint()..color = GozarPalette.cyan.withOpacity(.16)
           ..style = PaintingStyle.stroke ..strokeWidth = 6);
     canvas.drawCircle(center, radius,
-        Paint()..color = const Color(0xff06152e));
+        Paint()..color = daylight
+            ? const Color(0xfffafdff) : const Color(0xff06152e));
     canvas.drawCircle(center, radius,
         Paint()..color = GozarPalette.blue.withOpacity(.86)
           ..style = PaintingStyle.stroke ..strokeWidth = 1.8);
@@ -127,7 +133,9 @@ class _ClockPainter extends CustomPainter {
       final p2 = center + Offset(math.cos(angle), math.sin(angle)) *
           (radius - 3);
       canvas.drawLine(p1, p2, Paint()
-        ..color = major ? Colors.white : GozarPalette.muted
+        ..color = daylight
+            ? (major ? GozarPalette.daylightInk : GozarPalette.daylightMuted)
+            : (major ? Colors.white : GozarPalette.muted)
         ..strokeWidth = major ? 1.6 : .7);
     }
     for (var n = 1; n <= 12; n++) {
@@ -135,8 +143,9 @@ class _ClockPainter extends CustomPainter {
       final position = center +
           Offset(math.cos(angle), math.sin(angle)) * (radius - 25);
       final label = TextPainter(
-        text: TextSpan(text: persianDigits(n), style: const TextStyle(
-          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+        text: TextSpan(text: persianDigits(n), style: TextStyle(
+          color: daylight ? GozarPalette.daylightInk : Colors.white,
+          fontWeight: FontWeight.bold, fontSize: 12)),
         textDirection: TextDirection.ltr,
       )..layout();
       label.paint(canvas, position - Offset(label.width / 2, label.height / 2));
@@ -151,9 +160,9 @@ class _ClockPainter extends CustomPainter {
     }
 
     hand((time.hour % 12 + time.minute / 60) * 30, radius * .47,
-        5, Colors.white);
+        5, daylight ? GozarPalette.daylightInk : Colors.white);
     hand((time.minute + time.second / 60) * 6, radius * .72,
-        3.5, Colors.white);
+        3.5, daylight ? GozarPalette.daylightInk : Colors.white);
     hand(time.second * 6, radius * .79, 1.2, GozarPalette.cyan);
     canvas.drawCircle(center, 4, Paint()..color = GozarPalette.cyan);
   }
