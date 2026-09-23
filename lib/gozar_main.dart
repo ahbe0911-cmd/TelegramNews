@@ -1270,6 +1270,14 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
     children: [
       _hero(),
+      GozarDueTodayCard(
+        preferences: widget.preferences,
+        refresh: notesRevision,
+        onOpen: () => setState(() {
+          visitedPages.add(2);
+          currentPage = 2;
+        }),
+      ),
     ],
   );
 
