@@ -131,10 +131,17 @@ void main() {
     expect(GozarNotesStore.load(prefs).single.title, 'قرار کتابخانه');
     expect(revisions, 1);
     final saved = GozarNotesStore.load(prefs).single;
-    await tester.ensureVisible(find.byKey(
-        ValueKey('gozar-note-done-' + saved.id)));
-    await tester.tap(find.byKey(
-        ValueKey('gozar-note-done-' + saved.id)));
+    final done = find.byKey(ValueKey('gozar-note-done-' + saved.id));
+    // The redesigned calendar can push the day's notes below the viewport
+    // on a small phone; scroll the outer list until the note is built.
+    await tester.scrollUntilVisible(done, 175,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('gozar-notes-page')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.pump(const Duration(milliseconds: 170));
+    await tester.tap(done);
     await tester.pump(const Duration(milliseconds: 250));
     expect(GozarNotesStore.load(prefs).single.done, isTrue);
     expect(revisions, 2);
