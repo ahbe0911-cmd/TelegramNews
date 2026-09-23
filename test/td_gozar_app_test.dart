@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/gozar_main.dart';
+import 'package:telegram_news/gozar_notes_store.dart';
 import 'package:telegram_news/gozar_shortcuts.dart';
 import 'package:telegram_news/td_system_vpn.dart';
 
@@ -82,6 +83,53 @@ void main() {
     expect(find.text('افزودن کانال عمومی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('home displays only notes due on this date, not future alarms',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final today = gozarDayKey(now);
+    final tomorrow = gozarDayKey(now.add(const Duration(days: 1)));
+    expect(await GozarNotesStore.save(preferences, [
+      GozarNote(id: 'due', day: today,
+        title: 'یادآوری رسیده', body: '',
+        reminderAt: now.subtract(const Duration(minutes: 5))
+            .millisecondsSinceEpoch),
+      GozarNote(id: 'future', day: today,
+        title: 'یادآوری بعدی', body: '',
+        reminderAt: now.add(const Duration(minutes: 25))
+            .millisecondsSinceEpoch),
+      GozarNote(id: 'tomorrow', day: tomorrow,
+        title: 'فردا', body: ''),
+    ]), isTrue);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'status') {
+        return {'stage': 'off', 'detail': 'off'};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    await tester.pumpWidget(GozarApp(preferences: preferences));
+    await tester.pump(const Duration(milliseconds: 350));
+    final card = find.byKey(const ValueKey('gozar-home-due-notes'));
+    await tester.scrollUntilVisible(card, 150,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('gozar-home')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    expect(card, findsOneWidget);
+    expect(find.text('یادآوری رسیده'), findsOneWidget);
+    expect(find.text('یادآوری بعدی'), findsNothing);
+    expect(find.text('فردا'), findsNothing);
+    expect(find.byKey(const ValueKey('gozar-user-shortcut-grid')),
+        findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('tap user shortcut launches selected Android alias',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
