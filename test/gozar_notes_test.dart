@@ -46,6 +46,43 @@ void main() {
     expect(GozarNotesStore.load(prefs).first.title, 'کار ویرایش شد');
   });
 
+  test('home note card shows only this day and only once alarm time arrives',
+      () {
+    final now = DateTime(2026, 10, 17, 9, 30);
+    final today = gozarDayKey(now);
+    final tomorrow = gozarDayKey(now.add(const Duration(days: 1)));
+    final yesterday = gozarDayKey(now.subtract(const Duration(days: 1)));
+    final morning = DateTime(2026, 10, 17, 9, 0).millisecondsSinceEpoch;
+    final future = DateTime(2026, 10, 17, 9, 45).millisecondsSinceEpoch;
+    final notes = [
+      GozarNote(id: 'done', day: today,
+        title: 'انجام شده', body: '', done: true),
+      GozarNote(id: 'untimed', day: today,
+        title: 'کار روز', body: ''),
+      GozarNote(id: 'due', day: today,
+        title: 'زنگ امروز', body: '', reminderAt: morning),
+      GozarNote(id: 'later', day: today,
+        title: 'هنوز زود است', body: '', reminderAt: future),
+      GozarNote(id: 'tomorrow', day: tomorrow,
+        title: 'برنامه فردا', body: ''),
+      GozarNote(id: 'old', day: yesterday,
+        title: 'برنامه دیروز', body: ''),
+    ];
+    final visible = GozarNotesStore.dueForHome(notes, now);
+    expect(visible.map((n) => n.id), containsAll(['untimed', 'due']));
+    expect(visible.map((n) => n.id),
+        isNot(contains(anyOf('done', 'later', 'tomorrow', 'old'))));
+    expect(GozarNotesStore.dueForHome(notes,
+        DateTime(2026, 10, 17, 9, 44))
+        .any((n) => n.id == 'later'), isFalse);
+    expect(GozarNotesStore.dueForHome(notes,
+        DateTime(2026, 10, 17, 9, 45))
+        .any((n) => n.id == 'later'), isTrue);
+    expect(GozarNotesStore.dueForHome(notes,
+        DateTime(2026, 10, 18, 0, 0))
+        .any((n) => n.id == 'due'), isFalse);
+  });
+
   test('invalid and malformed notes never overwrite valid saved data',
       () async {
     final prefs = await SharedPreferences.getInstance();
