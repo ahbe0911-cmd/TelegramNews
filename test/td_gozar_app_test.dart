@@ -40,16 +40,27 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('سرورها'), findsOneWidget);
+    expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
-    await tester.tap(find.text('سرورها'));
+    expect(find.byKey(const ValueKey('gozar-home-notes-widget')),
+        findsOneWidget);
+    await tester.tap(find.text('یادداشت'));
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(const ValueKey('gozar-config')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-notes-calendar')),
+        findsOneWidget);
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
-    // Settings is a lazy, scrollable page: the Android VPN section may
-    // initially be below the fold now that shortcut management is above it.
+    expect(find.byKey(const ValueKey('gozar-open-servers-settings')),
+        findsOneWidget);
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-open-servers-settings')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-config')), findsOneWidget);
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-back-to-settings')));
+    await tester.pump(const Duration(milliseconds: 250));
+    // VPN options remain in Settings; server management is a nested card.
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('gozar-vpn-settings')),
       220,
