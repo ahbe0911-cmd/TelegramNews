@@ -1153,9 +1153,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           Expanded(child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.topCenter,
-            child: const SizedBox(
+            child: SizedBox(
               width: 154, height: 196,
-              child: GozarLiveClock(),
+              child: GozarLiveClock(active: currentPage == 0),
             ),
           )),
           const SizedBox(width: 3),
