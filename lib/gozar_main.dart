@@ -98,6 +98,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   Timer? statusTimer;
   bool hideProfile = true;
   int currentPage = 0;
+  // Mount tabs lazily once, then keep their State (launcher page/scroll
+  // position, icon futures, settings) alive when switching between tabs.
+  final Set<int> visitedPages = {0};
+  late final GozarLauncher launcherPage;
   int selectedProfile = -1;
   List<GozarProfile> profiles = [];
   List<GozarShortcut> shortcuts = [];
@@ -129,6 +133,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     shortcuts = GozarShortcutStore.load(widget.preferences);
+    launcherPage = GozarLauncher(
+      preferences: widget.preferences, onOpenApp: _openShortcut);
     mode = widget.preferences.getString('gozar_routing_mode') == 'selected'
         ? 'selected' : 'all';
     packages = (widget.preferences.getStringList('gozar_selected_packages')
@@ -1620,18 +1626,21 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final views = <Widget>[
-      _home(),
-      GozarLauncher(preferences: widget.preferences, onOpenApp: _openShortcut),
-      _servers(),
-      _security(),
-    ];
+    Widget tab(int index) {
+      if (!visitedPages.contains(index)) return const SizedBox.shrink();
+      switch (index) {
+        case 0: return _home();
+        case 1: return launcherPage;
+        case 2: return _servers();
+        default: return _security();
+      }
+    }
     return Scaffold(
       backgroundColor: GozarPalette.base,
       body: Stack(children: [
         const AuroraBackdrop(),
         SafeArea(child: Column(children: [
-          Padding(
+          if (currentPage != 1) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
               const Icon(Icons.shield_outlined,
@@ -1670,7 +1679,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               ),
             ]),
           ),
-          Expanded(child: views[currentPage]),
+          Expanded(child: IndexedStack(
+            index: currentPage,
+            children: [for (var index = 0; index < 4; index++) tab(index)],
+          )),
           NavigationBar(
             height: 68,
             backgroundColor: const Color(0xff08172e),
@@ -1678,7 +1690,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             selectedIndex: currentPage,
             onDestinationSelected: (index) {
-              setState(() { currentPage = index; });
+              setState(() {
+                visitedPages.add(index);
+                currentPage = index;
+              });
             },
             destinations: const [
               NavigationDestination(
