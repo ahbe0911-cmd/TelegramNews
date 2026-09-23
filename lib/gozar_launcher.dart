@@ -402,6 +402,127 @@ class _GozarLauncherState extends State<GozarLauncher> {
     await reorderApp(section, app.key, section.apps[destination].key);
   }
 
+  Widget inlineSectionSettings(GozarLauncherSection section) {
+    return Container(
+      key: const ValueKey('gozar-launcher-inline-settings'),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xff102642),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: GozarPalette.blue.withOpacity(.6)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(Icons.tune_rounded, color: GozarPalette.cyan, size: 19),
+          const SizedBox(width: 6),
+          const Expanded(child: Text('تنظیمات همین بخش',
+            style: TextStyle(color: GozarPalette.text,
+              fontWeight: FontWeight.bold))),
+          IconButton(
+            key: const ValueKey('gozar-launcher-close-settings'),
+            tooltip: 'بستن تنظیمات لانچر',
+            onPressed: () => setState(() { showSettings = false; }),
+            icon: const Icon(Icons.close_rounded, size: 19)),
+        ]),
+        TextFormField(
+          key: ValueKey('gozar-launcher-inline-name-' + section.id),
+          initialValue: draftSectionTitle,
+          maxLength: 40,
+          onChanged: (value) { draftSectionTitle = value; },
+          onFieldSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              updateSection(section, title: value.trim());
+            }
+          },
+          decoration: InputDecoration(
+            labelText: 'نام بخش',
+            suffixIcon: IconButton(
+              key: const ValueKey('gozar-launcher-save-inline-name'),
+              tooltip: 'ذخیره نام بخش',
+              icon: const Icon(Icons.check_circle_outline_rounded,
+                color: GozarPalette.cyan),
+              onPressed: () {
+                final name = draftSectionTitle.trim();
+                if (name.isEmpty || name.length > 40) {
+                  notice('نام بخش باید بین ۱ تا ۴۰ نویسه باشد.');
+                  return;
+                }
+                updateSection(section, title: name);
+                FocusScope.of(context).unfocus();
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Expanded(child: Text('تعداد ستون‌ها',
+            style: TextStyle(color: GozarPalette.text, fontSize: 12))),
+          for (final columns in [3, 4, 5, 6])
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: ChoiceChip(
+                key: ValueKey('gozar-launcher-inline-cols-' +
+                    columns.toString()),
+                label: Text(columns.toString()),
+                selected: section.columns == columns,
+                onSelected: (_) =>
+                    updateSection(section, columns: columns),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 7),
+        Row(children: [
+          const Expanded(child: Text('اندازه آیکن',
+            style: TextStyle(color: GozarPalette.text, fontSize: 12))),
+          Text((previewIconSize ?? section.iconSize).round().toString() +
+              'dp', style: const TextStyle(color: GozarPalette.cyan)),
+        ]),
+        Slider(
+          key: const ValueKey('gozar-launcher-inline-icon-size'),
+          value: previewIconSize ?? section.iconSize,
+          min: 36, max: 72, divisions: 12,
+          onChanged: (value) =>
+            setState(() { previewIconSize = value; }),
+          onChangeEnd: (value) =>
+            updateSection(section, iconSize: value),
+        ),
+        const Divider(height: 15),
+        OutlinedButton.icon(
+          key: const ValueKey('gozar-launcher-inline-delete-section'),
+          onPressed: () => confirmDeleteSection(section),
+          icon: const Icon(Icons.delete_outline_rounded,
+            color: GozarPalette.red),
+          label: const Text('حذف این بخش',
+            style: TextStyle(color: GozarPalette.red)),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> confirmDeleteSection(GozarLauncherSection section) async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف بخش لانچر'),
+        content: Text('بخش «' + section.title +
+          '» و میانبرهای داخل آن حذف شوند؟ '
+          'خود برنامه‌های گوشی حذف نمی‌شوند.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف بخش')),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    final remaining = sections.where((s) => s.id != section.id).toList();
+    await persist(remaining, openIndex:
+        active.clamp(0, remaining.isEmpty ? 0 : remaining.length - 1));
+    if (mounted) setState(() { showSettings = false; });
+  }
+
   Future<void> addApps(GozarLauncherSection section) async {
     List<Map<String, String>> installed;
     try {
