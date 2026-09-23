@@ -42,7 +42,8 @@ object GozarReminderScheduler {
     fun notificationsAllowed(context: Context): Boolean {
         val notificationManager = context.getSystemService(
             Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (!notificationManager.areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= 24 &&
+            !notificationManager.areNotificationsEnabled()) return false
         return Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
