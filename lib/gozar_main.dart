@@ -1092,7 +1092,12 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     final connected = stage == 'running';
     final canStop = busy || connected || stage == 'starting' ||
         stage == 'consent' || stage == 'stopping';
-    return GozarPanel(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: GozarPalette.daylightAccent,
+          brightness: Brightness.light)),
+      child: GozarPanel(
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       glow: connected ? GozarPalette.green : GozarPalette.blue,
       daylight: true,
@@ -1184,7 +1189,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           ),
         ]),
       ]),
-    );
+    ));
   }
 
   Widget _connectActions() => Row(children: [
@@ -1633,26 +1638,30 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 currentPage = index;
               });
             },
-            destinations: const [
+            destinations: [
               NavigationDestination(
-                icon: Icon(Icons.home_outlined),
+                icon: const Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded,
-                    color: GozarPalette.cyan),
+                    color: currentPage == 0
+                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'خانه'),
               NavigationDestination(
-                icon: Icon(Icons.grid_view_outlined),
+                icon: const Icon(Icons.grid_view_outlined),
                 selectedIcon: Icon(Icons.grid_view_rounded,
-                    color: GozarPalette.cyan),
+                    color: currentPage == 0
+                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'لانچر'),
               NavigationDestination(
-                icon: Icon(Icons.event_note_outlined),
+                icon: const Icon(Icons.event_note_outlined),
                 selectedIcon: Icon(Icons.event_note_rounded,
-                    color: GozarPalette.cyan),
+                    color: currentPage == 0
+                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'یادداشت'),
               NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
+                icon: const Icon(Icons.settings_outlined),
                 selectedIcon: Icon(Icons.settings_rounded,
-                    color: GozarPalette.cyan),
+                    color: currentPage == 0
+                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'تنظیمات'),
             ],
           ),
