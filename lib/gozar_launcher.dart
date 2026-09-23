@@ -693,12 +693,16 @@ class _GozarLauncherState extends State<GozarLauncher> {
                 switch (action) {
                   case 'rename':
                     renameApp(section, app);
+                    return;
                   case 'before':
                     moveAppByStep(section, app, -1);
+                    return;
                   case 'after':
                     moveAppByStep(section, app, 1);
+                    return;
                   case 'remove':
                     removeApp(section, app);
+                    return;
                 }
               },
             ),
