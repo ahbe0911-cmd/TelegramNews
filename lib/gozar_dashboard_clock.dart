@@ -26,7 +26,8 @@ String persianDigits(Object value) {
 
 /// Clock hands and solar Hijri date follow the phone's time and timezone.
 class GozarLiveClock extends StatefulWidget {
-  const GozarLiveClock({super.key});
+  final bool active;
+  const GozarLiveClock({super.key, this.active = true});
 
   @override
   State<GozarLiveClock> createState() => _GozarLiveClockState();
@@ -40,9 +41,29 @@ class _GozarLiveClockState extends State<GozarLiveClock> {
   void initState() {
     super.initState();
     now = DateTime.now();
+    if (widget.active) _startTicker();
+  }
+
+  void _startTicker() {
+    timer?.cancel();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() { now = DateTime.now(); });
+      if (mounted && widget.active) {
+        setState(() { now = DateTime.now(); });
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant GozarLiveClock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active == widget.active) return;
+    if (widget.active) {
+      now = DateTime.now();
+      _startTicker();
+    } else {
+      timer?.cancel();
+      timer = null;
+    }
   }
 
   @override
