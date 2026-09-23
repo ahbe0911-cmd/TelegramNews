@@ -174,7 +174,14 @@ class _GozarLauncherState extends State<GozarLauncher> {
     setState(() {
       sections = updated;
       active = destination;
-      draftSectionTitle = updated.isEmpty ? '' : updated[destination].title;
+      // Preserve unfinished inline title edits while changing icon size,
+      // columns or app order in the very same launcher section.
+      if (updated.isEmpty) {
+        draftSectionTitle = '';
+      } else if (original.isEmpty || destination != oldPage ||
+          updated[destination].title != original[oldPage].title) {
+        draftSectionTitle = updated[destination].title;
+      }
       previewIconSize = null;
     });
     final write = pendingSave.then((_) async {
