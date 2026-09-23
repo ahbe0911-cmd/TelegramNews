@@ -137,11 +137,15 @@ class _GozarLauncherState extends State<GozarLauncher> {
   int active = 0;
   int serial = 0;
   bool saving = false;
+  bool showSettings = false;
+  String draftSectionTitle = '';
+  double? previewIconSize;
 
   @override
   void initState() {
     super.initState();
     sections = GozarLauncherStore.load(widget.preferences);
+    if (sections.isNotEmpty) draftSectionTitle = sections.first.title;
   }
 
   @override
@@ -165,10 +169,19 @@ class _GozarLauncherState extends State<GozarLauncher> {
     final oldPage = active;
     final destination = updated.isEmpty ? 0 :
         (openIndex ?? active).clamp(0, updated.length - 1);
-    setState(() { sections = updated; active = destination; });
+    setState(() {
+      sections = updated;
+      active = destination;
+      draftSectionTitle = updated.isEmpty ? '' : updated[destination].title;
+      previewIconSize = null;
+    });
     final ok = await GozarLauncherStore.save(widget.preferences, updated);
     if (!ok && mounted) {
-      setState(() { sections = original; active = oldPage; });
+      setState(() {
+        sections = original;
+        active = oldPage;
+        draftSectionTitle = original.isEmpty ? '' : original[oldPage].title;
+      });
       notice('تنظیمات لانچر ذخیره نشد.');
     }
     saving = false;
