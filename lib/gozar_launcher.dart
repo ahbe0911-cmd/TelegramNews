@@ -649,33 +649,101 @@ class _GozarLauncherState extends State<GozarLauncher> {
   }
 
   Widget appTile(GozarLauncherSection section,
-      GozarShortcut app, double cellWidth) {
+      GozarShortcut app, double cellWidth, {bool controls = true}) {
     final size = math.min(section.iconSize, cellWidth - 14)
         .clamp(28.0, 72.0);
     return InkWell(
       key: ValueKey('gozar-launcher-open-' + app.key),
       borderRadius: BorderRadius.circular(16),
-      onTap: () => widget.onOpenApp(app),
-      onLongPress: () => removeApp(section, app),
+      onTap: controls ? () => widget.onOpenApp(app) : null,
       child: Column(children: [
-        Expanded(child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: const Color(0xff193654),
-            border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
-          ),
-          child: Center(child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: GozarShortcutIcon(shortcut: app, size: size),
+        Expanded(child: Stack(children: [
+          Positioned.fill(child: Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xff193654),
+              border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
+            ),
+            child: Center(child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: GozarShortcutIcon(shortcut: app, size: size),
+            )),
           )),
-        )),
+          if (controls) Positioned(top: 0, right: 0, child: SizedBox(
+            width: 28, height: 30,
+            child: PopupMenuButton<String>(
+              key: ValueKey('gozar-launcher-app-menu-' + app.key),
+              tooltip: 'ویرایش یا جابه‌جایی برنامه',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: const Icon(Icons.more_horiz_rounded,
+                color: GozarPalette.cyan),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'rename',
+                  child: Text('ویرایش نام')),
+                PopupMenuItem(value: 'before',
+                  child: Text('انتقال به قبل')),
+                PopupMenuItem(value: 'after',
+                  child: Text('انتقال به بعد')),
+                PopupMenuItem(value: 'remove',
+                  child: Text('حذف از این بخش')),
+              ],
+              onSelected: (action) {
+                switch (action) {
+                  case 'rename':
+                    renameApp(section, app);
+                  case 'before':
+                    moveAppByStep(section, app, -1);
+                  case 'after':
+                    moveAppByStep(section, app, 1);
+                  case 'remove':
+                    removeApp(section, app);
+                }
+              },
+            ),
+          )),
+        ])),
         const SizedBox(height: 5),
         Text(app.title, maxLines: 2, overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(color: GozarPalette.text, fontSize: 10.5)),
       ]),
+    );
+  }
+
+  /// Long-press any program and drop it on a different icon. The Android
+  /// package/component remain untouched when the visual order changes.
+  Widget draggableAppTile(GozarLauncherSection section,
+      GozarShortcut app, double cellWidth) {
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != app.key &&
+          section.apps.any((candidate) => candidate.key == details.data),
+      onAcceptWithDetails: (details) =>
+          reorderApp(section, details.data, app.key),
+      builder: (context, accepted, rejected) => Container(
+        decoration: accepted.isEmpty ? null : BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: GozarPalette.cyan, width: 2),
+        ),
+        child: LongPressDraggable<String>(
+          data: app.key,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: cellWidth,
+              height: cellWidth / .76,
+              child: Opacity(opacity: .88,
+                child: appTile(section, app, cellWidth, controls: false)),
+            ),
+          ),
+          childWhenDragging: Opacity(
+            opacity: .28,
+            child: appTile(section, app, cellWidth),
+          ),
+          child: appTile(section, app, cellWidth),
+        ),
+      ),
     );
   }
 
@@ -710,7 +778,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
           crossAxisSpacing: 8, childAspectRatio: .76,
         ),
         itemBuilder: (context, index) =>
-            appTile(section, section.apps[index], cellWidth),
+            draggableAppTile(section, section.apps[index], cellWidth),
       );
     },
   );
