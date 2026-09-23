@@ -140,6 +140,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
   bool showSettings = false;
   String draftSectionTitle = '';
   double? previewIconSize;
+  List<Map<String, String>>? cachedInstalledApps;
+  DateTime? installedAppsFetchedAt;
 
   @override
   void initState() {
@@ -525,11 +527,20 @@ class _GozarLauncherState extends State<GozarLauncher> {
 
   Future<void> addApps(GozarLauncherSection section) async {
     List<Map<String, String>> installed;
-    try {
-      installed = await SystemVpnBridge.installedApps();
-    } catch (_) {
-      notice('فهرست برنامه‌های نصب‌شده دریافت نشد.');
-      return;
+    final cached = cachedInstalledApps;
+    final fetched = installedAppsFetchedAt;
+    if (cached != null && fetched != null &&
+        DateTime.now().difference(fetched) < const Duration(seconds: 30)) {
+      installed = cached;
+    } else {
+      try {
+        installed = await SystemVpnBridge.installedApps();
+        cachedInstalledApps = installed;
+        installedAppsFetchedAt = DateTime.now();
+      } catch (_) {
+        notice('فهرست برنامه‌های نصب‌شده دریافت نشد.');
+        return;
+      }
     }
     if (!mounted) return;
     var filter = '';
