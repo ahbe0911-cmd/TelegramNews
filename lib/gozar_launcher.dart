@@ -307,6 +307,101 @@ class _GozarLauncherState extends State<GozarLauncher> {
     }
   }
 
+  Future<void> updateSection(GozarLauncherSection section, {
+    String? title, int? columns, double? iconSize,
+  }) async {
+    final index = sections.indexWhere((s) => s.id == section.id);
+    if (index < 0) return;
+    final next = [...sections];
+    next[index] = next[index].copyWith(
+      title: title, columns: columns, iconSize: iconSize,
+    );
+    await persist(next, openIndex: index);
+  }
+
+  Future<void> renameApp(GozarLauncherSection section,
+      GozarShortcut app) async {
+    final controller = TextEditingController(text: app.title);
+    try {
+      final value = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: const ValueKey('gozar-launcher-rename-dialog'),
+          title: const Text('ویرایش نام برنامه در لانچر'),
+          content: TextField(
+            key: const ValueKey('gozar-launcher-app-name'),
+            controller: controller, autofocus: true,
+            maxLength: 48, textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'نام نمایشی',
+              helperText: 'نام اصلی برنامه و مسیر اجرای آن تغییر نمی‌کند.',
+            ),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('انصراف')),
+            FilledButton(
+              key: const ValueKey('gozar-launcher-save-app-name'),
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isEmpty || name.length > 48) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text(
+                      'نام برنامه باید بین ۱ تا ۴۸ نویسه باشد.')));
+                  return;
+                }
+                Navigator.pop(dialogContext, name);
+              },
+              child: const Text('ذخیره نام'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || value == null || value == app.title) return;
+      final sectionIndex = sections.indexWhere((s) => s.id == section.id);
+      if (sectionIndex < 0) return;
+      final current = sections[sectionIndex];
+      final appIndex = current.apps.indexWhere((s) => s.key == app.key);
+      if (appIndex < 0) return;
+      final updatedApps = [...current.apps];
+      updatedApps[appIndex] = updatedApps[appIndex].renamed(value);
+      final updated = [...sections];
+      updated[sectionIndex] = current.copyWith(apps: updatedApps);
+      await persist(updated, openIndex: sectionIndex);
+    } finally {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      controller.dispose();
+    }
+  }
+
+  Future<void> reorderApp(GozarLauncherSection section,
+      String sourceKey, String targetKey) async {
+    final index = sections.indexWhere((s) => s.id == section.id);
+    if (index < 0) return;
+    final current = sections[index];
+    final reordered = GozarLauncherStore.moveApp(
+        current.apps, sourceKey, targetKey);
+    if (reordered.map((s) => s.key).join('|') ==
+        current.apps.map((s) => s.key).join('|')) return;
+    final next = [...sections];
+    next[index] = current.copyWith(apps: reordered);
+    await persist(next, openIndex: index);
+  }
+
+  Future<void> moveAppByStep(GozarLauncherSection section,
+      GozarShortcut app, int delta) async {
+    final index = section.apps.indexWhere((s) => s.key == app.key);
+    final destination = index + delta;
+    if (index < 0 || destination < 0 ||
+        destination >= section.apps.length) return;
+    await reorderApp(section, app.key, section.apps[destination].key);
+  }
+
   Future<void> addApps(GozarLauncherSection section) async {
     List<Map<String, String>> installed;
     try {
