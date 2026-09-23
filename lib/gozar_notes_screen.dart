@@ -10,6 +10,54 @@ import 'gozar_visuals.dart';
 const _weekdays = <String>['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'];
 const _weekShort = <String>['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 
+/// Lightweight static illustrated month header: no external artwork,
+/// animation, network requests or extra APK assets are needed.
+class _NotesMountainPainter extends CustomPainter {
+  const _NotesMountainPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final area = Offset.zero & size;
+    canvas.drawRect(area, Paint()..shader = const LinearGradient(
+      begin: Alignment.topLeft, end: Alignment.bottomRight,
+      colors: [Color(0xff16416e), Color(0xff0a1c35)],
+    ).createShader(area));
+    final moon = Offset(size.width * .25, size.height * .27);
+    canvas.drawCircle(moon, 16,
+      Paint()..color = const Color(0x28ffedc4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
+    canvas.drawCircle(moon, 11,
+      Paint()..color = const Color(0xffffefc8));
+    final back = Path()
+      ..moveTo(0, size.height * .81)
+      ..lineTo(size.width * .11, size.height * .52)
+      ..lineTo(size.width * .19, size.height * .7)
+      ..lineTo(size.width * .32, size.height * .38)
+      ..lineTo(size.width * .47, size.height * .78)
+      ..lineTo(size.width * .63, size.height * .49)
+      ..lineTo(size.width * .79, size.height * .81)
+      ..lineTo(size.width, size.height * .56)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(back, Paint()..color = const Color(0xff26537d));
+    final front = Path()
+      ..moveTo(0, size.height * .83)
+      ..lineTo(size.width * .18, size.height * .7)
+      ..lineTo(size.width * .37, size.height * .84)
+      ..lineTo(size.width * .59, size.height * .67)
+      ..lineTo(size.width * .8, size.height * .83)
+      ..lineTo(size.width, size.height * .7)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(front, Paint()..color = const Color(0xff102d51));
+  }
+
+  @override
+  bool shouldRepaint(covariant _NotesMountainPainter oldDelegate) => false;
+}
+
 class GozarNotesScreen extends StatefulWidget {
   final SharedPreferences preferences;
   final VoidCallback onChanged;
