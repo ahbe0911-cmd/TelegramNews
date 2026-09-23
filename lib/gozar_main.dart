@@ -52,13 +52,13 @@ class GozarApp extends StatelessWidget {
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
         seedColor: GozarPalette.cyan,
-        brightness: Brightness.dark,
+        brightness: Brightness.light,
         surface: GozarPalette.navy,
       ),
       scaffoldBackgroundColor: GozarPalette.base,
       fontFamily: 'Vazirmatn',
       snackBarTheme: const SnackBarThemeData(
-        backgroundColor: Color(0xff203657),
+        backgroundColor: Color(0xffe8f4ff),
         contentTextStyle: TextStyle(color: GozarPalette.text),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -67,7 +67,7 @@ class GozarApp extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xff49628b)),
+          borderSide: const BorderSide(color: Color(0xffa4c5e0)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
