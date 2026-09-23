@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -687,88 +689,147 @@ class _GozarNotesScreenState extends State<GozarNotesScreen> {
   );
 }
 
-class GozarTodayNotesWidget extends StatelessWidget {
+/// A small dated agenda directly under the VPN card. It stays hidden until
+/// a note is actually due on the phone's current date. The Android alarm is
+/// scheduled separately and continues to work while Gozar is closed.
+class GozarDueTodayCard extends StatefulWidget {
   final SharedPreferences preferences;
   final VoidCallback onOpen;
   final ValueListenable<int> refresh;
-  const GozarTodayNotesWidget({
-    super.key, required this.preferences,
-    required this.onOpen, required this.refresh,
+
+  const GozarDueTodayCard({
+    super.key,
+    required this.preferences,
+    required this.onOpen,
+    required this.refresh,
   });
 
   @override
+  State<GozarDueTodayCard> createState() => _GozarDueTodayCardState();
+}
+
+class _GozarDueTodayCardState extends State<GozarDueTodayCard>
+    with WidgetsBindingObserver {
+  Timer? clockTick;
+  DateTime current = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Recheck while the screen is open: notes appear when their due time
+    // arrives and vanish automatically at the next local midnight.
+    clockTick = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() { current = DateTime.now(); });
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() { current = DateTime.now(); });
+    }
+  }
+
+  @override
+  void dispose() {
+    clockTick?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => ValueListenableBuilder<int>(
-    valueListenable: refresh,
+    valueListenable: widget.refresh,
     builder: (context, revision, child) {
-      final today = DateTime.now();
-      final notes = GozarNotesStore.forDay(
-          GozarNotesStore.load(preferences), today);
-      final remaining = notes.where((note) => !note.done).toList();
-      final upcoming = remaining.where((note) =>
-          note.reminderAt != null &&
-          note.reminderAt! > today.millisecondsSinceEpoch).toList()
-        ..sort((a, b) => a.reminderAt!.compareTo(b.reminderAt!));
-      final jalali = Jalali.fromDateTime(today);
+      final due = GozarNotesStore.dueForHome(
+        GozarNotesStore.load(widget.preferences), current,
+      );
+      if (due.isEmpty) return const SizedBox.shrink();
+      final date = Jalali.fromDateTime(current);
+      final shown = due.take(3).toList();
       return InkWell(
-        key: const ValueKey('gozar-home-notes-widget'),
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(20),
+        key: const ValueKey('gozar-home-due-notes'),
+        onTap: widget.onOpen,
+        borderRadius: BorderRadius.circular(21),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 11),
-          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(top: 11),
+          padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [
-              Color(0xff173a5b), Color(0xff10233d)]),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: GozarPalette.cyan.withOpacity(.38))),
-          child: Row(children: [
-            Container(
-              width: 51, height: 59,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
-                color: const Color(0xff235978)),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(persianDigits(jalali.day),
-                    style: const TextStyle(
-                      color: GozarPalette.text,
-                      fontSize: 21, fontWeight: FontWeight.w900)),
-                  Text(gozarMonthNames[jalali.month - 1],
-                    style: const TextStyle(
-                      color: GozarPalette.cyan, fontSize: 9)),
-                ]),
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xff184565), Color(0xff0c233d)],
             ),
-            const SizedBox(width: 11),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('یادداشت‌های امروز',
-                  style: TextStyle(color: GozarPalette.text,
-                    fontSize: 14, fontWeight: FontWeight.w800)),
-                Text(remaining.isEmpty
-                    ? 'برای امروز یادداشتی نداری'
-                    : persianDigits(remaining.length) + ' کار باقی‌مانده · ' +
-                      remaining.first.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: GozarPalette.muted, fontSize: 11)),
-                if (upcoming.isNotEmpty)
-                  Text('یادآوری بعدی: ' + persianDigits(
-                    DateTime.fromMillisecondsSinceEpoch(
-                        upcoming.first.reminderAt!).hour
-                          .toString().padLeft(2, '0')) + ':' +
-                    persianDigits(DateTime.fromMillisecondsSinceEpoch(
-                        upcoming.first.reminderAt!).minute
-                          .toString().padLeft(2, '0')),
-                    style: const TextStyle(
-                      color: GozarPalette.cyan, fontSize: 10)),
-              ],
-            )),
-            const Icon(Icons.chevron_left_rounded,
-                color: GozarPalette.cyan),
-          ]),
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: GozarPalette.cyan.withOpacity(.65)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                Container(
+                  width: 43, height: 46,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xff246280),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(persianDigits(date.day),
+                        style: const TextStyle(
+                          color: GozarPalette.text, fontSize: 19,
+                          fontWeight: FontWeight.w900)),
+                      Text(gozarMonthNames[date.month - 1],
+                        style: const TextStyle(
+                          color: GozarPalette.cyan, fontSize: 9)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('یادآوری‌های امروز',
+                  style: TextStyle(
+                    color: GozarPalette.text,
+                    fontSize: 15, fontWeight: FontWeight.w800))),
+                if (due.length > 3)
+                  Text('+' + persianDigits(due.length - 3),
+                    style: const TextStyle(color: GozarPalette.cyan)),
+                const Icon(Icons.notifications_active_outlined,
+                  color: GozarPalette.cyan, size: 22),
+              ]),
+              const SizedBox(height: 9),
+              for (final note in shown)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(children: [
+                    Icon(note.reminderAt == null
+                        ? Icons.sticky_note_2_outlined
+                        : Icons.alarm_on_rounded,
+                      color: GozarPalette.cyan, size: 17),
+                    const SizedBox(width: 7),
+                    Expanded(child: Text(note.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: GozarPalette.text, fontSize: 12))),
+                    if (note.reminderAt != null)
+                      Text(_dueClock(note.reminderAt!),
+                        style: const TextStyle(
+                          color: GozarPalette.cyan, fontSize: 11)),
+                  ]),
+                ),
+              const Text('نمایش یادداشت‌های همین روز، پس از زمان تعیین‌شده',
+                style: TextStyle(color: GozarPalette.muted, fontSize: 10)),
+            ],
+          ),
         ),
       );
     },
   );
+
+  String _dueClock(int at) {
+    final date = DateTime.fromMillisecondsSinceEpoch(at);
+    return persianDigits(date.hour.toString().padLeft(2, '0')) + ':' +
+        persianDigits(date.minute.toString().padLeft(2, '0'));
+  }
 }
