@@ -51,6 +51,38 @@ void main() {
     expect(GozarShortcutStore.load(prefs), isEmpty);
   });
 
+  test('renaming launcher app preserves native package and component', () async {
+    final prefs = await SharedPreferences.getInstance();
+    const original = GozarLauncherSection(id: 'apps',
+      title: 'برنامه‌های من', apps: [instagram, editor]);
+    final renamed = original.copyWith(
+      apps: [instagram.renamed('اینستاگرام شخصی'), editor]);
+    expect(await GozarLauncherStore.save(prefs, [renamed]), isTrue);
+    final saved = GozarLauncherStore.load(prefs).single.apps.first;
+    expect(saved.title, 'اینستاگرام شخصی');
+    expect(saved.target, instagram.target);
+    expect(saved.component, instagram.component);
+    expect(saved.key, instagram.key);
+  });
+
+  test('drag reorder saves new icon order without altering launcher target',
+      () async {
+    final prefs = await SharedPreferences.getInstance();
+    final moved = GozarLauncherStore.moveApp(
+        [instagram, editor], editor.key, instagram.key);
+    expect(moved.map((app) => app.key).toList(),
+        [editor.key, instagram.key]);
+    expect(moved.first.component, editor.component);
+    expect(await GozarLauncherStore.save(prefs, [
+      GozarLauncherSection(id: 'order', title: 'ویرایش',
+        apps: moved)]), isTrue);
+    expect(GozarLauncherStore.load(prefs).single.apps
+        .map((app) => app.key).toList(),
+        [editor.key, instagram.key]);
+    expect(GozarLauncherStore.moveApp(
+      moved, 'missing-app', editor.key), moved);
+  });
+
   test('deleting the final section remains empty after app restart',
       () async {
     final prefs = await SharedPreferences.getInstance();
@@ -121,13 +153,15 @@ void main() {
         const ValueKey('gozar-launcher-section-settings')));
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(
-        const ValueKey('gozar-launcher-section-dialog')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('gozar-launcher-columns-4')));
-    await tester.enterText(find.byKey(
-        const ValueKey('gozar-launcher-section-name')), 'گرافیک');
+        const ValueKey('gozar-launcher-inline-settings')), findsOneWidget);
     await tester.tap(find.byKey(
-        const ValueKey('gozar-launcher-save-section')));
-    await tester.pump(const Duration(milliseconds: 500));
+        const ValueKey('gozar-launcher-inline-cols-4')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.enterText(find.byKey(
+        const ValueKey('gozar-launcher-inline-name-movies')), 'گرافیک');
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-save-inline-name')));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(GozarLauncherStore.load(prefs).single.title, 'گرافیک');
     expect(GozarLauncherStore.load(prefs).single.columns, 4);
     await tester.pumpWidget(const SizedBox.shrink());
