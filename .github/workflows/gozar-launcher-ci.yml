@@ -7,6 +7,10 @@ on:
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_notes_store.dart'
+      - 'lib/gozar_notes_screen.dart'
+      - 'test/gozar_notes_test.dart'
+      - 'native/GozarReminderBridge.kt'
       - 'lib/gozar_shortcuts.dart'
       - 'test/gozar_launcher_test.dart'
       - 'test/td_gozar_app_test.dart'
@@ -58,9 +62,11 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart test/gozar_launcher_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
+      - name: Test Persian notes and in-app calendar
+        run: flutter test --reporter expanded test/gozar_notes_test.dart
       - name: Test Gozar navigation and VPN regressions
         run: |
           flutter test --reporter expanded test/td_gozar_app_test.dart
@@ -74,7 +80,17 @@ jobs:
           for action in ('openShortcutApp', 'appIcon', 'installedApps'):
               assert bridge.count(f'"{action}" ->') == 1, action
           assert 'InternalTelegramProxyService' not in bridge
-          print('Launcher handlers are present in the generated Android host.')
+          main = next((root / 'kotlin').rglob('MainActivity.kt')).read_text()
+          manifest = (root / 'AndroidManifest.xml').read_text()
+          alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
+          assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
+          for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
+                       'SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED'):
+              assert name in manifest, name
+          for action in ('setExactAndAllowWhileIdle', 'setAndAllowWhileIdle',
+                         'POST_NOTIFICATIONS', 'ACTION_BOOT_COMPLETED'):
+              assert action in alarm, action
+          print('Launcher and native reminder alarm handlers are present.')
           PY
       - name: Compile Gozar ARM64 without full artifact quota
         run: |
