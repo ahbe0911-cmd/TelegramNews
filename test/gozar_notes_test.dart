@@ -65,6 +65,47 @@ void main() {
     }), isNull);
   });
 
+  testWidgets('Saturday is rightmost, Friday leftmost on Persian calendar',
+      (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Use the normal LTR test host to guard against accidental locale flips.
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: GozarNotesScreen(
+        preferences: prefs, onChanged: () {}),
+    )));
+    await tester.pump(const Duration(milliseconds: 200));
+    final saturday =
+        find.byKey(const ValueKey('gozar-notes-weekday-0'));
+    final friday =
+        find.byKey(const ValueKey('gozar-notes-weekday-6'));
+    expect(saturday, findsOneWidget);
+    expect(friday, findsOneWidget);
+    expect(tester.getCenter(saturday).dx,
+        greaterThan(tester.getCenter(friday).dx));
+    final calendar = find.byKey(const ValueKey('gozar-notes-calendar'));
+    expect(
+      tester.widget<Directionality>(
+        find.ancestor(of: calendar, matching: find.byType(Directionality)).first)
+          .textDirection,
+      TextDirection.rtl,
+    );
+    final jalali = Jalali.fromDateTime(DateTime.now());
+    final first = Jalali(jalali.year, jalali.month, 1);
+    final dayOne = find.byKey(ValueKey(
+      'gozar-notes-day-' +
+          gozarDayKey(gozarGregorianDay(first))));
+    await tester.ensureVisible(dayOne);
+    expect(dayOne, findsOneWidget);
+    if (first.weekDay == 1) {
+      expect(tester.getCenter(dayOne).dx,
+          greaterThan(tester.getCenter(friday).dx));
+    }
+    await tester.tap(dayOne);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text(gozarJalaliLabel(first)), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('select Persian day, write a note, edit and check completion',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
