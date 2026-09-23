@@ -180,9 +180,11 @@ class GozarPowerButton extends StatefulWidget {
   final bool busy;
   final VoidCallback? onPressed;
   final String label;
+  final bool daylight;
   const GozarPowerButton({
     super.key, required this.connected, required this.busy,
     required this.onPressed, required this.label,
+    this.daylight = false,
   });
 
   @override
@@ -233,14 +235,17 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: color, width: 3),
-              gradient: const RadialGradient(
-                colors: [Color(0xff0e4260), Color(0xff07162f)],
+              gradient: RadialGradient(
+                colors: widget.daylight
+                    ? const [Color(0xffffffff), Color(0xfff1f8ff)]
+                    : const [Color(0xff0e4260), Color(0xff07162f)],
               ),
               boxShadow: [
                 BoxShadow(color: color.withOpacity(.30 + glow.value * .42),
                     blurRadius: 9 + glow.value * 15, spreadRadius: 1 + glow.value * 2),
-                const BoxShadow(color: Color(0xbb000818),
-                    blurRadius: 14, offset: Offset(0, 7)),
+                BoxShadow(color: widget.daylight
+                    ? const Color(0x261f5791) : const Color(0xbb000818),
+                    blurRadius: 14, offset: const Offset(0, 7)),
               ],
             ),
             child: Column(
@@ -255,16 +260,18 @@ class _GozarPowerButtonState extends State<GozarPowerButton>
                 Text(widget.busy ? 'در حال انجام…' :
                     widget.connected ? 'متصل' : 'اتصال',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16,
+                  style: TextStyle(fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: GozarPalette.text)),
+                    color: widget.daylight
+                        ? GozarPalette.daylightInk : GozarPalette.text)),
                 const SizedBox(height: 3),
                 Text(widget.label,
                   maxLines: 1, softWrap: false,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 9,
-                      color: GozarPalette.muted)),
+                  style: TextStyle(fontSize: 9,
+                      color: widget.daylight
+                          ? GozarPalette.daylightMuted : GozarPalette.muted)),
               ],
             ),
           ),
