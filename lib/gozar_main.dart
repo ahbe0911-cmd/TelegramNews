@@ -105,20 +105,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   int selectedProfile = -1;
   List<GozarProfile> profiles = [];
   List<GozarShortcut> shortcuts = [];
-  Timer? countersTimer;
-  bool samplingCounters = false;
-  DateTime? connectedObservedAt;
-  DateTime? sampledAt;
-  int? receivedAtSample;
-  int? sentAtSample;
-  int? receivedAtStart;
-  int? sentAtStart;
-  double? receivedMbps;
-  double? sentMbps;
-  int? receivedSession;
-  int? sentSession;
-  final List<double> receivedSeries = [];
-  final List<double> sentSeries = [];
   final Map<String, int> tcpLatencies = {};
   final Set<String> checkingTcpProfiles = {};
   bool importingSubscription = false;
@@ -383,81 +369,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     if (updated.isEmpty) await _vault.delete(key: 'gozar_xray_profile');
   }
 
-  void _stopCounters() {
-    countersTimer?.cancel();
-    countersTimer = null;
-    receivedAtSample = null;
-    sentAtSample = null;
-    sampledAt = null;
-    receivedAtStart = null;
-    sentAtStart = null;
-    receivedMbps = null;
-    sentMbps = null;
-    receivedSession = null;
-    sentSession = null;
-    receivedSeries.clear();
-    sentSeries.clear();
-    connectedObservedAt = null;
-  }
-
-  void _startCounters() {
-    if (countersTimer != null) return;
-    connectedObservedAt = DateTime.now();
-    unawaited(sampleCounters());
-    countersTimer = Timer.periodic(const Duration(seconds: 2),
-        (_) => unawaited(sampleCounters()));
-  }
-
-  Future<void> sampleCounters() async {
-    if (!mounted || samplingCounters || stage != 'running') return;
-    samplingCounters = true;
-    try {
-      final now = DateTime.now();
-      final counters = await SystemVpnBridge.networkCounters();
-      if (!mounted || stage != 'running') return;
-      final rx = counters['rx'] ?? -1;
-      final tx = counters['tx'] ?? -1;
-      if (rx < 0 || tx < 0) return;
-      if (receivedAtStart == null || sentAtStart == null ||
-          receivedAtSample == null || sentAtSample == null ||
-          sampledAt == null) {
-        setState(() {
-          receivedAtStart = rx;
-          sentAtStart = tx;
-          receivedAtSample = rx;
-          sentAtSample = tx;
-          sampledAt = now;
-        });
-        return;
-      }
-      final seconds = now.difference(sampledAt!).inMilliseconds / 1000;
-      if (seconds <= 0) return;
-      final download = rx >= receivedAtSample!
-          ? (rx - receivedAtSample!) * 8 / (seconds * 1000000) : 0.0;
-      final upload = tx >= sentAtSample!
-          ? (tx - sentAtSample!) * 8 / (seconds * 1000000) : 0.0;
-      setState(() {
-        receivedMbps = download;
-        sentMbps = upload;
-        receivedSession = rx >= receivedAtStart!
-            ? rx - receivedAtStart! : 0;
-        sentSession = tx >= sentAtStart! ? tx - sentAtStart! : 0;
-        receivedAtSample = rx;
-        sentAtSample = tx;
-        sampledAt = now;
-        receivedSeries.add(download);
-        sentSeries.add(upload);
-        if (receivedSeries.length > 27) receivedSeries.removeAt(0);
-        if (sentSeries.length > 27) sentSeries.removeAt(0);
-      });
-    } catch (_) {
-      // TrafficStats may be unsupported by a particular Android build.
-      // A missing reading stays unavailable; never fabricate chart values.
-    } finally {
-      samplingCounters = false;
-    }
-  }
-
   Future<void> checkTcpLatency(int index) async {
     if (index < 0 || index >= profiles.length) return;
     final link = profiles[index].link;
@@ -494,7 +405,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    countersTimer?.cancel();
     statusTimer?.cancel();
     profile.dispose();
     super.dispose();
@@ -514,11 +424,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       // "running" over the user's explicit disconnect action.
       if (disconnecting && (status == 'running' || status == 'starting')) {
         return;
-      }
-      if (status == 'running') {
-        _startCounters();
-      } else if (countersTimer != null) {
-        _stopCounters();
       }
       final nextDetail = switch (status) {
           'running' => 'تونل اندروید فعال است؛ اتصال اینترنت سرور را '
