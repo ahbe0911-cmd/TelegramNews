@@ -164,6 +164,15 @@ void main() {
     expect(find.text('اینستاگرام من'), findsOneWidget);
     final shortcut = find.byKey(ValueKey('gozar-shortcut-' + selected.key));
     await tester.ensureVisible(shortcut);
+    final homeScroller = find.descendant(
+      of: find.byKey(const ValueKey('gozar-home')),
+      matching: find.byType(Scrollable),
+    ).first;
+    final homePosition = tester.state<ScrollableState>(homeScroller).position;
+    // Scroll above the fixed navigation bar after the new Today widget.
+    homePosition.jumpTo((homePosition.pixels + 160)
+        .clamp(0.0, homePosition.maxScrollExtent).toDouble());
+    await tester.pump(const Duration(milliseconds: 220));
     await tester.tap(shortcut);
     await tester.pump(const Duration(milliseconds: 150));
     expect(opened?['package'], selected.target);
