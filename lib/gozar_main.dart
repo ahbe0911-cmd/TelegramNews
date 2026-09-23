@@ -5,6 +5,8 @@ import 'gozar_visuals.dart';
 import 'gozar_subscription.dart';
 import 'gozar_shortcuts.dart';
 import 'gozar_launcher.dart';
+import 'gozar_notes_screen.dart';
+import 'gozar_notes_store.dart';
 import 'gozar_dashboard_clock.dart';
 
 import 'package:flutter/material.dart';
@@ -102,6 +104,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   // position, icon futures, settings) alive when switching between tabs.
   final Set<int> visitedPages = {0};
   late final GozarLauncher launcherPage;
+  late final GozarNotesScreen notesPage;
+  final ValueNotifier<int> notesRevision = ValueNotifier<int>(0);
+  bool showServerSettings = false;
   int selectedProfile = -1;
   List<GozarProfile> profiles = [];
   List<GozarShortcut> shortcuts = [];
@@ -121,6 +126,24 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     shortcuts = GozarShortcutStore.load(widget.preferences);
     launcherPage = GozarLauncher(
       preferences: widget.preferences, onOpenApp: _openShortcut);
+    notesPage = GozarNotesScreen(
+      preferences: widget.preferences,
+      onChanged: () { notesRevision.value++; });
+    GozarReminderBridge.channel.setMethodCallHandler((call) async {
+      if (call.method == 'openNotes' && mounted) {
+        setState(() { visitedPages.add(2); currentPage = 2; });
+      }
+    });
+    // A tap on a reminder while the process was stopped opens the Notes tab.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final opened = await GozarReminderBridge.channel
+            .invokeMethod<bool>('takeOpenedReminder') ?? false;
+        if (opened && mounted) {
+          setState(() { visitedPages.add(2); currentPage = 2; });
+        }
+      } catch (_) { /* Widget tests and unsupported hosts. */ }
+    });
     mode = widget.preferences.getString('gozar_routing_mode') == 'selected'
         ? 'selected' : 'all';
     packages = (widget.preferences.getStringList('gozar_selected_packages')
@@ -1223,8 +1246,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               color: GozarPalette.text, fontSize: 11))),
           TextButton(
             onPressed: () => setState(() {
-              visitedPages.add(2);
-              currentPage = 2;
+              visitedPages.add(3);
+              showServerSettings = true;
+              currentPage = 3;
             }),
             child: const Text('تغییر سرور', style: TextStyle(
               color: GozarPalette.cyan, fontSize: 11)),
@@ -1321,7 +1345,15 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
     children: [
       _hero(),
-      const SizedBox(height: 12),
+      const SizedBox(height: 11),
+      GozarTodayNotesWidget(
+        preferences: widget.preferences,
+        refresh: notesRevision,
+        onOpen: () => setState(() {
+          visitedPages.add(2);
+          currentPage = 2;
+        }),
+      ),
       _shortcutPanel(),
     ],
   );
@@ -1450,10 +1482,53 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ],
   );
 
-  Widget _security() => ListView(
+  Widget _security() => showServerSettings
+      ? Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(13, 7, 13, 0),
+            child: Row(children: [
+              IconButton(
+                key: const ValueKey('gozar-back-to-settings'),
+                onPressed: () => setState(() {
+                  showServerSettings = false;
+                }),
+                icon: const Icon(Icons.arrow_forward_rounded,
+                    color: GozarPalette.cyan),
+              ),
+              const Expanded(child: Text('مدیریت سرورها',
+                style: TextStyle(color: GozarPalette.text,
+                  fontSize: 17, fontWeight: FontWeight.w800))),
+            ]),
+          ),
+          Expanded(child: _servers()),
+        ])
+      : ListView(
     key: const ValueKey('gozar-settings-page'),
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
     children: [
+      GozarPanel(
+        glow: GozarPalette.cyan,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _eyebrow(Icons.dns_rounded, 'سرورهای من'),
+            const SizedBox(height: 8),
+            Text(profiles.isEmpty ? 'افزودن و مدیریت سرورهای VPN'
+                : persianDigits(profiles.length) +
+                  ' سرور ذخیره‌شده · مدیریت و انتخاب اتصال',
+              style: const TextStyle(
+                color: GozarPalette.muted, fontSize: 12)),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              key: const ValueKey('gozar-open-servers-settings'),
+              onPressed: () => setState(() {
+                showServerSettings = true;
+              }),
+              icon: const Icon(Icons.dns_outlined),
+              label: const Text('ورود به مدیریت سرورها'),
+            ),
+          ]),
+      ),
+      const SizedBox(height: 13),
       _shortcutSettings(),
       const SizedBox(height: 13),
       GozarPanel(child: Column(
@@ -1545,7 +1620,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       switch (index) {
         case 0: return _home();
         case 1: return launcherPage;
-        case 2: return _servers();
+        case 2: return notesPage;
         default: return _security();
       }
     }
@@ -1621,10 +1696,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: GozarPalette.cyan),
                 label: 'لانچر'),
               NavigationDestination(
-                icon: Icon(Icons.dns_outlined),
-                selectedIcon: Icon(Icons.dns_rounded,
+                icon: Icon(Icons.event_note_outlined),
+                selectedIcon: Icon(Icons.event_note_rounded,
                     color: GozarPalette.cyan),
-                label: 'سرورها'),
+                label: 'یادداشت'),
               NavigationDestination(
                 icon: Icon(Icons.settings_outlined),
                 selectedIcon: Icon(Icons.settings_rounded,
