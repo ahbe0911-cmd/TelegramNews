@@ -119,6 +119,18 @@ class GozarNotesStore {
           if (a.done != b.done) return a.done ? 1 : -1;
           return (a.reminderAt ?? 0).compareTo(b.reminderAt ?? 0);
         });
+
+  /// Home only displays today's unfinished notes. Timed notes become visible
+  /// when their scheduled phone-local time arrives; future-day notes must
+  /// never appear early. Untimed notes are visible throughout their date.
+  static List<GozarNote> dueForHome(
+      List<GozarNote> notes, DateTime now) {
+    final timestamp = now.millisecondsSinceEpoch;
+    return forDay(notes, now).where((note) =>
+      !note.done &&
+      (note.reminderAt == null || note.reminderAt! <= timestamp)
+    ).toList();
+  }
 }
 
 /// Android AlarmManager + NotificationManager. Independent of VPN lifecycle.
