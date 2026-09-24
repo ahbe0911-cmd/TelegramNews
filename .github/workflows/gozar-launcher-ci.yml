@@ -95,6 +95,8 @@ jobs:
                          'web.rubika.ir/', 'web.eitaa.com/'):
               assert domain in social, domain
           assert 'web.settings.domStorageEnabled = true' in social
+          assert 'web.settings.useWideViewPort = true' in social
+          assert 'web.settings.loadWithOverviewMode = true' in social
           assert 'web.settings.allowFileAccess = false' in social
           assert 'web.onPause()' in social and 'web.onResume()' in social
           for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
