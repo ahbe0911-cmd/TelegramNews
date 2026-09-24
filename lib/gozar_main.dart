@@ -11,6 +11,7 @@ import 'gozar_notes_store.dart';
 import 'gozar_dashboard_clock.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -101,6 +102,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   Timer? statusTimer;
   bool hideProfile = true;
   int currentPage = 0;
+  // Real Forkgram screen is native and lives in this same Android package.
+  static const _forkgramChannel =
+      MethodChannel('ir.channel.telegram_tdnews/forkgram');
   // Mount tabs lazily once, then keep their State (launcher page/scroll
   // position, icon futures, settings) alive when switching between tabs.
   final Set<int> visitedPages = {0};
@@ -125,6 +129,25 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     shortcuts = GozarShortcutStore.load(widget.preferences);
+    _forkgramChannel.setMethodCallHandler((call) async {
+      if (call.method != 'navigate' || !mounted) return;
+      final index = (call.arguments as Map?)?['tab'];
+      if (index is int && index >= 0 && index <= 4 && index != 1) {
+        setState(() { visitedPages.add(index); currentPage = index; });
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final index = await _forkgramChannel.invokeMethod<int>('takePendingTab');
+        if (mounted && index != null && index >= 0 && index <= 4 && index != 1) {
+          setState(() { visitedPages.add(index); currentPage = index; });
+        }
+      } on MissingPluginException {
+        // Tests have no native Android host.
+      } on PlatformException {
+        // No incoming tab; preserve the user's current Gozar page.
+      }
+    });
     launcherPage = GozarLauncher(
       preferences: widget.preferences, onOpenApp: _openShortcut);
     notesPage = GozarNotesScreen(
@@ -132,7 +155,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       onChanged: () { notesRevision.value++; });
     GozarReminderBridge.channel.setMethodCallHandler((call) async {
       if (call.method == 'openNotes' && mounted) {
-        setState(() { visitedPages.add(2); currentPage = 2; });
+        setState(() { visitedPages.add(3); currentPage = 3; });
       }
     });
     // A tap on a reminder while the process was stopped opens the Notes tab.
@@ -141,7 +164,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         final opened = await GozarReminderBridge.channel
             .invokeMethod<bool>('takeOpenedReminder') ?? false;
         if (opened && mounted) {
-          setState(() { visitedPages.add(2); currentPage = 2; });
+          setState(() { visitedPages.add(3); currentPage = 3; });
         }
       } catch (_) { /* Widget tests and unsupported hosts. */ }
     });
@@ -320,6 +343,16 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _openNativeForkgram() async {
+    try {
+      await _forkgramChannel.invokeMethod<void>('showForkgram');
+    } on PlatformException {
+      if (mounted) notice('فورک‌گرام داخل این نسخه نصب نشده یا باز نشد.');
+    } on MissingPluginException {
+      if (mounted) notice('موتور بومی فورک‌گرام در این نسخه وجود ندارد.');
+    }
+  }
+
   void selectProfile(int index) {
     if (index < 0 || index >= profiles.length) return;
     setState(() {
@@ -340,9 +373,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       profile.clear();
       // The server editor now lives inside Settings; do not route back
       // to Home where the user cannot enter the newly selected config.
-      visitedPages.add(3);
+      visitedPages.add(4);
       showServerSettings = true;
-      currentPage = 3;
+      currentPage = 4;
     });
   }
 
@@ -437,6 +470,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     statusTimer?.cancel();
     GozarReminderBridge.channel.setMethodCallHandler(null);
+    _forkgramChannel.setMethodCallHandler(null);
     notesRevision.dispose();
     profile.dispose();
     super.dispose();
@@ -1180,9 +1214,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               color: GozarPalette.daylightInk, fontSize: 11))),
           TextButton(
             onPressed: () => setState(() {
-              visitedPages.add(3);
+              visitedPages.add(4);
               showServerSettings = true;
-              currentPage = 3;
+              currentPage = 4;
             }),
             child: const Text('تغییر سرور', style: TextStyle(
               color: GozarPalette.daylightAccent, fontSize: 11)),
@@ -1283,8 +1317,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         preferences: widget.preferences,
         refresh: notesRevision,
         onOpen: () => setState(() {
-          visitedPages.add(2);
-          currentPage = 2;
+          visitedPages.add(3);
+          currentPage = 3;
         }),
       ),
     ],
@@ -1551,8 +1585,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       if (!visitedPages.contains(index)) return const SizedBox.shrink();
       switch (index) {
         case 0: return _home();
-        case 1: return launcherPage;
-        case 2: return notesPage;
+        case 1: return const SizedBox.shrink(); // native screen owns Telegram
+        case 2: return launcherPage;
+        case 3: return notesPage;
         default: return _security();
       }
     }
@@ -1564,7 +1599,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         else const Positioned.fill(child: ColoredBox(
           color: Color(0xffeaf6ff))),
         SafeArea(child: Column(children: [
-          if (currentPage != 1) Padding(
+          if (currentPage != 2) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
               Icon(Icons.shield_outlined,
@@ -1616,7 +1651,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           ),
           Expanded(child: IndexedStack(
             index: currentPage,
-            children: [for (var index = 0; index < 4; index++) tab(index)],
+            children: [for (var index = 0; index < 5; index++) tab(index)],
           )),
           Theme(
             data: Theme.of(context).copyWith(
@@ -1630,6 +1665,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             selectedIndex: currentPage,
             onDestinationSelected: (index) {
+              if (index == 1) {
+                unawaited(_openNativeForkgram());
+                return;
+              }
               setState(() {
                 visitedPages.add(index);
                 currentPage = index;
@@ -1642,6 +1681,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: currentPage == 0
                       ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'خانه'),
+              const NavigationDestination(
+                icon: Icon(Icons.send_outlined),
+                selectedIcon: Icon(Icons.send_rounded),
+                label: 'تلگرام'),
               NavigationDestination(
                 icon: const Icon(Icons.grid_view_outlined),
                 selectedIcon: Icon(Icons.grid_view_rounded,
