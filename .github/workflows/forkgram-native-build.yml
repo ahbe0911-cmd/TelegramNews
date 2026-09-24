@@ -1,0 +1,67 @@
+name: Forkgram source build feasibility (not an integrated APK)
+
+on:
+  push:
+    branches:
+      - feature/forkgram-embedded-telegram
+    paths:
+      - '.github/workflows/forkgram-native-build.yml'
+      - '.gitmodules'
+      - 'third_party/FORKGRAM_PIN.json'
+      - 'third_party/forkgram'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forkgram-feasibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Verify upstream source release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess
+          with open('third_party/FORKGRAM_PIN.json', encoding='utf-8') as stream:
+              pin=json.load(stream)
+          head=subprocess.check_output(['git','-C','third_party/forkgram','rev-parse','HEAD'],text=True).strip()
+          assert head == pin['commit'], (head, pin['commit'])
+          assert (subprocess.check_output(['git','-C','third_party/forkgram','status','--porcelain'],text=True).strip() == '')
+          print('Pinned upstream source available:',pin['release_tag'],head)
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Native Android build requirements
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config rustc cargo yasm
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Compile Forkgram baseline (not Gozar)
+        working-directory: third_party/forkgram
+        timeout-minutes: 75
+        env:
+          ABIS: arm64-v8a
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --stacktrace
+      - name: Mark baseline result only
+        run: |
+          echo "Upstream native compilation succeeded."
+          echo "This is NOT the embedded Gozar Telegram tab and MUST NOT be sent as a combined APK."
