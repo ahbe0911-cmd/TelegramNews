@@ -1569,7 +1569,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         else const Positioned.fill(child: ColoredBox(
           color: Color(0xffeaf6ff))),
         SafeArea(child: Column(children: [
-          if (currentPage != 2) Padding(
+          if (currentPage != 1 && currentPage != 2) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
               Icon(Icons.shield_outlined,
@@ -1651,7 +1651,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 icon: const Icon(Icons.hub_outlined),
                 selectedIcon: const Icon(Icons.hub_rounded,
                     color: GozarPalette.daylightAccent),
-                label: 'شبکه‌های اجتماعی'),
+                label: 'شبکه'),
               NavigationDestination(
                 icon: const Icon(Icons.grid_view_outlined),
                 selectedIcon: Icon(Icons.grid_view_rounded,
