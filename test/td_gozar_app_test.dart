@@ -11,7 +11,7 @@ import 'package:telegram_news/td_system_vpn.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Gozar keeps standalone VPN, notes and settings with new social tab',
+  testWidgets('Gozar keeps four tabs after removing social network',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -41,9 +41,14 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('شبکه'), findsOneWidget);
-    expect(find.text('شبکه‌های اجتماعی'), findsNothing);
-    expect(find.byKey(const ValueKey('gozar-social-pages')), findsNothing);
+    expect(find.text('شبکه'), findsNothing);
+    expect(find.text('شاد'), findsNothing);
+    expect(find.text('بله'), findsNothing);
+    expect(find.text('روبیکا'), findsNothing);
+    expect(find.text('ایتا'), findsNothing);
+    expect(find.byKey(const ValueKey('gozar-social-tab')), findsNothing);
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(find.text('لانچر'), findsOneWidget);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-home-notes-widget')),

@@ -50,10 +50,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         SystemVpnBridge.attach(this, flutterEngine)
         GozarReminderBridge.attach(this, flutterEngine)
-        val social = GozarSocialWebViewFactory(
-            this, flutterEngine.dartExecutor.binaryMessenger)
-        flutterEngine.platformViewsController.registry.registerViewFactory(
-            GozarSocialWebViewFactory.VIEW_TYPE, social)
     }
 
     @Suppress("DEPRECATION")
@@ -79,12 +75,6 @@ class MainActivity : FlutterActivity() {
 # This activity exists only in the standalone VPN build, never in news/cafe.
 (activity.parent / 'GozarWebActivity.kt').write_bytes(
     (root / 'native/GozarWebActivity.kt').read_bytes()
-)
-(activity.parent / 'GozarSocialWebView.kt').write_bytes(
-    (root / 'native/GozarSocialWebView.kt').read_bytes()
-)
-(activity.parent / 'GozarSocialDownloads.kt').write_bytes(
-    (root / 'native/GozarSocialDownloads.kt').read_bytes()
 )
 (activity.parent / 'GozarReminderBridge.kt').write_bytes(
     (root / 'native/GozarReminderBridge.kt').read_bytes()

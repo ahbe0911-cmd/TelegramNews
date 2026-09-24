@@ -67,13 +67,11 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart lib/gozar_social.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/gozar_social_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Test Persian notes and in-app calendar
         run: flutter test --reporter expanded test/gozar_notes_test.dart
-      - name: Test lazy RTL social web swipe and load metrics
-        run: flutter test --reporter expanded test/gozar_social_test.dart
       - name: Test Gozar navigation and VPN regressions
         run: |
           flutter test --reporter expanded test/td_gozar_app_test.dart
@@ -91,25 +89,12 @@ jobs:
           manifest = (root / 'AndroidManifest.xml').read_text()
           alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
           assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
-          assert 'GozarSocialWebViewFactory.VIEW_TYPE, social' in main
-          social = next((root / 'kotlin').rglob('GozarSocialWebView.kt')).read_text()
-          for domain in ('my.shad.ir/', 'web.bale.ai/',
-                         'web.rubika.ir/', 'web.eitaa.com/'):
-              assert domain in social, domain
-          assert 'https://web.telegram.org' not in social
-          assert 'web.settings.domStorageEnabled = true' in social
-          assert 'web.settings.useWideViewPort = true' in social
-          assert 'web.settings.loadWithOverviewMode = true' in social
-          assert 'web.settings.allowFileAccess = false' in social
-          assert 'web.onPause()' in social and 'web.onResume()' in social
-          assert 'GozarSocialDownloads(activity, web, index, events)' in social
-          assert 'alternateShad' in social
-          assert 'https://web.shad.ir/' in social
-          downloads = next((root / 'kotlin').rglob('GozarSocialDownloads.kt')).read_text()
-          assert 'setDownloadListener' in downloads
-          assert 'MediaStore.Images.Media.EXTERNAL_CONTENT_URI' in downloads
-          assert 'MediaStore.Downloads.EXTERNAL_CONTENT_URI' in downloads
-          assert 'downloadBlob' in downloads
+          assert 'GozarSocialWebViewFactory' not in main
+          assert not list((root / 'kotlin').rglob('GozarSocialWebView.kt'))
+          assert not list((root / 'kotlin').rglob('GozarSocialDownloads.kt'))
+          main_dart = Path('lib/gozar_main.dart').read_text()
+          assert "label: 'شبکه'" not in main_dart
+          assert 'GozarSocialTab' not in main_dart
           icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
           assert '#0C5489' in icon and '#61E9DA' in icon
           for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
