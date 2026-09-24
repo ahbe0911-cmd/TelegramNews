@@ -119,6 +119,13 @@ class GozarSocialWebViewFactory(
             web.setBackgroundColor(android.graphics.Color.WHITE)
             web.settings.javaScriptEnabled = true
             web.settings.domStorageEnabled = true
+            // Respect each messenger's responsive viewport meta tag. Android
+            // defaults can otherwise render the desktop-width page clipped
+            // horizontally on a narrow phone (notably the Bale web layout).
+            web.settings.useWideViewPort = true
+            web.settings.loadWithOverviewMode = true
+            web.settings.textZoom = 100
+            web.setInitialScale(0)
             web.settings.allowFileAccess = false
             web.settings.allowContentAccess = false
             web.settings.setSupportMultipleWindows(false)
