@@ -41,7 +41,8 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('شبکه‌های اجتماعی'), findsOneWidget);
+    expect(find.text('شبکه'), findsOneWidget);
+    expect(find.text('شبکه‌های اجتماعی'), findsNothing);
     expect(find.byKey(const ValueKey('gozar-social-pages')), findsNothing);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
