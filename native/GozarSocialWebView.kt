@@ -5,12 +5,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -38,9 +41,10 @@ class GozarSocialWebViewFactory(
         const val VIEW_TYPE = "ir.channel.telegram_news/gozar_social_web"
         const val CONTROLS = "ir.channel.telegram_tdnews/gozar_social_controls"
         const val EVENTS = "ir.channel.telegram_tdnews/gozar_social_events"
+        const val SHAD_ALTERNATE = "https://web.shad.ir/"
 
         val sites = listOf(
-            "https://web.shad.ir/",
+            "https://my.shad.ir/",
             "https://web.bale.ai/",
             "https://web.rubika.ir/",
             "https://web.eitaa.com/"
@@ -58,6 +62,13 @@ class GozarSocialWebViewFactory(
                     val next = call.argument<Int>("index") ?: -1
                     currentIndex = if (next in sites.indices) next else -1
                     views.toList().forEach { it.updateActive(currentIndex) }
+                    result.success(null)
+                }
+                "alternateShad" -> {
+                    val index = call.argument<Int>("index") ?: -1
+                    if (index == 0) {
+                        views.firstOrNull { it.index == index }?.alternateShad()
+                    }
                     result.success(null)
                 }
                 "reload" -> {
@@ -87,7 +98,7 @@ class GozarSocialWebViewFactory(
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
         val index = (args as? Map<*, *>)?.get("index") as? Int ?: -1
         require(index in sites.indices) { "Unknown Gozar social web page" }
-        val page = SocialPlatformView(context, index, events) { closed ->
+        val page = SocialPlatformView(context, activity, index, events) { closed ->
             views.remove(closed)
         }
         views.add(page)
@@ -97,6 +108,7 @@ class GozarSocialWebViewFactory(
 
     private class SocialPlatformView(
         context: Context,
+        activity: Activity,
         val index: Int,
         private val events: MethodChannel,
         private val onDisposed: (SocialPlatformView) -> Unit,
@@ -107,6 +119,9 @@ class GozarSocialWebViewFactory(
             android.R.attr.progressBarStyleHorizontal)
         private var loadStarted = SystemClock.elapsedRealtime()
         private var paused = false
+        private var triedShadAlternate = false
+        private var pageFailed = false
+        private val downloads = GozarSocialDownloads(activity, web, index, events)
 
         init {
             frame.addView(web, FrameLayout.LayoutParams(
@@ -132,6 +147,14 @@ class GozarSocialWebViewFactory(
             web.settings.javaScriptCanOpenWindowsAutomatically = false
             web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             web.settings.cacheMode = WebSettings.LOAD_DEFAULT
+            web.settings.setSupportZoom(false)
+            if (index == 0) {
+                // Some Shad login pages require third-party SSO cookies, and
+                // some reject the default Android WebView user-agent marker.
+                CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+                web.settings.userAgentString = web.settings.userAgentString
+                    .replace("; wv", "").replace("Version/4.0 ", "")
+            }
             web.settings.mediaPlaybackRequiresUserGesture = true
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 web.settings.safeBrowsingEnabled = true
@@ -150,11 +173,13 @@ class GozarSocialWebViewFactory(
                     view: WebView, url: String?, favicon: android.graphics.Bitmap?
                 ) {
                     loadStarted = SystemClock.elapsedRealtime()
+                    pageFailed = false
                     progress.visibility = View.VISIBLE
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     progress.visibility = View.GONE
+                    if (pageFailed) return
                     events.invokeMethod("pageFinished", mapOf(
                         "index" to index,
                         "loadMs" to (SystemClock.elapsedRealtime() - loadStarted)
@@ -166,9 +191,10 @@ class GozarSocialWebViewFactory(
                     error: android.webkit.WebResourceError
                 ) {
                     if (request.isForMainFrame) {
-                        events.invokeMethod("pageError", mapOf(
-                            "index" to index
-                        ))
+                        pageFailed = true
+                        if (!tryShadFallback()) {
+                            events.invokeMethod("pageError", mapOf("index" to index))
+                        }
                     }
                 }
             }
@@ -180,6 +206,19 @@ class GozarSocialWebViewFactory(
                 }
             }
             web.loadUrl(sites[index])
+        }
+
+        private fun tryShadFallback(): Boolean {
+            if (index != 0 || triedShadAlternate) return false
+            triedShadAlternate = true
+            web.post { web.loadUrl(SHAD_ALTERNATE) }
+            return true
+        }
+
+        fun alternateShad() {
+            if (index != 0) return
+            triedShadAlternate = true
+            web.loadUrl(SHAD_ALTERNATE)
         }
 
         fun updateActive(activeIndex: Int) {
@@ -201,6 +240,7 @@ class GozarSocialWebViewFactory(
 
         override fun dispose() {
             onDisposed(this)
+            downloads.dispose()
             web.stopLoading()
             web.webChromeClient = null
             web.webViewClient = WebViewClient()
