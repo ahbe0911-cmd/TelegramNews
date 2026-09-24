@@ -20,6 +20,8 @@ on:
       - 'native/SystemVpnBridge.kt'
       - 'native/GozarWebActivity.kt'
       - 'native/GozarSocialWebView.kt'
+      - 'native/GozarSocialDownloads.kt'
+      - 'scripts/configure_variant.py'
       - 'native/GozarReminderBridge.kt'
       - 'native/SystemVpnService.kt'
       - 'native/AutomaticBypassPolicy.kt'
