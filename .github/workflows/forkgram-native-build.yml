@@ -54,7 +54,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config rustc cargo yasm
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config yasm
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          rustup target list --toolchain stable --installed
           yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
@@ -67,7 +70,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --stacktrace
+          ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2 --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2 --stacktrace
       - name: Mark baseline result only
         run: |
           echo "Upstream native compilation succeeded."
