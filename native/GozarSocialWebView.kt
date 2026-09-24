@@ -1,6 +1,9 @@
 package ir.channel.telegram_news
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.view.View
@@ -28,6 +31,7 @@ import io.flutter.plugin.platform.PlatformViewFactory
  * action uses the browser's own UID when routing through a VPN is needed.
  */
 class GozarSocialWebViewFactory(
+    private val activity: Activity,
     private val messenger: BinaryMessenger
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     companion object {
@@ -60,6 +64,20 @@ class GozarSocialWebViewFactory(
                     val index = call.argument<Int>("index") ?: -1
                     views.firstOrNull { it.index == index }?.reload()
                     result.success(null)
+                }
+                "openExternal" -> {
+                    val index = call.argument<Int>("index") ?: -1
+                    if (index !in sites.indices) {
+                        result.error("INVALID_SITE", "Unknown messenger", null)
+                    } else {
+                        try {
+                            activity.startActivity(Intent(Intent.ACTION_VIEW,
+                                Uri.parse(sites[index])).addCategory(Intent.CATEGORY_BROWSABLE))
+                            result.success(null)
+                        } catch (_: Exception) {
+                            result.error("NO_BROWSER", "No browser is available", null)
+                        }
+                    }
                 }
                 else -> result.notImplemented()
             }
