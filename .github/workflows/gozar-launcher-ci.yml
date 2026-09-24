@@ -9,6 +9,8 @@ on:
       - 'lib/gozar_main.dart'
       - 'lib/gozar_social.dart'
       - 'native/GozarSocialWebView.kt'
+      - 'native/GozarSocialDownloads.kt'
+      - 'scripts/configure_variant.py'
       - 'test/gozar_social_test.dart'
       - 'lib/gozar_notes_store.dart'
       - 'lib/gozar_notes_screen.dart'
@@ -91,7 +93,7 @@ jobs:
           assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
           assert 'GozarSocialWebViewFactory.VIEW_TYPE, social' in main
           social = next((root / 'kotlin').rglob('GozarSocialWebView.kt')).read_text()
-          for domain in ('web.shad.ir/', 'web.bale.ai/',
+          for domain in ('my.shad.ir/', 'web.bale.ai/',
                          'web.rubika.ir/', 'web.eitaa.com/'):
               assert domain in social, domain
           assert 'https://web.telegram.org' not in social
@@ -100,6 +102,16 @@ jobs:
           assert 'web.settings.loadWithOverviewMode = true' in social
           assert 'web.settings.allowFileAccess = false' in social
           assert 'web.onPause()' in social and 'web.onResume()' in social
+          assert 'GozarSocialDownloads(activity, web, index, events)' in social
+          assert 'alternateShad' in social
+          assert 'https://web.shad.ir/' in social
+          downloads = next((root / 'kotlin').rglob('GozarSocialDownloads.kt')).read_text()
+          assert 'setDownloadListener' in downloads
+          assert 'MediaStore.Images.Media.EXTERNAL_CONTENT_URI' in downloads
+          assert 'MediaStore.Downloads.EXTERNAL_CONTENT_URI' in downloads
+          assert 'downloadBlob' in downloads
+          icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
+          assert '#0C5489' in icon and '#61E9DA' in icon
           for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
                        'SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED'):
               assert name in manifest, name
