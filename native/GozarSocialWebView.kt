@@ -121,6 +121,8 @@ class GozarSocialWebViewFactory(
         private var paused = false
         private var triedShadAlternate = false
         private var pageFailed = false
+        private var loadGeneration = 0
+        private val mainHandler = Handler(Looper.getMainLooper())
         private val downloads = GozarSocialDownloads(activity, web, index, events)
 
         init {
@@ -147,6 +149,9 @@ class GozarSocialWebViewFactory(
             web.settings.javaScriptCanOpenWindowsAutomatically = false
             web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             web.settings.cacheMode = WebSettings.LOAD_DEFAULT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                web.settings.offscreenPreRaster = true
+            }
             web.settings.setSupportZoom(false)
             if (index == 0) {
                 // Some Shad login pages require third-party SSO cookies, and
@@ -175,6 +180,16 @@ class GozarSocialWebViewFactory(
                     loadStarted = SystemClock.elapsedRealtime()
                     pageFailed = false
                     progress.visibility = View.VISIBLE
+                    val generation = ++loadGeneration
+                    if (index == 0 && !triedShadAlternate &&
+                        url?.startsWith(sites[0]) == true) {
+                        mainHandler.postDelayed({
+                            if (generation == loadGeneration &&
+                                !triedShadAlternate && web.progress < 25) {
+                                tryShadFallback()
+                            }
+                        }, 18000)
+                    }
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
@@ -184,6 +199,18 @@ class GozarSocialWebViewFactory(
                         "index" to index,
                         "loadMs" to (SystemClock.elapsedRealtime() - loadStarted)
                     ))
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView, request: WebResourceRequest,
+                    response: WebResourceResponse
+                ) {
+                    if (request.isForMainFrame && response.statusCode >= 400) {
+                        pageFailed = true
+                        if (!tryShadFallback()) {
+                            events.invokeMethod("pageError", mapOf("index" to index))
+                        }
+                    }
                 }
 
                 override fun onReceivedError(
@@ -240,6 +267,7 @@ class GozarSocialWebViewFactory(
 
         override fun dispose() {
             onDisposed(this)
+            mainHandler.removeCallbacksAndMessages(null)
             downloads.dispose()
             web.stopLoading()
             web.webChromeClient = null
