@@ -28,11 +28,11 @@ object GozarForkgramBridge {
                         // browser URL, second APK or package auto-installation.
                         val telegram = Intent().setClassName(
                             activity.packageName,
-                            "ir.channel.telegram_news.GozarTelegramActivity")
+                            "org.telegram.ui.LaunchActivity")
                             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                         if (activity.packageManager.resolveActivity(telegram, 0) == null) {
                             result.error("FORKGRAM_MISSING",
-                                "Native Forkgram activity is not packaged", null)
+                                "Original native Forkgram LaunchActivity is not packaged", null)
                         } else {
                             activity.startActivity(telegram)
                             result.success(null)
