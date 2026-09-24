@@ -343,14 +343,43 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     }
   }
 
+  // Native host keeps Forkgram's actual LaunchActivity under the Flutter
+  // overlay. For tab 1 the overlay shrinks to NavigationBar height only.
   Future<void> _openNativeForkgram() async {
+    if (!mounted || currentPage == 1) return;
+    final previous = currentPage;
+    setState(() => currentPage = 1);
     try {
       await _forkgramChannel.invokeMethod<void>('showForkgram');
     } on PlatformException {
-      if (mounted) notice('فورک‌گرام داخل این نسخه نصب نشده یا باز نشد.');
+      if (!mounted) return;
+      setState(() => currentPage = previous);
+      notice('نمایش فورک‌گرام در این نسخه در دسترس نیست.');
     } on MissingPluginException {
-      if (mounted) notice('موتور بومی فورک‌گرام در این نسخه وجود ندارد.');
+      if (!mounted) return;
+      setState(() => currentPage = previous);
+      notice('موتور بومی فورک‌گرام در این نسخه وجود ندارد.');
     }
+  }
+
+  Future<void> _selectGozarTab(int index) async {
+    if (!mounted || index == 1) return;
+    if (currentPage == 1) {
+      try {
+        // Expand the existing FlutterView before rendering the selected page.
+        await _forkgramChannel.invokeMethod<void>('showGozar');
+      } on MissingPluginException {
+        // A widget-test host never resizes the native view.
+      } on PlatformException {
+        if (mounted) notice('بازگشت به گذر از تلگرام انجام نشد.');
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      visitedPages.add(index);
+      currentPage = index;
+    });
   }
 
   void selectProfile(int index) {
@@ -1585,7 +1614,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       if (!visitedPages.contains(index)) return const SizedBox.shrink();
       switch (index) {
         case 0: return _home();
-        case 1: return const SizedBox.shrink(); // native screen owns Telegram
+        case 1: return const SizedBox.shrink(); // real native Forkgram behind FlutterView
         case 2: return launcherPage;
         case 3: return notesPage;
         default: return _security();
@@ -1599,7 +1628,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         else const Positioned.fill(child: ColoredBox(
           color: Color(0xffeaf6ff))),
         SafeArea(child: Column(children: [
-          if (currentPage != 2) Padding(
+          if (currentPage != 1 && currentPage != 2) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
               Icon(Icons.shield_outlined,
@@ -1669,10 +1698,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                 unawaited(_openNativeForkgram());
                 return;
               }
-              setState(() {
-                visitedPages.add(index);
-                currentPage = index;
-              });
+              unawaited(_selectGozarTab(index));
             },
             destinations: [
               NavigationDestination(
