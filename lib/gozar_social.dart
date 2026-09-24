@@ -17,7 +17,7 @@ class GozarSocialSite {
 }
 
 const gozarSocialSites = <GozarSocialSite>[
-  GozarSocialSite('شاد', 'web.shad.ir',
+  GozarSocialSite('شاد', 'my.shad.ir',
     Icons.school_rounded, Color(0xff2484bd)),
   GozarSocialSite('بله', 'web.bale.ai',
     Icons.chat_bubble_rounded, Color(0xff24a486)),
@@ -51,6 +51,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
   final Map<int, int> loadMilliseconds = {};
   final Set<int> loadErrors = {};
   int selected = 0;
+  bool baleExpanded = false;
 
   @override
   void initState() {
@@ -78,6 +79,19 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
       });
     } else if (call.method == 'pageError') {
       setState(() { loadErrors.add(index); });
+    } else if (call.method == 'downloadStarted' ||
+        call.method == 'downloadSaved' || call.method == 'downloadError') {
+      if (!widget.active) return;
+      final message = call.method == 'downloadStarted'
+          ? 'در حال ذخیره فایل…'
+          : call.method == 'downloadSaved'
+              ? (data['gallery'] == true
+                  ? 'فایل در گالری ذخیره شد.'
+                  : 'فایل در پوشه دانلودها ذخیره شد.')
+              : 'ذخیره فایل ناموفق بود. از گزینه «مرورگر گوشی» استفاده کنید.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message), duration: const Duration(seconds: 3),
+      ));
     }
   }
 
@@ -142,8 +156,10 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
       child: Column(children: [
         Container(
           key: const ValueKey('gozar-social-header'),
-          height: 53,
-          padding: const EdgeInsets.fromLTRB(7, 5, 7, 5),
+          height: selected == 1 && !baleExpanded ? 30 : 53,
+          padding: EdgeInsets.fromLTRB(7,
+              selected == 1 && !baleExpanded ? 2 : 5, 7,
+              selected == 1 && !baleExpanded ? 2 : 5),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topRight,
@@ -153,7 +169,25 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
             border: Border(bottom: BorderSide(
               color: Color(0xffd6e6f4))),
           ),
-          child: Row(children: [
+          child: selected == 1 && !baleExpanded
+              ? InkWell(
+                  key: const ValueKey('gozar-bale-expand'),
+                  onTap: () => setState(() { baleExpanded = true; }),
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.keyboard_arrow_down_rounded, size: 16,
+                        color: Color(0xff486582)),
+                      SizedBox(width: 4),
+                      Text('نمایش پیام‌رسان‌ها',
+                        style: TextStyle(fontSize: 11,
+                          color: Color(0xff486582),
+                          fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                )
+              : Row(children: [
             Expanded(child: Container(
               key: const ValueKey('gozar-social-segments'),
               padding: const EdgeInsets.all(3),
@@ -243,8 +277,24 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                 onSelected: (value) {
                   if (value == 'reload') _reload();
                   if (value == 'external') _externalBrowser();
+                  if (value == 'baleCompact') {
+                    setState(() { baleExpanded = !baleExpanded; });
+                  }
+                  if (value == 'shadAlternate') {
+                    unawaited(_controls.invokeMethod<void>(
+                      'alternateShad', {'index': selected},
+                    ).catchError((Object _) {}));
+                  }
                 },
                 itemBuilder: (context) => [
+                  if (selected == 1)
+                    PopupMenuItem(value: 'baleCompact',
+                      child: Text(baleExpanded
+                          ? 'جمع‌کردن نوار برنامه در بله'
+                          : 'نمایش نوار برنامه در بله')),
+                  if (selected == 0)
+                    const PopupMenuItem(value: 'shadAlternate',
+                      child: Text('آدرس جایگزین شاد')),
                   const PopupMenuItem(value: 'reload',
                     child: Text('بارگذاری مجدد')),
                   const PopupMenuItem(value: 'external',
@@ -270,6 +320,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
             onPageChanged: (index) {
               setState(() {
                 selected = index;
+                if (index == 1) baleExpanded = false;
                 visited.add(index);
               });
               _setActive(overrideIndex: widget.active ? index : -1);
