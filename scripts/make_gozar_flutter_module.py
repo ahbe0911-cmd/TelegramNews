@@ -42,6 +42,11 @@ dev_dependencies:
     sdk: flutter
 flutter:
   uses-material-design: true
+  # This block is REQUIRED: Flutter build aar rejects ordinary app projects.
+  module:
+    androidX: true
+    androidPackage: ir.gozar.embed.gozar_module
+    iosBundleIdentifier: ir.gozar.embed.gozarModule
   fonts:
     - family: Vazirmatn
       fonts:
