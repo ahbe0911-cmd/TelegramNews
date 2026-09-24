@@ -3,7 +3,7 @@ name: Validate Gozar Native Launcher
 on:
   workflow_dispatch:
   push:
-    branches: [three-independent-apps]
+    branches: [three-independent-apps, feature/forkgram-embedded-telegram]
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
