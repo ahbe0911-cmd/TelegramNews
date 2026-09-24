@@ -10,6 +10,7 @@ import android.util.Base64
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
+import android.webkit.MimeTypeMap
 import android.webkit.WebView
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
@@ -55,19 +56,21 @@ class GozarSocialDownloads(
             when (uri.scheme?.lowercase()) {
                 "https" -> {
                     notify("downloadStarted")
+                    val agent = userAgent ?: web.settings.userAgentString
                     Thread {
                         try {
                             val request = URL(url).openConnection() as HttpURLConnection
                             request.connectTimeout = 20000
                             request.readTimeout = 45000
                             request.instanceFollowRedirects = true
-                            request.setRequestProperty("User-Agent", userAgent ?: web.settings.userAgentString)
+                            request.setRequestProperty("User-Agent", agent)
                             CookieManager.getInstance().getCookie(url)?.let {
                                 request.setRequestProperty("Cookie", it)
                             }
                             try {
-                                if (request.responseCode !in 200..299) {
-                                    throw IllegalStateException("HTTP download failed")
+                                if (request.responseCode !in 200..299 ||
+                                    request.url.protocol != "https") {
+                                    throw IllegalStateException("HTTPS download failed")
                                 }
                                 val name = filename(url,
                                     request.getHeaderField("Content-Disposition") ?: disposition,
@@ -110,6 +113,12 @@ class GozarSocialDownloads(
             URLConnection.guessContentTypeFromName(name) ?: "application/octet-stream"
         } else mimeHint
         val gallery = mime.startsWith("image/") || mime.startsWith("video/")
+        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+        val displayName = if (gallery && !extension.isNullOrBlank() &&
+            !name.lowercase().endsWith(".$extension") &&
+            !name.substringAfterLast('.').let { it.length in 2..5 }) {
+            "$name.$extension"
+        } else name
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val collection = when {
                 mime.startsWith("image/") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -122,7 +131,7 @@ class GozarSocialDownloads(
                 else -> Environment.DIRECTORY_DOWNLOADS
             }
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mime)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/Gozar")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -156,7 +165,7 @@ class GozarSocialDownloads(
                 if (gallery) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS
             ) ?: throw IllegalStateException("Storage unavailable")
             directory.mkdirs()
-            val output = File(directory, name)
+            val output = File(directory, displayName)
             output.outputStream().use { dest -> input.copyTo(dest) }
             if (gallery) MediaScannerConnection.scanFile(
                 activity, arrayOf(output.absolutePath), arrayOf(mime), null
