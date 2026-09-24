@@ -7,6 +7,9 @@ on:
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_social.dart'
+      - 'native/GozarSocialWebView.kt'
+      - 'test/gozar_social_test.dart'
       - 'lib/gozar_notes_store.dart'
       - 'lib/gozar_notes_screen.dart'
       - 'test/gozar_notes_test.dart'
@@ -62,11 +65,13 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart lib/gozar_social.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/gozar_social_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Test Persian notes and in-app calendar
         run: flutter test --reporter expanded test/gozar_notes_test.dart
+      - name: Test lazy RTL social web swipe and load metrics
+        run: flutter test --reporter expanded test/gozar_social_test.dart
       - name: Test Gozar navigation and VPN regressions
         run: |
           flutter test --reporter expanded test/td_gozar_app_test.dart
@@ -84,6 +89,14 @@ jobs:
           manifest = (root / 'AndroidManifest.xml').read_text()
           alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
           assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
+          assert 'GozarSocialWebViewFactory.VIEW_TYPE, social' in main
+          social = next((root / 'kotlin').rglob('GozarSocialWebView.kt')).read_text()
+          for domain in ('web.telegram.org/a/', 'web.bale.ai/',
+                         'web.rubika.ir/', 'web.eitaa.com/'):
+              assert domain in social, domain
+          assert 'web.settings.domStorageEnabled = true' in social
+          assert 'web.settings.allowFileAccess = false' in social
+          assert 'web.onPause()' in social and 'web.onResume()' in social
           for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
                        'SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED'):
               assert name in manifest, name
