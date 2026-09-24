@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/gozar_main.dart';
@@ -11,9 +12,16 @@ import 'package:telegram_news/td_system_vpn.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Gozar keeps four tabs after removing social network',
+  testWidgets('Gozar keeps five tabs and opens REAL Forkgram natively',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
+    const forkgram = MethodChannel('ir.channel.telegram_tdnews/forkgram');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var nativeLaunches = 0;
+    messenger.setMockMethodCallHandler(forkgram, (call) async {
+      if (call.method == 'showForkgram') nativeLaunches++;
+      return null;
+    });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
       if (call.method == 'status') {
@@ -24,6 +32,7 @@ void main() {
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemVpnBridge.channel, null);
+      messenger.setMockMethodCallHandler(forkgram, null);
     });
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
@@ -47,7 +56,14 @@ void main() {
     expect(find.text('روبیکا'), findsNothing);
     expect(find.text('ایتا'), findsNothing);
     expect(find.byKey(const ValueKey('gozar-social-tab')), findsNothing);
-    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.text('تلگرام'), findsOneWidget);
+    await tester.tap(find.text('تلگرام'));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(nativeLaunches, 1);
+    // Opening Forkgram must never pretend that a WebView is the native client.
+    expect(find.byKey(const ValueKey('gozar-home')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-social-pages')), findsNothing);
     expect(find.text('لانچر'), findsOneWidget);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
