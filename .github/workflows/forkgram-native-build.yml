@@ -9,6 +9,7 @@ on:
       - '.gitmodules'
       - 'third_party/FORKGRAM_PIN.json'
       - 'third_party/forkgram'
+      - 'scripts/check_forkgram_library.py'
   workflow_dispatch:
 
 permissions:
@@ -72,7 +73,23 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2 --stacktrace
           ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2 --stacktrace
+      - name: Inspect reusable native library boundary
+        run: |
+          set -euo pipefail
+          find third_party/forkgram/TMessagesProj/build/outputs/aar -name '*.aar' -printf '%s %p\\n'
+          python3 scripts/check_forkgram_library.py \\
+            third_party/forkgram/TMessagesProj/build/outputs/aar/TMessagesProj-release.aar \\
+            --report build-reports/forkgram-library.json
+      - name: Publish native library for same-APK integration work
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forkgram-Core-AAR-ARM64-NOT-A-GOZAR-APK
+          path: |
+            third_party/forkgram/TMessagesProj/build/outputs/aar/TMessagesProj-release.aar
+            build-reports/forkgram-library.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Mark baseline result only
         run: |
-          echo "Upstream native compilation succeeded."
-          echo "This is NOT the embedded Gozar Telegram tab and MUST NOT be sent as a combined APK."
+          echo "Verified the native Forkgram core can be packaged as an Android library."
+          echo "No Gozar integration, Flutter navigation, unified Application, or login tests have passed."
