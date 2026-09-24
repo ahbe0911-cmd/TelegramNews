@@ -82,6 +82,10 @@ script = replace_once(script, '        mavenCentral()',
 settings.write_text(script)
 appgradle = app / 'build.gradle'
 script = appgradle.read_text()
+script = replace_once(script, 'repositories {\n    mavenCentral()',
+    'repositories {\n    maven { url = uri("' + repo.resolve().as_uri() + '") }\n'
+    '    maven { url = uri("https://storage.googleapis.com/download.flutter.io") }\n'
+    '    mavenCentral()', 'app-level Flutter Maven resolution')
 script = replace_once(script, "apply plugin: 'com.android.application'",
     "apply plugin: 'com.android.application'\napply plugin: 'kotlin-android'",
     'Kotlin source plugin')
