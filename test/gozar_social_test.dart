@@ -8,9 +8,9 @@ void main() {
 
   test('web messenger order and trusted HTTPS domains are fixed', () {
     expect(gozarSocialSites.map((s) => s.name).toList(),
-      ['تلگرام', 'بله', 'روبیکا', 'ایتا']);
+      ['شاد', 'بله', 'روبیکا', 'ایتا']);
     expect(gozarSocialSites.map((s) => s.domain).toList(),
-      ['web.telegram.org', 'web.bale.ai',
+      ['web.shad.ir', 'web.bale.ai',
        'web.rubika.ir', 'web.eitaa.com']);
     expect(gozarSocialSites.map((s) => s.domain).toSet().length, 4);
   });
@@ -49,11 +49,14 @@ void main() {
     final content = tester.getRect(
         find.byKey(const ValueKey('gozar-social-content')));
     expect(header.height, 53);
+    expect(find.byKey(const ValueKey('gozar-social-segments')), findsOneWidget);
+    expect(find.text('تلگرام'), findsNothing);
     expect(content.top, header.bottom);
     expect(content.bottom,
         tester.getRect(find.byType(Scaffold)).bottom);
     expect(content.left, 0);
     expect(find.byKey(const ValueKey('mock-social-page-0')), findsOneWidget);
+    expect(find.text('شاد'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-2')), findsNothing);
     expect(tester.widget<Directionality>(
       find.ancestor(
@@ -61,11 +64,11 @@ void main() {
         matching: find.byType(Directionality),
       ).first,
     ).textDirection, TextDirection.rtl);
-    final telegram =
+    final shad =
       find.byKey(const ValueKey('gozar-social-select-0'));
     final eitaa =
       find.byKey(const ValueKey('gozar-social-select-3'));
-    expect(tester.getCenter(telegram).dx,
+    expect(tester.getCenter(shad).dx,
         greaterThan(tester.getCenter(eitaa).dx));
     await tester.tap(find.byKey(
       const ValueKey('gozar-social-select-1')));
@@ -90,6 +93,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ایتا'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-3')), findsOneWidget);
+    expect(find.text('شاد'), findsOneWidget);
     expect(controls, contains('setActive'));
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -17,8 +17,8 @@ class GozarSocialSite {
 }
 
 const gozarSocialSites = <GozarSocialSite>[
-  GozarSocialSite('تلگرام', 'web.telegram.org',
-    Icons.send_rounded, Color(0xff258ec7)),
+  GozarSocialSite('شاد', 'web.shad.ir',
+    Icons.school_rounded, Color(0xff2484bd)),
   GozarSocialSite('بله', 'web.bale.ai',
     Icons.chat_bubble_rounded, Color(0xff24a486)),
   GozarSocialSite('روبیکا', 'web.rubika.ir',
@@ -143,62 +143,121 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
         Container(
           key: const ValueKey('gozar-social-header'),
           height: 53,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.fromLTRB(7, 5, 7, 5),
           decoration: const BoxDecoration(
-            color: Color(0xfff9fcff),
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xfffcfeff), Color(0xfff0f7ff)],
+            ),
             border: Border(bottom: BorderSide(
-              color: Color(0xffc7dff1))),
+              color: Color(0xffd6e6f4))),
           ),
           child: Row(children: [
-            for (var index = 0; index < gozarSocialSites.length; index++)
-              Expanded(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: InkWell(
-                  key: ValueKey('gozar-social-select-' + index.toString()),
-                  onTap: () => _select(index),
-                  borderRadius: BorderRadius.circular(9),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      color: index == selected
-                          ? gozarSocialSites[index].accent
-                          : const Color(0xffeaf3fd)),
-                    child: Text(gozarSocialSites[index].name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: index == selected ? Colors.white
-                            : GozarPalette.daylightInk)),
-                  ),
-                ),
-              )),
-            PopupMenuButton<String>(
-              key: const ValueKey('gozar-social-options'),
-              tooltip: 'گزینه‌های صفحه وب',
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.more_vert_rounded,
-                size: 20, color: GozarPalette.daylightAccent),
-              onSelected: (value) {
-                if (value == 'reload') _reload();
-                if (value == 'external') _externalBrowser();
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'reload',
-                  child: Text('بارگذاری مجدد')),
-                const PopupMenuItem(value: 'external',
-                  child: Text('باز کردن در مرورگر گوشی')),
-                if (loadMilliseconds.containsKey(selected))
-                  PopupMenuItem(
-                    enabled: false,
-                    child: Text('زمان بارگذاری: ' +
-                      loadMilliseconds[selected].toString() + ' ms',
-                      key: const ValueKey('gozar-social-load-kpi')),
-                  ),
-              ],
+            Expanded(child: Container(
+              key: const ValueKey('gozar-social-segments'),
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: const Color(0xffe9f1fb),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: const Color(0xffd5e5f4)),
+              ),
+              child: Row(children: [
+                for (var index = 0; index < gozarSocialSites.length; index++)
+                  Expanded(child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: Semantics(
+                      button: true,
+                      selected: index == selected,
+                      label: 'انتخاب ' + gozarSocialSites[index].name,
+                      child: InkWell(
+                        key: ValueKey('gozar-social-select-' + index.toString()),
+                        onTap: () => _select(index),
+                        borderRadius: BorderRadius.circular(12),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          height: 33,
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: index == selected ? LinearGradient(
+                              begin: Alignment.topRight,
+                              end: Alignment.bottomLeft,
+                              colors: [
+                                gozarSocialSites[index].accent,
+                                Color.lerp(gozarSocialSites[index].accent,
+                                    const Color(0xff173f70), .22)!,
+                              ],
+                            ) : null,
+                            boxShadow: index == selected ? [
+                              BoxShadow(
+                                color: gozarSocialSites[index].accent
+                                    .withOpacity(.2),
+                                blurRadius: 5,
+                                offset: const Offset(0, 2),
+                              ),
+                            ] : const [],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(gozarSocialSites[index].icon,
+                                size: 13,
+                                color: index == selected
+                                    ? Colors.white
+                                    : const Color(0xff607991)),
+                              const SizedBox(width: 3),
+                              Flexible(child: Text(gozarSocialSites[index].name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: index == selected ? Colors.white
+                                      : GozarPalette.daylightInk))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  )),
+              ]),
+            )),
+            const SizedBox(width: 6),
+            Container(
+              width: 35,
+              height: 37,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xffd5e5f4)),
+              ),
+              child: PopupMenuButton<String>(
+                key: const ValueKey('gozar-social-options'),
+                tooltip: 'گزینه‌های صفحه وب',
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.more_horiz_rounded,
+                  size: 22, color: GozarPalette.daylightAccent),
+                onSelected: (value) {
+                  if (value == 'reload') _reload();
+                  if (value == 'external') _externalBrowser();
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'reload',
+                    child: Text('بارگذاری مجدد')),
+                  const PopupMenuItem(value: 'external',
+                    child: Text('باز کردن در مرورگر گوشی')),
+                  if (loadMilliseconds.containsKey(selected))
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Text('زمان بارگذاری: ' +
+                        loadMilliseconds[selected].toString() + ' ms',
+                        key: const ValueKey('gozar-social-load-kpi')),
+                    ),
+                ],
+              ),
             ),
           ]),
         ),

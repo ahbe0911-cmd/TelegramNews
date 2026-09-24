@@ -40,7 +40,7 @@ class GozarSocialWebViewFactory(
         const val EVENTS = "ir.channel.telegram_tdnews/gozar_social_events"
 
         val sites = listOf(
-            "https://web.telegram.org/a/",
+            "https://web.shad.ir/",
             "https://web.bale.ai/",
             "https://web.rubika.ir/",
             "https://web.eitaa.com/"

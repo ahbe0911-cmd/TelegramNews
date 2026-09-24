@@ -91,9 +91,10 @@ jobs:
           assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
           assert 'GozarSocialWebViewFactory.VIEW_TYPE, social' in main
           social = next((root / 'kotlin').rglob('GozarSocialWebView.kt')).read_text()
-          for domain in ('web.telegram.org/a/', 'web.bale.ai/',
+          for domain in ('web.shad.ir/', 'web.bale.ai/',
                          'web.rubika.ir/', 'web.eitaa.com/'):
               assert domain in social, domain
+          assert 'https://web.telegram.org' not in social
           assert 'web.settings.domStorageEnabled = true' in social
           assert 'web.settings.useWideViewPort = true' in social
           assert 'web.settings.loadWithOverviewMode = true' in social
