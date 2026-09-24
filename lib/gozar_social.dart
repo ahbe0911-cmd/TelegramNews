@@ -207,7 +207,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                 color: GozarPalette.daylightMuted),
               const SizedBox(width: 5),
               const Expanded(child: Text(
-                'با کشیدن صفحه به چپ، به پیام‌رسان بعدی بروید.',
+                'صفحه را افقی بکشید یا پیام‌رسان دلخواه را انتخاب کنید.',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: GozarPalette.daylightMuted,
                   fontSize: 10))),
