@@ -29,7 +29,7 @@ def check(apk: Path, aapt: str) -> None:
         assert any(name.endswith("/libflutter.so") for name in native), (
             "Flutter runtime missing"
         )
-        assert any(re.search(r"/libtmessages\\.[0-9]+\\.so$", name)
+        assert any(re.search(r"/libtmessages\.[0-9]+\.so$", name)
                    for name in native), "Forkgram native messaging library missing"
         assert any(name.startswith("assets/flutter_assets/") for name in names), (
             "Gozar Flutter assets missing"
