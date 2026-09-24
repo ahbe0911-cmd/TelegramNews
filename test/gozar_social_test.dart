@@ -73,11 +73,8 @@ void main() {
     await tester.tap(find.byKey(
       const ValueKey('gozar-social-select-1')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsOneWidget);
-    expect(tester.widget<AnimatedContainer>(find.descendant(
-      of: find.byKey(const ValueKey('gozar-social-select-1')),
-      matching: find.byType(AnimatedContainer),
-    )).decoration, isNotNull);
+    // Bale collapses only Gozar's header, not the website's own navigation.
+    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsNothing);
     expect(find.byKey(const ValueKey('mock-social-page-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-bale-expand')), findsOneWidget);
     expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 30);
@@ -85,6 +82,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 53);
     expect(find.text('بله'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsOneWidget);
+    expect(tester.widget<AnimatedContainer>(find.descendant(
+      of: find.byKey(const ValueKey('gozar-social-select-1')),
+      matching: find.byType(AnimatedContainer),
+    )).decoration, isNotNull);
     // In a right-to-left PageView, the next page sits to the LEFT
     // of the current one; drag right to bring it into view.
     await tester.drag(
