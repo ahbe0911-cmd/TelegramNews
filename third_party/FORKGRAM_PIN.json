@@ -1,0 +1,5 @@
+{
+  "upstream": "forkgram/TelegramAndroid",
+  "release_tag": "12.10.5.1",
+  "commit": "4992e612cfc99b1e967722822c1c4eb7aafe516b"
+}
