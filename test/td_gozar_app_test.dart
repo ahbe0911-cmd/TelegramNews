@@ -11,7 +11,7 @@ import 'package:telegram_news/td_system_vpn.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Gozar is a standalone VPN screen without news or Telegram',
+  testWidgets('Gozar keeps standalone VPN, notes and settings with new social tab',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -41,6 +41,8 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
+    expect(find.text('شبکه‌های اجتماعی'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-social-pages')), findsNothing);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-home-notes-widget')),
