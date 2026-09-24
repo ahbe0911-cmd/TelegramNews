@@ -10,7 +10,7 @@ void main() {
     expect(gozarSocialSites.map((s) => s.name).toList(),
       ['شاد', 'بله', 'روبیکا', 'ایتا']);
     expect(gozarSocialSites.map((s) => s.domain).toList(),
-      ['web.shad.ir', 'web.bale.ai',
+      ['my.shad.ir', 'web.bale.ai',
        'web.rubika.ir', 'web.eitaa.com']);
     expect(gozarSocialSites.map((s) => s.domain).toSet().length, 4);
   });
@@ -79,6 +79,12 @@ void main() {
       matching: find.byType(AnimatedContainer),
     )).decoration, isNotNull);
     expect(find.byKey(const ValueKey('mock-social-page-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-bale-expand')), findsOneWidget);
+    expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 30);
+    await tester.tap(find.byKey(const ValueKey('gozar-bale-expand')));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 53);
+    expect(find.text('بله'), findsOneWidget);
     // In a right-to-left PageView, the next page sits to the LEFT
     // of the current one; drag right to bring it into view.
     await tester.drag(
