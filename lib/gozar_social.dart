@@ -132,102 +132,78 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
     }));
   }
 
+  /// The site selector takes a single compact row at the very TOP of this
+  /// tab. No app-global toolbar, explanatory banner, footer or inset card is
+  /// placed around the webpage: Android WebView gets all the remaining space.
   @override
   Widget build(BuildContext context) {
-    final current = gozarSocialSites[selected];
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Column(children: [
         Container(
           key: const ValueKey('gozar-social-header'),
-          margin: const EdgeInsets.fromLTRB(10, 5, 10, 6),
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-          decoration: BoxDecoration(
-            color: GozarPalette.daylightCard,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xffc9dff1)),
+          height: 53,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: const BoxDecoration(
+            color: Color(0xfff9fcff),
+            border: Border(bottom: BorderSide(
+              color: Color(0xffc7dff1))),
           ),
-          child: Column(children: [
-            Row(children: [
-              const Icon(Icons.hub_outlined,
-                color: GozarPalette.daylightAccent, size: 22),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('شبکه‌های اجتماعی',
-                style: TextStyle(color: GozarPalette.daylightInk,
-                  fontSize: 16, fontWeight: FontWeight.w800))),
-              IconButton(
-                key: const ValueKey('gozar-social-refresh'),
-                tooltip: 'بارگذاری مجدد',
-                onPressed: _reload,
-                icon: const Icon(Icons.refresh_rounded,
-                  color: GozarPalette.daylightAccent)),
-              IconButton(
-                key: const ValueKey('gozar-social-open-browser'),
-                tooltip: 'باز کردن در مرورگر گوشی',
-                onPressed: _externalBrowser,
-                icon: const Icon(Icons.open_in_browser_rounded,
-                  color: GozarPalette.daylightAccent)),
-            ]),
-            const SizedBox(height: 5),
-            Row(children: [
-              for (var index = 0; index < gozarSocialSites.length; index++)
-                Expanded(child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: InkWell(
-                    key: ValueKey('gozar-social-select-' + index.toString()),
-                    onTap: () => _select(index),
-                    borderRadius: BorderRadius.circular(13),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(13),
-                        color: index == selected
-                            ? gozarSocialSites[index].accent
-                            : const Color(0xffeaf3fd)),
-                      child: Column(children: [
-                        Icon(gozarSocialSites[index].icon, size: 21,
-                          color: index == selected ? Colors.white
-                              : gozarSocialSites[index].accent),
-                        const SizedBox(height: 4),
-                        Text(gozarSocialSites[index].name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: index == selected ? Colors.white
-                                : GozarPalette.daylightInk)),
-                      ]),
-                    ),
+          child: Row(children: [
+            for (var index = 0; index < gozarSocialSites.length; index++)
+              Expanded(child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: InkWell(
+                  key: ValueKey('gozar-social-select-' + index.toString()),
+                  onTap: () => _select(index),
+                  borderRadius: BorderRadius.circular(9),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      color: index == selected
+                          ? gozarSocialSites[index].accent
+                          : const Color(0xffeaf3fd)),
+                    child: Text(gozarSocialSites[index].name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: index == selected ? Colors.white
+                            : GozarPalette.daylightInk)),
                   ),
-                )),
-            ]),
-            const SizedBox(height: 4),
-            Row(children: [
-              const Icon(Icons.swipe_rounded, size: 15,
-                color: GozarPalette.daylightMuted),
-              const SizedBox(width: 5),
-              const Expanded(child: Text(
-                'صفحه را افقی بکشید یا پیام‌رسان دلخواه را انتخاب کنید.',
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: GozarPalette.daylightMuted,
-                  fontSize: 10))),
-              if (loadMilliseconds.containsKey(selected))
-                Text(loadMilliseconds[selected].toString() + ' ms',
-                  key: const ValueKey('gozar-social-load-kpi'),
-                  style: const TextStyle(
-                    fontSize: 10, color: GozarPalette.daylightAccent)),
-            ]),
+                ),
+              )),
+            PopupMenuButton<String>(
+              key: const ValueKey('gozar-social-options'),
+              tooltip: 'گزینه‌های صفحه وب',
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.more_vert_rounded,
+                size: 20, color: GozarPalette.daylightAccent),
+              onSelected: (value) {
+                if (value == 'reload') _reload();
+                if (value == 'external') _externalBrowser();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'reload',
+                  child: Text('بارگذاری مجدد')),
+                const PopupMenuItem(value: 'external',
+                  child: Text('باز کردن در مرورگر گوشی')),
+                if (loadMilliseconds.containsKey(selected))
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Text('زمان بارگذاری: ' +
+                      loadMilliseconds[selected].toString() + ' ms',
+                      key: const ValueKey('gozar-social-load-kpi')),
+                  ),
+              ],
+            ),
           ]),
         ),
-        Expanded(child: Container(
+        Expanded(child: SizedBox.expand(
           key: const ValueKey('gozar-social-content'),
-          margin: const EdgeInsets.symmetric(horizontal: 7),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xffc9dff1)),
-          ),
           child: PageView.builder(
             key: const ValueKey('gozar-social-pages'),
             controller: controller,
@@ -257,7 +233,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                     index: index)),
                 if (loadErrors.contains(index))
                   Positioned(
-                    bottom: 10, right: 10, left: 10,
+                    bottom: 12, right: 10, left: 10,
                     child: Material(
                       borderRadius: BorderRadius.circular(11),
                       color: const Color(0xfff6eff0),
@@ -276,14 +252,6 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
             },
           ),
         )),
-        const SizedBox(height: 4),
-        Text(current.name + ' · ' + current.domain + ' · ' +
-          (selected + 1).toString() + ' از ' +
-          gozarSocialSites.length.toString(),
-          key: const ValueKey('gozar-social-current'),
-          style: const TextStyle(
-            color: GozarPalette.daylightMuted, fontSize: 10)),
-        const SizedBox(height: 3),
       ]),
     );
   }
