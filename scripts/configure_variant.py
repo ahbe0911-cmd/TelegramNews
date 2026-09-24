@@ -25,7 +25,7 @@ manifest.write_text(source)
 activity = next((root / 'android/app/src/main/kotlin').rglob('MainActivity.kt'))
 activity.write_text(activity.read_text().replace('"/NabzKhabar"', f'"/{folder}"'))
 res = root / 'android/app/src/main/res'
-color = '#087E70' if gozar else '#7043C6' if cafe else '#0866DC'
+color = '#0C5489' if gozar else '#7043C6' if cafe else '#0866DC'
 # Vector assets stay crisp on A54 and support Android adaptive launcher masks.
 paths = '''<path android:fillColor="#FFFFFFFF" android:pathData="M28,31 L80,31 Q84,31 84,35 L84,67 Q84,71 80,71 L59,71 L59,77 L70,77 L70,81 L38,81 L38,77 L49,77 L49,71 L28,71 Q24,71 24,67 L24,35 Q24,31 28,31 Z"/>
 <path android:fillColor="COLOR" android:pathData="M30,37 L78,37 L78,64 L30,64 Z"/>
@@ -33,10 +33,12 @@ paths = '''<path android:fillColor="#FFFFFFFF" android:pathData="M28,31 L80,31 Q
 <path android:fillColor="COLOR" android:pathData="M32,36 L69,36 L69,41 L32,41 Z M32,64 L69,64 L69,68 L32,68 Z M32,73 L57,73 L57,76 L32,76 Z"/>
 <path android:fillColor="#00000000" android:strokeColor="COLOR" android:strokeWidth="3" android:strokeLineJoin="round" android:pathData="M32,53 L42,53 L47,46 L53,60 L58,51 L69,51"/>'''
 if gozar:
-    # A separate green shield icon for the VPN application.
-    paths = '''<path android:fillColor="#FFFFFFFF" android:pathData="M54,19 L83,31 L83,52 Q83,72 54,89 Q25,72 25,52 L25,31 Z"/>
-<path android:fillColor="COLOR" android:pathData="M54,28 L75,36 L75,52 Q75,66 54,78 Q33,66 33,52 L33,36 Z"/>
-<path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M41,53 L51,62 L68,44"/>'''
+    # network-and-shield: blue protection around four connected web nodes.
+    paths = '''<path android:fillColor="#FFFFFFFF" android:pathData="M54,16 L82,27 L82,50 Q82,70 54,88 Q26,70 26,50 L26,27 Z"/>
+<path android:fillColor="#0C5489" android:pathData="M54,24 L75,32 L75,50 Q75,65 54,79 Q33,65 33,50 L33,32 Z"/>
+<path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M54,35 L40,49 L54,68 L68,49 L54,35 M40,49 L68,49 M54,35 L54,68"/>
+<path android:fillColor="#61E9DA" android:pathData="M54,28 A7,7 0,1 1,54 42 A7,7 0,1 1,54 28 Z M40,42 A7,7 0,1 1,40 56 A7,7 0,1 1,40 42 Z M68,42 A7,7 0,1 1,68 56 A7,7 0,1 1,68 42 Z M54,61 A7,7 0,1 1,54 75 A7,7 0,1 1,54 61 Z"/>
+<path android:fillColor="#FFFFFFFF" android:pathData="M54,32 A3,3 0,1 1,54 38 A3,3 0,1 1,54 32 Z M40,46 A3,3 0,1 1,40 52 A3,3 0,1 1,40 46 Z M68,46 A3,3 0,1 1,68 52 A3,3 0,1 1,68 46 Z M54,65 A3,3 0,1 1,54 71 A3,3 0,1 1,54 65 Z"/>'''
 paths = paths.replace('COLOR', color)
 def vector(background):
     bg = f'<path android:fillColor="{color}" android:pathData="M0,0 L108,0 L108,108 L0,108 Z"/>' if background else ''
