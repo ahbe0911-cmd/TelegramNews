@@ -224,35 +224,12 @@ if app_id or app_hash:
     assert re.fullmatch(r'[0-9a-fA-F]{32}', app_hash), 'Invalid API hash format'
     props = fork / 'gradle.properties'
     old = props.read_text()
-    old = re.sub(r'^APP_ID\\s*=.*
-    old = re.sub(r'^APP_HASH\\s*=.*
-    props.write_text(old)
-elif os.environ.get('BUILD_ONLY') != '1':
-    raise SystemExit('Own Telegram APP_ID and APP_HASH are required for usable login')
-
-print('Staged one APK host containing real Forkgram + Gozar Flutter AAR.')
-print('Flutter Maven coordinate:', coordinate)
-print('Credentials:', 'provided securely' if app_id else 'missing (BUILD ONLY)')
-, 'APP_ID=' + app_id, old, count=1, flags=re.M)
-    old = re.sub(r'^APP_HASH=.*$', 'APP_HASH=' + app_hash, old, count=1, flags=re.M)
-    props.write_text(old)
-elif os.environ.get('BUILD_ONLY') != '1':
-    raise SystemExit('Own Telegram APP_ID and APP_HASH are required for usable login')
-
-print('Staged one APK host containing real Forkgram + Gozar Flutter AAR.')
-print('Flutter Maven coordinate:', coordinate)
-print('Credentials:', 'provided securely' if app_id else 'missing (BUILD ONLY)')
-, 'APP_HASH=' + app_hash, old, count=1, flags=re.M)
-    props.write_text(old)
-elif os.environ.get('BUILD_ONLY') != '1':
-    raise SystemExit('Own Telegram APP_ID and APP_HASH are required for usable login')
-
-print('Staged one APK host containing real Forkgram + Gozar Flutter AAR.')
-print('Flutter Maven coordinate:', coordinate)
-print('Credentials:', 'provided securely' if app_id else 'missing (BUILD ONLY)')
-, 'APP_ID=' + app_id, old, count=1, flags=re.M)
-    old = re.sub(r'^APP_HASH=.*$', 'APP_HASH=' + app_hash, old, count=1, flags=re.M)
-    props.write_text(old)
+    updated, id_count = re.subn(r'^APP_ID\s*=.*$', 'APP_ID=' + app_id, old,
+                                 count=1, flags=re.M)
+    updated, hash_count = re.subn(r'^APP_HASH\s*=.*$', 'APP_HASH=' + app_hash,
+                                   updated, count=1, flags=re.M)
+    assert id_count == hash_count == 1, 'Unexpected upstream API property format'
+    props.write_text(updated)
 elif os.environ.get('BUILD_ONLY') != '1':
     raise SystemExit('Own Telegram APP_ID and APP_HASH are required for usable login')
 
