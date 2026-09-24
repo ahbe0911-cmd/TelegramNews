@@ -59,10 +59,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('بله · web.bale.ai'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-1')), findsOneWidget);
-    // Swiping LEFT from Bale goes to Rubika, not back to Telegram.
+    // In a right-to-left PageView, the next page sits to the LEFT
+    // of the current one; drag right to bring it into view.
     await tester.drag(
       find.byKey(const ValueKey('gozar-social-pages')),
-      const Offset(-500, 0),
+      const Offset(500, 0),
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('روبیکا · web.rubika.ir'), findsOneWidget);
