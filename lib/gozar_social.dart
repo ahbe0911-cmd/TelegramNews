@@ -316,12 +316,18 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
           child: PageView.builder(
             key: const ValueKey('gozar-social-pages'),
             controller: controller,
+            allowImplicitScrolling: true,
             itemCount: gozarSocialSites.length,
             onPageChanged: (index) {
               setState(() {
                 selected = index;
                 if (index == 1) baleExpanded = false;
                 visited.add(index);
+                // Warm one adjacent page so the next RTL swipe starts faster,
+                // without starting all four heavyweight web apps at once.
+                if (index + 1 < gozarSocialSites.length) {
+                  visited.add(index + 1);
+                }
               });
               _setActive(overrideIndex: widget.active ? index : -1);
             },
@@ -349,12 +355,23 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                       color: const Color(0xfff6eff0),
                       child: Padding(
                         padding: const EdgeInsets.all(11),
-                        child: Text('بارگذاری ' +
-                          gozarSocialSites[index].name +
-                          ' انجام نشد. اینترنت را بررسی و صفحه را تازه‌سازی کنید.',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xff91364a), fontSize: 11)),
+                        child: Column(mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('بارگذاری ' + gozarSocialSites[index].name +
+                              ' انجام نشد. اینترنت را بررسی و صفحه را تازه‌سازی کنید.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xff91364a), fontSize: 11)),
+                            if (index == 0)
+                              TextButton.icon(
+                                key: const ValueKey('gozar-shad-browser-fallback'),
+                                onPressed: _externalBrowser,
+                                icon: const Icon(Icons.open_in_browser_rounded,
+                                  size: 16),
+                                label: const Text('باز کردن شاد در مرورگر گوشی'),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
