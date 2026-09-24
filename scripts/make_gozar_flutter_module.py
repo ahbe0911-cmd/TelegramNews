@@ -17,6 +17,10 @@ subprocess.run([
     '--project-name', 'gozar_module', str(module)
 ], check=True)
 shutil.copytree(root / 'lib', module / 'lib', dirs_exist_ok=True)
+# flutter build aar uses lib/main.dart; it does not support --target.
+(module / 'lib' / 'main.dart').write_text(
+    "import 'gozar_main.dart' as gozar;\\nFuture<void> main() => gozar.main();\\n",
+    encoding='utf-8')
 shutil.copytree(root / 'assets' / 'fonts', module / 'assets' / 'fonts',
                 dirs_exist_ok=True)
 (module / 'pubspec.yaml').write_text("""name: gozar_module

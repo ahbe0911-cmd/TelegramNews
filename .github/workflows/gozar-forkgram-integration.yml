@@ -69,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           cd build/gozar_module
-          flutter build aar --no-debug --no-profile --target=lib/gozar_main.dart
+          flutter build aar --no-debug --no-profile
           find build/host/outputs/repo -name 'flutter_release-*.aar' -size +1M -print -quit | grep -q .
       - name: Obtain pinned upstream Forkgram source and recursive dependencies
         timeout-minutes: 25
