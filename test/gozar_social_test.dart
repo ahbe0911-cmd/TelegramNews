@@ -40,6 +40,19 @@ void main() {
     )));
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(const ValueKey('gozar-social-pages')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-social-header')), findsOneWidget);
+    expect(find.text('شبکه‌های اجتماعی'), findsNothing);
+    expect(find.textContaining('صفحه را افقی'), findsNothing);
+    expect(find.byKey(const ValueKey('gozar-social-options')), findsOneWidget);
+    final header = tester.getRect(
+        find.byKey(const ValueKey('gozar-social-header')));
+    final content = tester.getRect(
+        find.byKey(const ValueKey('gozar-social-content')));
+    expect(header.height, 53);
+    expect(content.top, header.bottom);
+    expect(content.bottom,
+        tester.getRect(find.byType(Scaffold)).bottom);
+    expect(content.left, 0);
     expect(find.byKey(const ValueKey('mock-social-page-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-2')), findsNothing);
     expect(tester.widget<Directionality>(
@@ -57,7 +70,11 @@ void main() {
     await tester.tap(find.byKey(
       const ValueKey('gozar-social-select-1')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('بله · web.bale.ai'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsOneWidget);
+    expect(tester.widget<AnimatedContainer>(find.descendant(
+      of: find.byKey(const ValueKey('gozar-social-select-1')),
+      matching: find.byType(AnimatedContainer),
+    )).decoration, isNotNull);
     expect(find.byKey(const ValueKey('mock-social-page-1')), findsOneWidget);
     // In a right-to-left PageView, the next page sits to the LEFT
     // of the current one; drag right to bring it into view.
@@ -66,12 +83,12 @@ void main() {
       const Offset(500, 0),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('روبیکا · web.rubika.ir'), findsOneWidget);
+    expect(find.text('روبیکا'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-2')), findsOneWidget);
     await tester.tap(find.byKey(
       const ValueKey('gozar-social-select-3')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('ایتا · web.eitaa.com'), findsOneWidget);
+    expect(find.text('ایتا'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-social-page-3')), findsOneWidget);
     expect(controls, contains('setActive'));
     await tester.pumpWidget(const SizedBox.shrink());
