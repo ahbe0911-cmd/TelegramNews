@@ -1,6 +1,7 @@
 package ir.channel.telegram_news
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -120,8 +121,35 @@ class GozarSocialWebViewFactory(
         private var pageFailed = false
         private var everActivated = false
         private val downloads = GozarSocialDownloads(activity, web, index, events)
+        // An explicit long-press Save action also works for images which the
+        // website displays without providing a download button.
+        private fun installImageSave() {
+            web.setOnLongClickListener {
+                val hit = web.hitTestResult
+                val source = hit.extra
+                val type = hit.type
+                val isImage = type == WebView.HitTestResult.IMAGE_TYPE ||
+                    type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                val scheme = if (source == null) null else
+                    Uri.parse(source).scheme?.lowercase()
+                if (!isImage || source.isNullOrBlank() ||
+                    (scheme != "https" && scheme != "blob")) {
+                    false
+                } else {
+                    AlertDialog.Builder(activity)
+                        .setTitle("ذخیرهٔ تصویر")
+                        .setNegativeButton("انصراف", null)
+                        .setPositiveButton("ذخیره در گالری") { _, _ ->
+                            downloads.saveUserDownload(source,
+                                web.settings.userAgentString, null, "image/jpeg")
+                        }.show()
+                    true
+                }
+            }
+        }
 
         init {
+            installImageSave()
             frame.addView(web, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT))
