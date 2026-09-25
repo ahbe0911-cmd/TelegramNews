@@ -396,9 +396,15 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
                     'اتصال اینترنت را بررسی کنید.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xff92384b))),
-                  TextButton(
-                    onPressed: _openInBrowser,
-                    child: const Text('باز کردن در مرورگر گوشی')),
+                  Wrap(alignment: WrapAlignment.center, children: [
+                    TextButton(
+                      key: const ValueKey('gozar-telegram-retry'),
+                      onPressed: _reload,
+                      child: const Text('تلاش مجدد')),
+                    TextButton(
+                      onPressed: _openInBrowser,
+                      child: const Text('باز کردن در مرورگر گوشی')),
+                  ]),
                 ]),
               ),
             ),
