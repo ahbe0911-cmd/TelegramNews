@@ -63,6 +63,12 @@ jobs:
           path.write_text(script.replace(needle, '', 1))
           print('Removed the workaround TEMPORARILY for unbiased dependency diagnostics.')
           PY
+      - name: Install pinned Android SDK/NDK required during Gradle configuration
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - name: Resolve complete runtime tree and BOTH precise transitive origins
         working-directory: third_party/forkgram
         run: |
