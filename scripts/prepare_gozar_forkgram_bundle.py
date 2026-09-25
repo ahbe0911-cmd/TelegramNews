@@ -98,8 +98,9 @@ script = replace_once(script, "    implementation project(':TMessagesProj')",
 # the newer Tink runtime resolved by Flutter AndroidX secure storage. Retain
 # the newer single copy for this experimental build; verify runtime crypto and
 # login on a physical Android device before allowing user distribution.
-script = replace_once(script, "configurations.all {\\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'".replace('\n', '\n'),
-    "configurations.all {\\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'\\n    exclude group: 'com.google.crypto.tink', module: 'tink-android'".replace('\n', '\n'),
+script = replace_once(script,
+    "configurations.all {\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'",
+    "configurations.all {\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'\n    exclude group: 'com.google.crypto.tink', module: 'tink-android'",
     'duplicate Tink dependency conflict')
 script = replace_once(script, 'minSdkVersion 21', 'minSdkVersion 24',
     'min Android SDK')
