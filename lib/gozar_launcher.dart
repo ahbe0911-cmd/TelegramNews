@@ -834,8 +834,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
       // height on the VPN status toolbar from other tabs.
       Container(
         key: const ValueKey('gozar-launcher-top-toolbar'),
-        margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        margin: const EdgeInsets.fromLTRB(12, 7, 12, 6),
+        padding: const EdgeInsets.fromLTRB(11, 8, 11, 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(21),
           gradient: const LinearGradient(colors: [
@@ -855,12 +855,12 @@ class _GozarLauncherState extends State<GozarLauncher> {
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: GozarPalette.text,
-                  fontSize: 16, fontWeight: FontWeight.w800)),
+                  fontSize: 18, fontWeight: FontWeight.w800)),
               Text(section == null ? 'بخش جدید بسازید'
                 : section.apps.length.toString() + ' برنامه · ' +
                   section.columns.toString() + ' ستون',
                 style: const TextStyle(
-                  color: GozarPalette.muted, fontSize: 10)),
+                  color: GozarPalette.muted, fontSize: 11)),
             ],
           )),
           IconButton(
@@ -900,24 +900,25 @@ class _GozarLauncherState extends State<GozarLauncher> {
           ),
         ),
       ),
-      if (section != null) Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            key: const ValueKey('gozar-launcher-add-apps'),
-            onPressed: section.apps.length >=
-                    GozarLauncherStore.maxAppsPerSection
-                ? null : () => addApps(section),
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 19),
-            label: Text('افزودن برنامه به «' + section.title + '»',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xff236fc0),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 13, vertical: 9),
-              visualDensity: VisualDensity.compact,
-            ),
+      if (reorderMode && section != null) Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 5),
+        child: Material(
+          color: const Color(0xffe1f1ff),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Row(children: [
+              const Icon(Icons.open_with_rounded,
+                color: GozarPalette.cyan, size: 19),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('آیکون را نگه دارید و به جای جدید بکشید',
+                style: TextStyle(
+                  color: GozarPalette.text, fontSize: 12))),
+              TextButton(
+                key: const ValueKey('gozar-launcher-finish-reorder'),
+                onPressed: () => setState(() { reorderMode = false; }),
+                child: const Text('پایان')),
+            ]),
           ),
         ),
       ),
@@ -932,6 +933,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
         : PageView.builder(
           key: const ValueKey('gozar-launcher-pages'),
           controller: pages,
+          physics: reorderMode ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
           itemCount: sections.length,
           onPageChanged: (index) => setState(() {
             active = index;
