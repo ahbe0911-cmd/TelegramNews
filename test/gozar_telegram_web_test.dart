@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:telegram_news/gozar_telegram_web.dart';
 
 void main() {
@@ -33,4 +34,52 @@ void main() {
         findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('Telegram Web exposes font toggle and validated external MTProto',
+      (tester) async {
+    final calls = <MethodCall>[];
+    const native = MethodChannel(
+        'ir.channel.telegram_tdnews/gozar_telegram_controls');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(native, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(
+      body: GozarTelegramWeb(
+        active: true, testWebPage: SizedBox.expand(),
+      ),
+    )));
+    await tester.pump(const Duration(milliseconds: 130));
+    await tester.tap(find.byKey(const ValueKey('gozar-telegram-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('استفاده از فونت اصلی سایت'));
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(calls.any((call) => call.method == 'setFontEnabled' &&
+        (call.arguments as Map)['enabled'] == false), isTrue);
+    await tester.tap(find.byKey(const ValueKey('gozar-telegram-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('افزودن MTProto در برنامه تلگرام'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('روی تلگرام وب'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('gozar-mtproto-confirm')));
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(calls.where((call) =>
+        call.method == 'openMtprotoInTelegram'), isEmpty);
+    await tester.enterText(find.byKey(
+      const ValueKey('gozar-mtproto-server')), 'proxy.example.org');
+    await tester.enterText(find.byKey(
+      const ValueKey('gozar-mtproto-secret')), '0123456789abcdef0123456789abcdef');
+    await tester.tap(find.byKey(const ValueKey('gozar-mtproto-confirm')));
+    await tester.pumpAndSettle();
+    final linked = calls.where((call) =>
+        call.method == 'openMtprotoInTelegram').toList();
+    expect(linked.length, 1);
+    expect((linked.single.arguments as Map)['server'], 'proxy.example.org');
+    expect((linked.single.arguments as Map)['port'], 443);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }
