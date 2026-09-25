@@ -14,8 +14,7 @@ import android.webkit.MimeTypeMap
 import android.webkit.WebView
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
+import java.io.FileOutputStream
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -36,15 +35,30 @@ class GozarSocialDownloads(
     private val index: Int,
     private val events: MethodChannel
 ) {
-    private class BlobTransfer(val filename: String, val mimeHint: String) {
-        val bytes = ByteArrayOutputStream()
+    private class BlobTransfer(
+        val filename: String, var mimeHint: String, val file: File
+    ) {
+        val output = FileOutputStream(file)
         var expectedSize = -1L
+        var written = 0L
         var started = false
+        var closed = false
+        @Synchronized fun close() {
+            if (!closed) {
+                closed = true
+                output.close()
+            }
+        }
+        @Synchronized fun abort() {
+            close()
+            file.delete()
+        }
     }
 
     private val transfers = ConcurrentHashMap<String, BlobTransfer>()
-    private val maxBlob = 30L * 1024 * 1024
-    private val maxHttps = 150L * 1024 * 1024
+    // Blob data is streamed to a temporary file rather than retained in RAM.
+    private val maxBlob = 512L * 1024 * 1024
+    private val maxHttps = 512L * 1024 * 1024
 
     init {
         // No arbitrary URL or file path can be submitted through this bridge.
@@ -52,6 +66,14 @@ class GozarSocialDownloads(
         // user-initiated WebView download for this specific page.
         web.addJavascriptInterface(BlobPort(), "GozarFileBridge")
         web.setDownloadListener { url, userAgent, disposition, mime, _ ->
+            saveUserDownload(url, userAgent, disposition, mime)
+        }
+    }
+
+    /** Called from the website download action or the user's Save image dialog. */
+    fun saveUserDownload(url: String, userAgent: String?,
+                         disposition: String?, mime: String?) {
+        try {
             val uri = android.net.Uri.parse(url)
             when (uri.scheme?.lowercase()) {
                 "https" -> {
@@ -92,6 +114,8 @@ class GozarSocialDownloads(
                 "blob" -> downloadBlob(url, disposition, mime)
                 else -> notify("downloadError")
             }
+        } catch (_: Exception) {
+            notify("downloadError")
         }
     }
 
@@ -114,10 +138,16 @@ class GozarSocialDownloads(
         } else mimeHint
         val gallery = mime.startsWith("image/") || mime.startsWith("video/")
         val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
-        val displayName = if (gallery && !extension.isNullOrBlank() &&
-            !name.lowercase().endsWith(".$extension") &&
-            !name.substringAfterLast('.').let { it.length in 2..5 }) {
-            "$name.$extension"
+        val inferred = when (mime) {
+            "application/pdf" -> "pdf"
+            "application/vnd.android.package-archive" -> "apk"
+            else -> extension
+        }
+        val hasExtension = name.substringAfterLast('.', "").let {
+            it.length in 2..6 && it.all { c -> c.isLetterOrDigit() }
+        }
+        val displayName = if (!inferred.isNullOrBlank() && !hasExtension) {
+            "$name.$inferred"
         } else name
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val collection = when {
@@ -176,8 +206,20 @@ class GozarSocialDownloads(
 
     private fun downloadBlob(url: String, disposition: String?, mime: String?) {
         val token = UUID.randomUUID().toString()
-        transfers[token] = BlobTransfer(filename("https://local.invalid/download", disposition, mime),
-            mime ?: "application/octet-stream")
+        if (transfers.size >= 2) {
+            notify("downloadError")
+            return
+        }
+        val transfer = try {
+            BlobTransfer(
+                filename("https://local.invalid/download", disposition, mime),
+                mime ?: "application/octet-stream",
+                File.createTempFile("gozar-blob-", ".part", activity.cacheDir))
+        } catch (_: Exception) {
+            notify("downloadError")
+            return
+        }
+        transfers[token] = transfer
         notify("downloadStarted")
         // fetch(blob:) must execute in the page that created the object URL.
         // Stream moderate chunks to avoid JS string and Android binder limits.
@@ -191,10 +233,9 @@ class GozarSocialDownloads(
                 const blob = await response.blob();
                 if (blob.size > $maxBlob) throw new Error('File too large');
                 GozarFileBridge.begin(token, blob.type || '', blob.size);
-                const buffer = await blob.arrayBuffer();
-                const data = new Uint8Array(buffer);
-                for (let i = 0; i < data.length; i += 24000) {
-                  const part = data.subarray(i, i + 24000);
+                for (let i = 0; i < blob.size; i += 24000) {
+                  const part = new Uint8Array(
+                    await blob.slice(i, i + 24000).arrayBuffer());
                   let raw = '';
                   for (let j = 0; j < part.length; j++) {
                     raw += String.fromCharCode(part[j]);
@@ -215,57 +256,70 @@ class GozarSocialDownloads(
             val transfer = transfers[token] ?: return
             if (size <= 0 || size > maxBlob) {
                 transfers.remove(token)
+                transfer.abort()
                 notify("downloadError")
                 return
             }
-            transfer.expectedSize = size
-            transfer.started = true
-            // Blob's actual MIME may be more useful than a generic download hint.
-            if (mime.isNotBlank()) {
-                transfers[token] = BlobTransfer(transfer.filename, mime).also {
-                    it.expectedSize = size
-                    it.started = true
-                }
+            synchronized(transfer) {
+                if (transfer.closed) return
+                transfer.expectedSize = size
+                transfer.started = true
+                if (mime.isNotBlank()) transfer.mimeHint = mime
             }
         }
 
         @JavascriptInterface fun chunk(token: String, encoded: String) {
             val transfer = transfers[token] ?: return
-            if (!transfer.started) return
             try {
                 val bytes = Base64.decode(encoded, Base64.DEFAULT)
-                if (transfer.bytes.size().toLong() + bytes.size > maxBlob)
-                    throw IllegalStateException("Blob exceeds limit")
-                transfer.bytes.write(bytes)
+                synchronized(transfer) {
+                    if (!transfer.started || transfer.closed ||
+                        transfer.written + bytes.size > maxBlob) {
+                        throw IllegalStateException("Invalid download chunk")
+                    }
+                    transfer.output.write(bytes)
+                    transfer.written += bytes.size
+                }
             } catch (_: Exception) {
                 transfers.remove(token)
+                transfer.abort()
                 notify("downloadError")
             }
         }
 
         @JavascriptInterface fun finish(token: String) {
             val transfer = transfers.remove(token) ?: return
-            if (!transfer.started || transfer.bytes.size().toLong() != transfer.expectedSize) {
-                notify("downloadError")
-                return
+            synchronized(transfer) {
+                if (!transfer.started || transfer.written != transfer.expectedSize) {
+                    transfer.abort()
+                    notify("downloadError")
+                    return
+                }
+                transfer.close()
             }
             Thread {
                 try {
-                    ByteArrayInputStream(transfer.bytes.toByteArray()).use { input ->
+                    transfer.file.inputStream().use { input ->
                         store(input, transfer.filename, transfer.mimeHint, maxBlob)
                     }
                 } catch (_: Exception) {
                     notify("downloadError")
+                } finally {
+                    transfer.file.delete()
                 }
             }.start()
         }
 
         @JavascriptInterface fun fail(token: String) {
-            if (transfers.remove(token) != null) notify("downloadError")
+            transfers.remove(token)?.let {
+                it.abort()
+                notify("downloadError")
+            }
         }
     }
 
     fun dispose() {
+        transfers.values.forEach { it.abort() }
         transfers.clear()
         web.removeJavascriptInterface("GozarFileBridge")
     }
