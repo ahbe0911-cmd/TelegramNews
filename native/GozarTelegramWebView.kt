@@ -27,8 +27,7 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 /**
- * ONLY the official Telegram Web K browser, not an MTProto client, login
- * interceptor or Telegram SDK. The original standalone Gozar VPN and routing
+ * ONLY the official Telegram Web K browser, with no MTProto or VPN UI. The original standalone Gozar VPN and routing
  * stay untouched. Like other in-app Gozar browsers, Gozar's own UID bypasses
  * its VPN tunnel to prevent recursive tunnelling. Use the external browser
  * button when the phone browser should follow Android's VPN routing.
@@ -61,55 +60,10 @@ class GozarTelegramWebViewFactory(
     }
 
     private fun makePage(context: android.content.Context): TelegramView =
-        TelegramView(context, activity, events, ::handleProxyNavigation) { closed ->
+        TelegramView(context, activity, events) { closed ->
             if (activePage === closed) activePage = null
             if (prewarmedPage === closed) prewarmedPage = null
         }
-
-    private fun validatedMtproto(server: String, port: Int, secret: String): Uri? {
-        if (!server.matches(Regex("^[A-Za-z0-9.-]{1,253}$")) ||
-            port !in 1..65535 ||
-            !secret.matches(Regex("(?i)^[0-9a-f]{32,512}$"))) return null
-        return Uri.Builder().scheme("tg").authority("proxy")
-            .appendQueryParameter("server", server)
-            .appendQueryParameter("port", port.toString())
-            .appendQueryParameter("secret", secret).build()
-    }
-
-    private fun validatedMtprotoLink(uri: Uri): Uri? {
-        val fromTelegram = uri.scheme.equals("tg", true) &&
-            uri.host.equals("proxy", true)
-        val fromWeb = uri.scheme.equals("https", true) &&
-            uri.host?.lowercase() in setOf("t.me", "telegram.me") &&
-            uri.path?.trimEnd('/') == "/proxy"
-        if (!fromTelegram && !fromWeb) return null
-        return try {
-            val server = uri.getQueryParameter("server")?.trim() ?: return null
-            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: return null
-            val secret = uri.getQueryParameter("secret")?.trim() ?: return null
-            validatedMtproto(server, port, secret)
-        } catch (_: Exception) { null }
-    }
-
-    private fun launchProxy(uri: Uri): Boolean = try {
-        activity.startActivity(Intent(Intent.ACTION_VIEW, uri)
-            .addCategory(Intent.CATEGORY_BROWSABLE))
-        true
-    } catch (_: Exception) { false }
-
-    private fun handleProxyNavigation(uri: Uri): Boolean {
-        val isLink = (uri.scheme.equals("tg", true) &&
-                uri.host.equals("proxy", true)) ||
-            (uri.scheme.equals("https", true) &&
-                uri.host?.lowercase() in setOf("t.me", "telegram.me") &&
-                uri.path?.trimEnd('/') == "/proxy")
-        if (!isLink) return false
-        val target = validatedMtprotoLink(uri)
-        if (target == null || !launchProxy(target)) {
-            events.invokeMethod("proxyLinkError", null)
-        }
-        return true
-    }
 
     val controls = MethodChannel(messenger, CONTROLS).also { channel ->
         channel.setMethodCallHandler { call, result ->
@@ -126,34 +80,6 @@ class GozarTelegramWebViewFactory(
                 "setFontEnabled" -> {
                     activePage?.setFontEnabled(call.argument<Boolean>("enabled") == true)
                     result.success(null)
-                }
-                "openMtprotoInTelegram" -> {
-                    val server = call.argument<String>("server")?.trim() ?: ""
-                    val port = call.argument<Int>("port") ?: 0
-                    val secret = call.argument<String>("secret")?.trim() ?: ""
-                    val uri = validatedMtproto(server, port, secret)
-                    if (uri == null) {
-                        result.error("INVALID_PROXY", "Invalid MTProto proxy fields", null)
-                    } else if (!launchProxy(uri)) {
-                        result.error("NO_TELEGRAM_APP",
-                            "No Telegram app can handle this proxy link", null)
-                    } else {
-                        result.success(null)
-                    }
-                }
-                "openMtprotoLink" -> {
-                    val uri = try {
-                        Uri.parse(call.argument<String>("url")?.trim() ?: "")
-                    } catch (_: Exception) { Uri.EMPTY }
-                    val target = validatedMtprotoLink(uri)
-                    if (target == null) {
-                        result.error("INVALID_PROXY", "Invalid MTProto proxy link", null)
-                    } else if (!launchProxy(target)) {
-                        result.error("NO_TELEGRAM_APP",
-                            "No Telegram app can handle this proxy link", null)
-                    } else {
-                        result.success(null)
-                    }
                 }
                 "openExternal" -> {
                     try {
@@ -184,7 +110,6 @@ class GozarTelegramWebViewFactory(
         context: android.content.Context,
         private val activity: Activity,
         private val events: MethodChannel,
-        private val onProxyNavigation: (Uri) -> Boolean,
         private val onDispose: (TelegramView) -> Unit,
     ) : PlatformView {
         private val frame = FrameLayout(context)
@@ -197,7 +122,7 @@ class GozarTelegramWebViewFactory(
         private var pageFinished = false
         private var lastLoadMs: Long? = null
         private var mainFrameFailed = false
-        private var fontEnabled = true
+        private var fontEnabled = false
         // This is the same licensed local font that Gozar uses in Flutter.
         // Lazy initialization avoids delaying Telegram's first navigation.
         private val fontCss: String by lazy {
@@ -248,7 +173,6 @@ class GozarTelegramWebViewFactory(
                 ): Boolean {
                     if (!request.isForMainFrame) return false
                     val url = request.url
-                    if (onProxyNavigation(url)) return true
                     if (url.scheme == "https" && url.host == "web.telegram.org") {
                         return false
                     }
