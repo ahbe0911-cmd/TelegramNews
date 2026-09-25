@@ -11,7 +11,7 @@ import 'package:telegram_news/td_system_vpn.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Gozar has five tabs and a single official Telegram web view',
+  testWidgets('Gozar has five main tabs and one four-page Network view',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -41,13 +41,13 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('شبکه'), findsNothing);
-    expect(find.text('تلگرام'), findsOneWidget);
+    expect(find.text('شبکه'), findsOneWidget);
+    expect(find.text('تلگرام'), findsNothing);
     expect(find.text('شاد'), findsNothing);
     expect(find.text('بله'), findsNothing);
     expect(find.text('روبیکا'), findsNothing);
     expect(find.text('ایتا'), findsNothing);
-    expect(find.byKey(const ValueKey('gozar-social-tab')), findsNothing);
+    expect(find.byKey(const ValueKey('gozar-network-tab')), findsNothing);
     expect(find.byType(NavigationDestination), findsNWidgets(5));
     expect(find.text('لانچر'), findsOneWidget);
     expect(find.text('یادداشت'), findsOneWidget);
