@@ -19,7 +19,7 @@ class GozarLauncherSection {
 
   const GozarLauncherSection({
     required this.id, required this.title,
-    this.columns = 5, this.iconSize = 60, this.apps = const [],
+    this.columns = 4, this.iconSize = 72, this.apps = const [],
   });
 
   GozarLauncherSection copyWith({
@@ -55,8 +55,8 @@ class GozarLauncherSection {
       }
     }
     return GozarLauncherSection(
-      id: id, title: title, columns: columns,
-      iconSize: size.toDouble(), apps: apps);
+      id: id, title: title, columns: 4,
+      iconSize: math.max(72.0, size.toDouble()), apps: apps);
   }
 }
 
@@ -138,8 +138,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
   int serial = 0;
   Future<void> pendingSave = Future<void>.value();
   bool showSettings = false;
+  bool reorderMode = false;
   String draftSectionTitle = '';
-  double? previewIconSize;
   List<Map<String, String>>? cachedInstalledApps;
   DateTime? installedAppsFetchedAt;
 
@@ -182,7 +182,6 @@ class _GozarLauncherState extends State<GozarLauncher> {
           updated[destination].title != original[oldPage].title) {
         draftSectionTitle = updated[destination].title;
       }
-      previewIconSize = null;
     });
     final write = pendingSave.then((_) async {
       bool saved;
@@ -204,10 +203,11 @@ class _GozarLauncherState extends State<GozarLauncher> {
     });
     pendingSave = write;
     await write;
-    if (!mounted) return;
+    // Reordering on the current page must never jump its scroll position.
+    if (!mounted || oldPage == destination) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && pages.hasClients && sections.isNotEmpty &&
-          active == destination) {
+          active == destination && pages.page?.round() != active) {
         pages.jumpToPage(active);
       }
     });
@@ -220,8 +220,6 @@ class _GozarLauncherState extends State<GozarLauncher> {
       return;
     }
     final name = TextEditingController(text: section?.title ?? '');
-    var columns = section?.columns ?? 5;
-    var iconSize = section?.iconSize ?? 60.0;
     var deleting = false;
     final accepted = await showDialog<bool>(
       context: context,
@@ -240,33 +238,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
                 decoration: const InputDecoration(
                   labelText: 'نام این بخش', hintText: 'مثلاً ساخت ویدئو'),
               ),
-              const SizedBox(height: 10),
-              const Text('چیدمان و ظاهر',
-                style: TextStyle(color: GozarPalette.purple,
-                  fontWeight: FontWeight.w800)),
-              const SizedBox(height: 12),
-              const Text('تعداد ستون‌ها'),
-              Wrap(spacing: 8, children: [
-                for (final value in [3, 4, 5, 6])
-                  ChoiceChip(
-                    key: ValueKey('gozar-launcher-columns-' +
-                        value.toString()),
-                    label: Text(value.toString()),
-                    selected: columns == value,
-                    onSelected: (_) => update(() { columns = value; }),
-                  ),
-              ]),
-              const SizedBox(height: 12),
-              Row(children: [
-                const Expanded(child: Text('اندازه آیکن')),
-                Text(iconSize.round().toString() + 'dp',
-                  style: const TextStyle(color: GozarPalette.cyan)),
-              ]),
-              Slider(
-                key: const ValueKey('gozar-launcher-icon-size'),
-                min: 36, max: 72, divisions: 12, value: iconSize,
-                onChanged: (value) => update(() { iconSize = value; }),
-              ),
+              const SizedBox(height: 8),
+              const Text('چیدمان استاندارد ۴ ستونه با آیکون‌های بزرگ'),
               if (!creating) TextButton.icon(
                 key: const ValueKey('gozar-launcher-delete-section'),
                 onPressed: () {
@@ -313,7 +286,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
         final next = GozarLauncherSection(
           id: DateTime.now().microsecondsSinceEpoch.toString() +
               '-' + (serial++).toString(),
-          title: title, columns: columns, iconSize: iconSize,
+          title: title, columns: 4, iconSize: 72,
         );
         await persist([...sections, next], openIndex: sections.length);
       } else {
@@ -321,7 +294,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
         if (index < 0) return;
         final updated = [...sections];
         updated[index] = updated[index].copyWith(
-          title: title, columns: columns, iconSize: iconSize);
+          title: title, columns: 4, iconSize: 72);
         await persist(updated, openIndex: index);
       }
     }
@@ -476,38 +449,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
           ),
         ),
         const SizedBox(height: 8),
-        Row(children: [
-          const Expanded(child: Text('تعداد ستون‌ها',
-            style: TextStyle(color: GozarPalette.text, fontSize: 12))),
-          for (final columns in [3, 4, 5, 6])
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: ChoiceChip(
-                key: ValueKey('gozar-launcher-inline-cols-' +
-                    columns.toString()),
-                label: Text(columns.toString()),
-                selected: section.columns == columns,
-                onSelected: (_) =>
-                    updateSection(section, columns: columns),
-              ),
-            ),
-        ]),
-        const SizedBox(height: 7),
-        Row(children: [
-          const Expanded(child: Text('اندازه آیکن',
-            style: TextStyle(color: GozarPalette.text, fontSize: 12))),
-          Text((previewIconSize ?? section.iconSize).round().toString() +
-              'dp', style: const TextStyle(color: GozarPalette.cyan)),
-        ]),
-        Slider(
-          key: const ValueKey('gozar-launcher-inline-icon-size'),
-          value: previewIconSize ?? section.iconSize,
-          min: 36, max: 72, divisions: 12,
-          onChanged: (value) =>
-            setState(() { previewIconSize = value; }),
-          onChangeEnd: (value) =>
-            updateSection(section, iconSize: value),
-        ),
+        const Text('چیدمان ۴ ستونه · آیکون‌های بزرگ',
+          style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
         const Divider(height: 15),
         OutlinedButton.icon(
           key: const ValueKey('gozar-launcher-inline-delete-section'),
@@ -541,7 +484,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
     final remaining = sections.where((s) => s.id != section.id).toList();
     await persist(remaining, openIndex:
         active.clamp(0, remaining.isEmpty ? 0 : remaining.length - 1));
-    if (mounted) setState(() { showSettings = false; });
+    if (mounted) setState(() { showSettings = false; reorderMode = false; });
   }
 
   Future<void> addApps(GozarLauncherSection section) async {
@@ -961,9 +904,9 @@ class _GozarLauncherState extends State<GozarLauncher> {
           itemCount: sections.length,
           onPageChanged: (index) => setState(() {
             active = index;
+            reorderMode = false;
             draftSectionTitle = sections[index].title;
-            previewIconSize = null;
-          }),
+                }),
           itemBuilder: (context, index) => sectionPage(sections[index]),
         )),
       if (sections.length > 1)
