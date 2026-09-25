@@ -58,6 +58,7 @@ public final class AhbegramApiVerifyService extends Service {
         BuildVars.APP_HASH = hash;
         handler.postDelayed(() -> finish(recipient, "timeout"), 25000L);
         try {
+            AhbegramApiCredentials.verifierProcessPermitted = true;
             ApplicationLoader.postInitApplication();
             TLRPC.TL_auth_exportLoginToken request =
                     new TLRPC.TL_auth_exportLoginToken();
