@@ -6,12 +6,12 @@ import 'package:telegram_news/gozar_social.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Network has four fixed trusted web destinations, in requested order', () {
+  test('Network contains only Rubika, Shad and Eitaa, in requested order', () {
     expect(gozarSocialSites.map((s) => s.name).toList(),
-      ['تلگرام', 'روبیکا', 'شاد', 'ایتا']);
+      ['روبیکا', 'شاد', 'ایتا']);
     expect(gozarSocialSites.map((s) => s.domain).toList(),
-      ['web.telegram.org', 'web.rubika.ir', 'my.shad.ir', 'web.eitaa.com']);
-    expect(gozarSocialSites.map((s) => s.domain).toSet().length, 4);
+      ['web.rubika.ir', 'my.shad.ir', 'web.eitaa.com']);
+    expect(gozarSocialSites.map((s) => s.domain).toSet().length, 3);
   });
 
   testWidgets('Network switches without horizontal swipe or recreating pages',
@@ -42,12 +42,13 @@ void main() {
     expect(find.byType(PageView), findsNothing);
     expect(find.byKey(const ValueKey('mock-network-page-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-network-page-2')), findsNothing);
+    expect(find.text('تلگرام'), findsNothing);
     final header = tester.getRect(find.byKey(const ValueKey('gozar-social-header')));
     final body = tester.getRect(find.byKey(const ValueKey('gozar-social-content')));
     expect(header.height, 53);
     expect((body.top - header.bottom).abs(), lessThan(1));
     final first = find.byKey(const ValueKey('gozar-social-select-0'));
-    final last = find.byKey(const ValueKey('gozar-social-select-3'));
+    final last = find.byKey(const ValueKey('gozar-social-select-2'));
     expect(tester.getCenter(first).dx, greaterThan(tester.getCenter(last).dx));
     await tester.tap(find.byKey(const ValueKey('gozar-social-select-1')));
     await tester.pump(const Duration(milliseconds: 120));
@@ -55,17 +56,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('gozar-social-select-2')));
     await tester.pump(const Duration(milliseconds: 120));
     expect(find.byKey(const ValueKey('mock-network-page-2')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('gozar-social-select-3')));
-    await tester.pump(const Duration(milliseconds: 120));
-    expect(find.byKey(const ValueKey('mock-network-page-3')), findsOneWidget);
     await tester.tap(first);
     await tester.pump(const Duration(milliseconds: 120));
     expect(find.byKey(const ValueKey('mock-network-page-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-network-page-1'),
       skipOffstage: false), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-network-page-2'),
-      skipOffstage: false), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-network-page-3'),
       skipOffstage: false), findsOneWidget);
     expect(calls.any((c) => c.method == 'setActive' &&
       (c.arguments as Map)['index'] == 1), isTrue);
