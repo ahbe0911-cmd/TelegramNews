@@ -82,4 +82,55 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  test('MTProto link import accepts only valid official proxy URLs', () {
+    const secret = '0123456789abcdef0123456789abcdef';
+    expect(gozarValidMtprotoLink(
+      'tg://proxy?server=proxy.example.org&port=443&secret=$secret'), isTrue);
+    expect(gozarValidMtprotoLink(
+      'https://t.me/proxy?server=proxy.example.org&port=443&secret=$secret'),
+      isTrue);
+    expect(gozarValidMtprotoLink(
+      'https://t.me.evil.example/proxy?server=proxy.example.org&port=443&secret=$secret'),
+      isFalse);
+    expect(gozarValidMtprotoLink('https://t.me/proxy?server=x&port=0&secret=$secret'),
+      isFalse);
+    expect(gozarValidMtprotoLink('tg://proxy?server=x&port=443&secret=invalid'),
+      isFalse);
+  });
+
+  testWidgets('channel proxy link handoff validates input and opens native Telegram',
+      (tester) async {
+    final calls = <MethodCall>[];
+    const native = MethodChannel(
+        'ir.channel.telegram_tdnews/gozar_telegram_controls');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(native, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(
+      body: GozarTelegramWeb(active: true, testWebPage: SizedBox.expand()),
+    )));
+    await tester.pump(const Duration(milliseconds: 130));
+    await tester.tap(find.byKey(const ValueKey('gozar-telegram-options')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('افزودن MTProto از لینک کانال'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('gozar-mtproto-link-confirm')));
+    await tester.pump();
+    expect(find.text('لینک MTProto معتبر وارد کنید.'), findsOneWidget);
+    expect(calls.where((call) => call.method == 'openMtprotoLink'), isEmpty);
+    const link = 'https://t.me/proxy?server=proxy.example.org&port=443'
+        '&secret=0123456789abcdef0123456789abcdef';
+    await tester.enterText(find.byKey(const ValueKey('gozar-mtproto-link')), link);
+    await tester.tap(find.byKey(const ValueKey('gozar-mtproto-link-confirm')));
+    await tester.pumpAndSettle();
+    final linked = calls.where((call) => call.method == 'openMtprotoLink').toList();
+    expect(linked.length, 1);
+    expect((linked.single.arguments as Map)['url'], link);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }
