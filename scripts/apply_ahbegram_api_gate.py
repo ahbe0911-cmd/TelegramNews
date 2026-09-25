@@ -76,7 +76,7 @@ xml = MANIFEST.read_text()
 launch_start = xml.index('        <activity\n            android:name="org.telegram.ui.LaunchActivity"')
 launch_end = xml.index('</activity>', launch_start) + len('</activity>')
 launch = xml[launch_start:launch_end]
-filters = re.findall(r'<intent-filter(?:\\s[^>]*)?>[\\s\\S]*?</intent-filter>', launch)
+filters = re.findall(r'<intent-filter(?:\s[^>]*)?>[\s\S]*?</intent-filter>', launch)
 assert len(filters) >= 7, f"Unexpected upstream LaunchActivity intent filters: {len(filters)}"
 assert 'android:exported="true"' in launch
 launch_locked = launch.replace('android:exported="true"',
