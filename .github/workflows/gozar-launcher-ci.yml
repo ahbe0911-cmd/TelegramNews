@@ -7,6 +7,9 @@ on:
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_telegram_web.dart'
+      - 'native/GozarTelegramWebView.kt'
+      - 'test/gozar_telegram_web_test.dart'
       - 'lib/gozar_social.dart'
       - 'native/GozarSocialWebView.kt'
       - 'native/GozarSocialDownloads.kt'
@@ -67,11 +70,13 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart lib/gozar_telegram_web.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/gozar_telegram_web_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Test Persian notes and in-app calendar
         run: flutter test --reporter expanded test/gozar_notes_test.dart
+      - name: Test compact official Telegram Web tab
+        run: flutter test --reporter expanded test/gozar_telegram_web_test.dart
       - name: Test Gozar navigation and VPN regressions
         run: |
           flutter test --reporter expanded test/td_gozar_app_test.dart
@@ -89,11 +94,19 @@ jobs:
           manifest = (root / 'AndroidManifest.xml').read_text()
           alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
           assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
+          assert 'GozarTelegramWebViewFactory.VIEW_TYPE, telegram' in main
+          telegram = next((root / 'kotlin').rglob('GozarTelegramWebView.kt')).read_text()
+          assert 'https://web.telegram.org/k/' in telegram
+          assert 'MIXED_CONTENT_NEVER_ALLOW' in telegram
+          assert 'javaScriptCanOpenWindowsAutomatically = false' in telegram
+          assert 'evaluateJavascript' not in telegram
           assert 'GozarSocialWebViewFactory' not in main
           assert not list((root / 'kotlin').rglob('GozarSocialWebView.kt'))
           assert not list((root / 'kotlin').rglob('GozarSocialDownloads.kt'))
           main_dart = Path('lib/gozar_main.dart').read_text()
           assert "label: 'شبکه'" not in main_dart
+          assert "label: 'تلگرام'" in main_dart
+          assert 'GozarTelegramWeb(' in main_dart
           assert 'GozarSocialTab' not in main_dart
           icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
           assert '#0C5489' in icon and '#61E9DA' in icon
