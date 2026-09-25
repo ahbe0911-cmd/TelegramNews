@@ -113,6 +113,46 @@ void main() {
     expect(http['streamSettings']['httpSettings']['path'], '/h2');
   });
 
+  test('VLESS XHTTP link retains transport, mode and REALITY settings', () {
+    final proxy = outbound('vless://' + sampleId +
+        '@vpn.example.org:443?security=reality&pbk=sampleKey&sid=0a1b'
+        '&sni=cover.example.org&type=xhttp&mode=stream-up'
+        '&host=cdn.example.org&path=%2Fedge%2Fstream');
+    final stream = proxy['streamSettings'];
+    expect(stream['network'], 'xhttp');
+    expect(stream['security'], 'reality');
+    expect(stream['xhttpSettings'], {
+      'path': '/edge/stream',
+      'mode': 'stream-up',
+      'host': 'cdn.example.org',
+    });
+    expect(stream['realitySettings']['publicKey'], 'sampleKey');
+  });
+
+  test('Trojan supports gRPC, HTTPUpgrade, XHTTP and TLS ALPN', () {
+    final grpc = outbound('trojan://secret@vpn.example.org:443'
+        '?type=grpc&serviceName=service%2Fone&sni=cover.example.org');
+    expect(grpc['streamSettings']['grpcSettings']['serviceName'],
+        'service/one');
+    final http = outbound('trojan://secret@vpn.example.org:443'
+        '?type=httpupgrade&path=%2Fchat&host=front.example.org');
+    expect(http['streamSettings']['httpupgradeSettings'], {
+      'path': '/chat', 'host': 'front.example.org',
+    });
+    final xhttp = outbound('trojan://secret@vpn.example.org:443'
+        '?type=xhttp&mode=packet-up&path=%2Fx&alpn=h2%2Ch3');
+    expect(xhttp['streamSettings']['xhttpSettings']['mode'], 'packet-up');
+    expect(xhttp['streamSettings']['tlsSettings']['alpn'], ['h2', 'h3']);
+  });
+
+  test('Invalid XHTTP mode fails clearly instead of changing server mode', () {
+    expect(() => buildFullDeviceXrayConfig('vless://' + sampleId +
+        '@vpn.example.org:443?type=xhttp&mode=unsupported'),
+        throwsFormatException);
+    expect(() => buildFullDeviceXrayConfig('trojan://secret@vpn.example.org:443'
+        '?type=xhttp&mode=unsupported'), throwsFormatException);
+  });
+
   test('Invalid or incomplete VMess links fail before requesting Android VPN',
       () {
     expect(() => buildFullDeviceXrayConfig('vmess://'), throwsFormatException);
