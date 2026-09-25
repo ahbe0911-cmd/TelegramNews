@@ -19,7 +19,7 @@ class GozarLauncherSection {
 
   const GozarLauncherSection({
     required this.id, required this.title,
-    this.columns = 4, this.iconSize = 72, this.apps = const [],
+    this.columns = 4, this.iconSize = 64, this.apps = const [],
   });
 
   GozarLauncherSection copyWith({
@@ -43,7 +43,7 @@ class GozarLauncherSection {
     if (id.isEmpty || id.length > 100 ||
         title.isEmpty || title.length > 40 ||
         columns is! int || columns < 3 || columns > 6 ||
-        size is! num || size < 36 || size > 72 ||
+        size is! num || size < 36 || size > 80 ||
         rawApps is! List) return null;
     final apps = <GozarShortcut>[];
     final keys = <String>{};
@@ -55,8 +55,8 @@ class GozarLauncherSection {
       }
     }
     return GozarLauncherSection(
-      id: id, title: title, columns: 4,
-      iconSize: math.max(72.0, size.toDouble()), apps: apps);
+      id: id, title: title, columns: columns,
+      iconSize: size.toDouble().clamp(40.0, 80.0), apps: apps);
   }
 }
 
@@ -108,7 +108,7 @@ class GozarLauncherStore {
         sections.any((s) => s.title.trim().isEmpty ||
           s.title.length > 40 ||
           s.columns < 3 || s.columns > 6 ||
-          s.iconSize < 36 || s.iconSize > 72 ||
+          s.iconSize < 40 || s.iconSize > 80 ||
           s.apps.length > maxAppsPerSection ||
           s.apps.any((a) => a.kind != 'app' ||
             GozarShortcut.fromJson(a.toJson()) == null) ||
@@ -139,6 +139,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
   Future<void> pendingSave = Future<void>.value();
   bool showSettings = false;
   bool reorderMode = false;
+  // Preview changes locally while sliding; write preferences only on release.
+  double? previewIconSize;
   String draftSectionTitle = '';
   List<Map<String, String>>? cachedInstalledApps;
   DateTime? installedAppsFetchedAt;
@@ -241,7 +243,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
                   labelText: 'نام این بخش', hintText: 'مثلاً ساخت ویدئو'),
               ),
               const SizedBox(height: 8),
-              const Text('چیدمان استاندارد ۴ ستونه با آیکون‌های بزرگ'),
+              const Text('تعداد ستون‌ها و اندازهٔ آیکون‌ها از تنظیمات '
+                'همین بخش در صفحهٔ لانچر قابل تغییر است.'),
               if (!creating) TextButton.icon(
                 key: const ValueKey('gozar-launcher-delete-section'),
                 onPressed: () {
@@ -288,15 +291,14 @@ class _GozarLauncherState extends State<GozarLauncher> {
         final next = GozarLauncherSection(
           id: DateTime.now().microsecondsSinceEpoch.toString() +
               '-' + (serial++).toString(),
-          title: title, columns: 4, iconSize: 72,
+          title: title, columns: 4, iconSize: 64,
         );
         await persist([...sections, next], openIndex: sections.length);
       } else {
         final index = sections.indexWhere((s) => s.id == section.id);
         if (index < 0) return;
         final updated = [...sections];
-        updated[index] = updated[index].copyWith(
-          title: title, columns: 4, iconSize: 72);
+        updated[index] = updated[index].copyWith(title: title);
         await persist(updated, openIndex: index);
       }
     }
@@ -451,8 +453,58 @@ class _GozarLauncherState extends State<GozarLauncher> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text('چیدمان ۴ ستونه · آیکون‌های بزرگ',
-          style: TextStyle(color: GozarPalette.muted, fontSize: 12)),
+        const Text('تعداد ستون‌های چیدمان',
+          style: TextStyle(color: GozarPalette.text,
+            fontWeight: FontWeight.w700, fontSize: 13)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final count in const [3, 4, 5, 6])
+              ChoiceChip(
+                key: ValueKey('gozar-launcher-columns-' + count.toString()),
+                label: Text(count.toString() + ' ستون'),
+                selected: section.columns == count,
+                onSelected: (value) {
+                  if (value && section.columns != count) {
+                    updateSection(section, columns: count);
+                  }
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Expanded(child: Text('اندازهٔ آیکون‌ها',
+            style: TextStyle(color: GozarPalette.text,
+              fontWeight: FontWeight.w700, fontSize: 13))),
+          Text((previewIconSize ?? section.iconSize).round().toString(),
+            key: const ValueKey('gozar-launcher-icon-size-value'),
+            style: const TextStyle(color: GozarPalette.cyan,
+              fontWeight: FontWeight.w700)),
+        ]),
+        Slider(
+          key: const ValueKey('gozar-launcher-icon-size-slider'),
+          min: 40, max: 80, divisions: 10,
+          value: previewIconSize ?? section.iconSize,
+          label: (previewIconSize ?? section.iconSize).round().toString(),
+          onChanged: (value) => setState(() { previewIconSize = value; }),
+          onChangeEnd: (value) {
+            setState(() { previewIconSize = null; });
+            updateSection(section, iconSize: value);
+          },
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('کوچک', style: TextStyle(
+                fontSize: 11, color: GozarPalette.muted)),
+              Text('بزرگ', style: TextStyle(
+                fontSize: 11, color: GozarPalette.muted)),
+            ]),
+        ),
         const Divider(height: 15),
         OutlinedButton.icon(
           key: const ValueKey('gozar-launcher-inline-delete-section'),
@@ -709,7 +761,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
       GozarShortcut app, double cellWidth, {bool interactive = true}) {
     // Four columns with large artwork. Keep the touch target generous while
     // avoiding the card-like boxes that made the previous launcher look small.
-    final size = math.min(math.max(section.iconSize, 76.0), cellWidth - 4);
+    final size = math.min(section.iconSize, cellWidth - 4);
     return Material(
       color: Colors.transparent,
       child: InkResponse(
@@ -773,7 +825,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
                   color: Colors.transparent,
                   child: SizedBox(
                     width: cellWidth,
-                    height: cellWidth / .80,
+                    height: math.min(section.iconSize, cellWidth - 4) + 35,
                     child: Opacity(opacity: .90,
                       child: appTile(section, app, cellWidth,
                         interactive: false)),
@@ -794,25 +846,26 @@ class _GozarLauncherState extends State<GozarLauncher> {
 
   Widget sectionPage(GozarLauncherSection section) => LayoutBuilder(
     builder: (context, constraints) {
-      const columns = 4;
-      const horizontalPadding = 16.0;
+      final columns = section.columns;
+      const horizontalPadding = 14.0;
       const spacing = 10.0;
       final cellWidth = math.max(0.0,
         (constraints.maxWidth - horizontalPadding * 2 -
           (columns - 1) * spacing) / columns);
-      // Stable, four-column home-screen geometry; no nested AnimatedContainer
-      // or oversized decorative boxes to shrink the real Android app artwork.
+      final actualIconSize = math.min(section.iconSize, cellWidth - 4);
+      // Row height follows the chosen size, without clipping two-line labels.
+      // The default remains the familiar four-column Samsung-style grid.
       return GridView.builder(
         key: ValueKey('gozar-launcher-grid-' + section.id),
         padding: const EdgeInsets.fromLTRB(
             horizontalPadding, 18, horizontalPadding, 18),
         cacheExtent: 720,
         itemCount: section.apps.length + 1,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: columns,
-          mainAxisSpacing: 22,
+          mainAxisSpacing: 18,
           crossAxisSpacing: spacing,
-          childAspectRatio: .76,
+          mainAxisExtent: actualIconSize + 36,
         ),
         itemBuilder: (context, index) {
           if (index == section.apps.length) {
@@ -825,10 +878,10 @@ class _GozarLauncherState extends State<GozarLauncher> {
               borderRadius: BorderRadius.circular(18),
               child: Column(children: [
                 SizedBox(
-                  height: math.min(78.0, cellWidth - 4) + 4,
+                  height: actualIconSize + 2,
                   child: Center(child: Container(
-                    width: math.min(76.0, cellWidth - 4),
-                    height: math.min(76.0, cellWidth - 4),
+                    width: actualIconSize,
+                    height: actualIconSize,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(21),
                       color: const Color(0xffe1f1ff),
@@ -971,7 +1024,10 @@ class _GozarLauncherState extends State<GozarLauncher> {
             reorderMode = false;
             draftSectionTitle = sections[index].title;
                 }),
-          itemBuilder: (context, index) => sectionPage(sections[index]),
+          itemBuilder: (context, index) => sectionPage(
+            index == active && previewIconSize != null
+                ? sections[index].copyWith(iconSize: previewIconSize)
+                : sections[index]),
         )),
       if (sections.length > 1)
         Padding(
