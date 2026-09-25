@@ -825,7 +825,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
                   color: Colors.transparent,
                   child: SizedBox(
                     width: cellWidth,
-                    height: math.min(section.iconSize, cellWidth - 4) + 35,
+                    height: math.min(section.iconSize, cellWidth - 4) + 46,
                     child: Opacity(opacity: .90,
                       child: appTile(section, app, cellWidth,
                         interactive: false)),
@@ -865,7 +865,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
           crossAxisCount: columns,
           mainAxisSpacing: 18,
           crossAxisSpacing: spacing,
-          mainAxisExtent: actualIconSize + 36,
+          mainAxisExtent: actualIconSize + 46,
         ),
         itemBuilder: (context, index) {
           if (index == section.apps.length) {
