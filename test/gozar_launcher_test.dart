@@ -25,7 +25,7 @@ void main() {
     expect(sections.length, 1);
     expect(sections.single.apps, isEmpty);
     expect(sections.single.columns, 4);
-    expect(sections.single.iconSize, 72);
+    expect(sections.single.iconSize, 64);
     expect(GozarShortcutStore.load(prefs), isEmpty);
   });
 
@@ -36,16 +36,16 @@ void main() {
       const GozarLauncherSection(id: 'editing', title: 'ساخت ویدئو',
         columns: 4, iconSize: 54, apps: [instagram, editor]),
       const GozarLauncherSection(id: 'social', title: 'شبکه‌های اجتماعی',
-        columns: 6, iconSize: 36, apps: [instagram]),
+        columns: 6, iconSize: 44, apps: [instagram]),
     ];
     expect(await GozarLauncherStore.save(prefs, sections), isTrue);
     final restored = GozarLauncherStore.load(prefs);
     expect(restored.map((s) => s.title).toList(),
         ['ساخت ویدئو', 'شبکه‌های اجتماعی']);
     expect(restored.first.columns, 4);
-    expect(restored.last.columns, 4);
-    expect(restored.first.iconSize, 72);
-    expect(restored.last.iconSize, 72);
+    expect(restored.last.columns, 6);
+    expect(restored.first.iconSize, 54);
+    expect(restored.last.iconSize, 44);
     expect(restored.first.apps.first.component, instagram.component);
     expect(restored.first.apps.last.target, editor.target);
     expect(GozarShortcutStore.load(prefs), isEmpty);
@@ -241,6 +241,60 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(launches, 1);
     expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('launcher settings change columns and icon size persistently',
+      (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    const section = GozarLauncherSection(
+      id: 'adjustable', title: 'برنامه‌های من',
+      apps: [instagram, editor]);
+    expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'appIcon') return null;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: GozarLauncher(preferences: prefs, onOpenApp: (app) async {}),
+    )));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-section-settings')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const ValueKey('gozar-launcher-icon-size-slider')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-launcher-columns-5')),
+        findsOneWidget);
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-columns-5')));
+    await tester.pump(const Duration(milliseconds: 250));
+    var grid = tester.widget<GridView>(
+        find.byKey(const ValueKey('gozar-launcher-grid-adjustable')));
+    expect((grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+        .crossAxisCount, 5);
+    final slider = find.byKey(
+        const ValueKey('gozar-launcher-icon-size-slider'));
+    await tester.drag(slider, const Offset(-120, 0));
+    await tester.pump(const Duration(milliseconds: 250));
+    final saved = GozarLauncherStore.load(prefs).single;
+    expect(saved.columns, 5);
+    expect(saved.iconSize, lessThan(64));
+    final expectedSize = saved.iconSize;
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: GozarLauncher(preferences: prefs, onOpenApp: (app) async {}),
+    )));
+    await tester.pump(const Duration(milliseconds: 200));
+    grid = tester.widget<GridView>(
+        find.byKey(const ValueKey('gozar-launcher-grid-adjustable')));
+    expect((grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+        .crossAxisCount, 5);
+    expect(GozarLauncherStore.load(prefs).single.iconSize, expectedSize);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
