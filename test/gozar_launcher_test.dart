@@ -24,8 +24,8 @@ void main() {
     final sections = GozarLauncherStore.load(prefs);
     expect(sections.length, 1);
     expect(sections.single.apps, isEmpty);
-    expect(sections.single.columns, 5);
-    expect(sections.single.iconSize, 60);
+    expect(sections.single.columns, 4);
+    expect(sections.single.iconSize, 72);
     expect(GozarShortcutStore.load(prefs), isEmpty);
   });
 
@@ -43,9 +43,9 @@ void main() {
     expect(restored.map((s) => s.title).toList(),
         ['ساخت ویدئو', 'شبکه‌های اجتماعی']);
     expect(restored.first.columns, 4);
-    expect(restored.last.columns, 6);
-    expect(restored.first.iconSize, 54);
-    expect(restored.last.iconSize, 36);
+    expect(restored.last.columns, 4);
+    expect(restored.first.iconSize, 72);
+    expect(restored.last.iconSize, 72);
     expect(restored.first.apps.first.component, instagram.component);
     expect(restored.first.apps.last.target, editor.target);
     expect(GozarShortcutStore.load(prefs), isEmpty);
@@ -101,7 +101,7 @@ void main() {
     expect(await GozarLauncherStore.save(prefs, [
       good.copyWith(apps: [instagram, instagram]),
     ]), isFalse);
-    expect(GozarLauncherStore.load(prefs).single.columns, 5);
+    expect(GozarLauncherStore.load(prefs).single.columns, 4);
   });
 
   test('malformed saved apps cannot inject nonlaunchable targets', () async {
@@ -123,7 +123,7 @@ void main() {
     expect(apps.single.component, instagram.component);
   });
 
-  testWidgets('per-app menu edits name, changes order and keeps native target',
+  testWidgets('long press opens edit sheet without any three-dot button',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
     const section = GozarLauncherSection(id: 'apps', title: 'برنامه‌های من',
@@ -143,10 +143,18 @@ void main() {
         onOpenApp: (app) async { launched = app; }),
     )));
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.byKey(
-        ValueKey('gozar-launcher-app-menu-' + instagram.key)));
+    expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+    final instagramTile = find.byKey(
+        ValueKey('gozar-launcher-open-' + instagram.key));
+    final editorTile = find.byKey(
+        ValueKey('gozar-launcher-open-' + editor.key));
+    expect(instagramTile, findsOneWidget);
+    await tester.longPress(instagramTile);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('ویرایش نام').last);
+    expect(find.byKey(ValueKey('gozar-launcher-app-options-' +
+        instagram.key)), findsOneWidget);
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-action-rename')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(
         const ValueKey('gozar-launcher-app-name')), 'اینستاگرام شخصی');
@@ -156,16 +164,32 @@ void main() {
     final savedName = GozarLauncherStore.load(prefs).single.apps.first;
     expect(savedName.title, 'اینستاگرام شخصی');
     expect(savedName.component, instagram.component);
-    await tester.tap(find.byKey(
-        ValueKey('gozar-launcher-app-menu-' + editor.key)));
+
+    await tester.longPress(editorTile);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('انتقال به قبل').last);
-    await tester.pump(const Duration(milliseconds: 450));
-    final ordered = GozarLauncherStore.load(prefs).single.apps;
-    expect(ordered.map((app) => app.key).toList(),
-        [editor.key, instagram.key]);
     await tester.tap(find.byKey(
-        ValueKey('gozar-launcher-open-' + instagram.key)));
+        const ValueKey('gozar-launcher-action-move')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('gozar-launcher-finish-reorder')),
+        findsOneWidget);
+
+    // Drag the second app onto the first app, then verify disk persistence.
+    final start = tester.getCenter(find.byKey(
+        ValueKey('gozar-launcher-drag-' + editor.key)));
+    final destination = tester.getCenter(instagramTile);
+    final drag = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 450));
+    await drag.moveTo(destination);
+    await tester.pump(const Duration(milliseconds: 300));
+    await drag.up();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(GozarLauncherStore.load(prefs).single.apps
+        .map((app) => app.key).toList(), [editor.key, instagram.key]);
+
+    await tester.tap(find.byKey(
+        const ValueKey('gozar-launcher-finish-reorder')));
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.tap(instagramTile);
     await tester.pump(const Duration(milliseconds: 100));
     expect(launched?.title, 'اینستاگرام شخصی');
     expect(launched?.target, instagram.target);
@@ -207,11 +231,11 @@ void main() {
     )));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-launcher-add-apps')),
-        findsOneWidget);
+        findsNothing);
     expect(find.byKey(const ValueKey('gozar-launcher-grid-add-many-apps')),
         findsOneWidget);
     await tester.tap(find.byKey(
-        const ValueKey('gozar-launcher-add-apps')));
+        const ValueKey('gozar-launcher-grid-add-many-apps')));
     await tester.pump(const Duration(milliseconds: 300));
     final pickSix = find.byKey(const ValueKey(
         'gozar-launcher-pick-app:com.example.app5:com.example.app5.Main'));
@@ -229,7 +253,7 @@ void main() {
     expect(saved.last.target, 'com.example.app5');
     expect(saved.last.component, 'com.example.app5.Main');
     expect(find.byKey(const ValueKey('gozar-launcher-add-apps')),
-        findsOneWidget);
+        findsNothing);
     expect(find.byKey(const ValueKey('gozar-launcher-grid-add-many-apps')),
         findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -266,9 +290,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(
         const ValueKey('gozar-launcher-inline-settings')), findsOneWidget);
-    await tester.tap(find.byKey(
-        const ValueKey('gozar-launcher-inline-cols-4')));
-    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('چیدمان ۴ ستونه · آیکون‌های بزرگ'), findsOneWidget);
     await tester.enterText(find.byKey(
         const ValueKey('gozar-launcher-inline-name-movies')), 'گرافیک');
     await tester.tap(find.byKey(
