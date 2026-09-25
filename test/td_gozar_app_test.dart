@@ -11,7 +11,7 @@ import 'package:telegram_news/td_system_vpn.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Gozar has five main tabs and one four-page Network view',
+  testWidgets('Gozar has four tabs without Network and retains launcher and notes',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -41,14 +41,14 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('شبکه'), findsOneWidget);
+    expect(find.text('شبکه'), findsNothing);
     expect(find.text('تلگرام'), findsNothing);
     expect(find.text('شاد'), findsNothing);
     expect(find.text('بله'), findsNothing);
     expect(find.text('روبیکا'), findsNothing);
     expect(find.text('ایتا'), findsNothing);
     expect(find.byKey(const ValueKey('gozar-network-tab')), findsNothing);
-    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
     expect(find.text('لانچر'), findsOneWidget);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
@@ -56,6 +56,13 @@ void main() {
         findsNothing);
     expect(find.byKey(const ValueKey('gozar-user-shortcut-grid')),
         findsNothing);
+    // The launcher is now the second bottom tab; its saved sections and
+    // scroll position must continue to work without loading a WebView.
+    await tester.tap(find.text('لانچر'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-launcher-top-toolbar')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-network-tab')), findsNothing);
     await tester.tap(find.text('یادداشت'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-notes-calendar')),
