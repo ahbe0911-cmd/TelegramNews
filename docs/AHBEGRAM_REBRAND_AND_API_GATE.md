@@ -1,6 +1,6 @@
 # ahbegram — standalone Android client (implementation specification)
 
-Status: design/research branch only. **Do not release the previous Forkgram CI APK as ahbegram.**
+Status: experimental implementation in progress. The branch contains the supplied branding artwork, a native API-first screen, a separate-process MTProto server preflight, and Android Keystore credential storage. Source staging tests pass; full APK compilation and physical-device login are not yet confirmed. **Do not release the previous Forkgram CI APK as ahbegram or advertise the experimental build as login-tested.**
 Base: pinned upstream Forkgram at `third_party/forkgram`, kept independently from Gozar.
 Requested visible identity: `ahbegram`; use the exact user-supplied blue-to-purple speech-mark logo as the canonical artwork, not the upstream paper-plane or Forkgram launcher assets.
 
