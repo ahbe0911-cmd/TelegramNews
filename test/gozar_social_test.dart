@@ -6,103 +6,73 @@ import 'package:telegram_news/gozar_social.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('web messenger order and trusted HTTPS domains are fixed', () {
+  test('Network has four fixed trusted web destinations, in requested order', () {
     expect(gozarSocialSites.map((s) => s.name).toList(),
-      ['شاد', 'بله', 'روبیکا', 'ایتا']);
+      ['تلگرام', 'روبیکا', 'شاد', 'ایتا']);
     expect(gozarSocialSites.map((s) => s.domain).toList(),
-      ['my.shad.ir', 'web.bale.ai',
-       'web.rubika.ir', 'web.eitaa.com']);
+      ['web.telegram.org', 'web.rubika.ir', 'my.shad.ir', 'web.eitaa.com']);
     expect(gozarSocialSites.map((s) => s.domain).toSet().length, 4);
   });
 
-  testWidgets('social swipe is RTL, lazy, and keeps all four pages',
+  testWidgets('Network switches without horizontal swipe or recreating pages',
       (tester) async {
-    final controls = <String>[];
+    final calls = <MethodCall>[];
     final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     const channel =
       MethodChannel('ir.channel.telegram_tdnews/gozar_social_controls');
     messenger.setMockMethodCallHandler(channel, (call) async {
-      controls.add(call.method);
+      calls.add(call);
       return null;
     });
-    addTearDown(() =>
-      messenger.setMockMethodCallHandler(channel, null));
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: GozarSocialTab(
         active: true,
         pageBuilder: (index) => Container(
-          key: ValueKey('mock-social-page-' + index.toString()),
+          key: ValueKey('mock-network-page-' + index.toString()),
           alignment: Alignment.center,
           child: Text('صفحهٔ وب ' + index.toString()),
         ),
       ),
     )));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const ValueKey('gozar-social-pages')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 120));
     expect(find.byKey(const ValueKey('gozar-social-header')), findsOneWidget);
-    expect(find.text('شبکه‌های اجتماعی'), findsNothing);
-    expect(find.textContaining('صفحه را افقی'), findsNothing);
-    expect(find.byKey(const ValueKey('gozar-social-options')), findsOneWidget);
-    final header = tester.getRect(
-        find.byKey(const ValueKey('gozar-social-header')));
-    final content = tester.getRect(
-        find.byKey(const ValueKey('gozar-social-content')));
+    expect(find.byKey(const ValueKey('gozar-social-pages')), findsOneWidget);
+    expect(find.byType(PageView), findsNothing);
+    expect(find.byKey(const ValueKey('mock-network-page-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-network-page-2')), findsNothing);
+    final header = tester.getRect(find.byKey(const ValueKey('gozar-social-header')));
+    final body = tester.getRect(find.byKey(const ValueKey('gozar-social-content')));
     expect(header.height, 53);
-    expect(find.byKey(const ValueKey('gozar-social-segments')), findsOneWidget);
-    expect(find.text('تلگرام'), findsNothing);
-    expect(content.top, header.bottom);
-    expect(content.bottom,
-        tester.getRect(find.byType(Scaffold)).bottom);
-    expect(content.left, 0);
-    expect(find.byKey(const ValueKey('mock-social-page-0')), findsOneWidget);
-    expect(find.text('شاد'), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-social-page-2')), findsNothing);
-    expect(tester.widget<Directionality>(
-      find.ancestor(
-        of: find.byKey(const ValueKey('gozar-social-pages')),
-        matching: find.byType(Directionality),
-      ).first,
-    ).textDirection, TextDirection.rtl);
-    final shad =
-      find.byKey(const ValueKey('gozar-social-select-0'));
-    final eitaa =
-      find.byKey(const ValueKey('gozar-social-select-3'));
-    expect(tester.getCenter(shad).dx,
-        greaterThan(tester.getCenter(eitaa).dx));
-    await tester.tap(find.byKey(
-      const ValueKey('gozar-social-select-1')));
+    expect((body.top - header.bottom).abs(), lessThan(1));
+    final first = find.byKey(const ValueKey('gozar-social-select-0'));
+    final last = find.byKey(const ValueKey('gozar-social-select-3'));
+    expect(tester.getCenter(first).dx, greaterThan(tester.getCenter(last).dx));
+    await tester.tap(find.byKey(const ValueKey('gozar-social-select-1')));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.byKey(const ValueKey('mock-network-page-1')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('gozar-social-select-2')));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.byKey(const ValueKey('mock-network-page-2')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('gozar-social-select-3')));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.byKey(const ValueKey('mock-network-page-3')), findsOneWidget);
+    await tester.tap(first);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.byKey(const ValueKey('mock-network-page-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-network-page-1'),
+      skipOffstage: false), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-network-page-2'),
+      skipOffstage: false), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-network-page-3'),
+      skipOffstage: false), findsOneWidget);
+    expect(calls.any((c) => c.method == 'setActive' &&
+      (c.arguments as Map)['index'] == 1), isTrue);
+    await tester.tap(find.byKey(const ValueKey('gozar-social-options')));
     await tester.pumpAndSettle();
-    // Bale collapses only Gozar's header, not the website's own navigation.
-    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsNothing);
-    expect(find.byKey(const ValueKey('mock-social-page-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-bale-expand')), findsOneWidget);
-    expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 30);
-    await tester.tap(find.byKey(const ValueKey('gozar-bale-expand')));
-    await tester.pumpAndSettle();
-    expect(tester.getRect(find.byKey(const ValueKey('gozar-social-header'))).height, 53);
-    expect(find.text('بله'), findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-social-select-1')), findsOneWidget);
-    expect(tester.widget<AnimatedContainer>(find.descendant(
-      of: find.byKey(const ValueKey('gozar-social-select-1')),
-      matching: find.byType(AnimatedContainer),
-    )).decoration, isNotNull);
-    // In a right-to-left PageView, the next page sits to the LEFT
-    // of the current one; drag right to bring it into view.
-    await tester.drag(
-      find.byKey(const ValueKey('gozar-social-pages')),
-      const Offset(500, 0),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('روبیکا'), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-social-page-2')), findsOneWidget);
-    await tester.tap(find.byKey(
-      const ValueKey('gozar-social-select-3')));
-    await tester.pumpAndSettle();
-    expect(find.text('ایتا'), findsOneWidget);
-    expect(find.byKey(const ValueKey('mock-social-page-3')), findsOneWidget);
-    expect(find.text('شاد'), findsOneWidget);
-    expect(controls, contains('setActive'));
+    expect(find.text('افزودن MTProto'), findsNothing);
+    expect(find.text('اتصال خودکار و VPN گوشی'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
