@@ -1,0 +1,112 @@
+name: Build ahbegram native API-first preview APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ahbegram-standalone
+    paths:
+      - '.github/workflows/ahbegram-standalone-build.yml'
+      - 'scripts/apply_ahbegram_branding.py'
+      - 'scripts/apply_ahbegram_api_gate.py'
+      - 'native/ahbegram/**'
+      - 'branding/ahbegram-symbol.webp'
+      - 'third_party/forkgram'
+      - 'third_party/FORKGRAM_PIN.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ahbegram-native-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify original pinned upstream release
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          git -c submodule.fetchJobs=6 submodule update --init --depth 1 third_party/forkgram
+          git -C third_party/forkgram -c submodule.fetchJobs=6 submodule update --init --recursive --depth 1
+          python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          pin=json.loads(Path('third_party/FORKGRAM_PIN.json').read_text())
+          assert subprocess.check_output(['git','-C','third_party/forkgram','rev-parse','HEAD'],text=True).strip()==pin['commit']
+          print('Pinned source:',pin['release_tag'])
+          PY
+      - name: Stage ahbegram name, real uploaded logo, API entry and verification code
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user Pillow
+          python3 -m py_compile scripts/apply_ahbegram_branding.py scripts/apply_ahbegram_api_gate.py
+          python3 scripts/apply_ahbegram_branding.py
+          python3 scripts/apply_ahbegram_api_gate.py
+          test -f third_party/forkgram/TMessagesProj/src/main/java/ir/channel/ahbegram/AhbegramApiGateActivity.java
+          test -f third_party/forkgram/TMessagesProj/src/main/java/ir/channel/ahbegram/AhbegramApiVerifyService.java
+      - name: Prepare native ARM64 Android compiler
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config yasm
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Compile real source with API-first gate (not a mocked UI)
+        working-directory: third_party/forkgram
+        timeout-minutes: 80
+        env:
+          ABIS: arm64-v8a
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2 --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2 --stacktrace
+      - name: Inspect preview APK package and native components
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re,shutil,subprocess
+          from pathlib import Path
+          from zipfile import ZipFile
+          output=Path('third_party/forkgram/TMessagesProj_App/build/outputs/apk')
+          apks=[p for p in output.rglob('*.apk') if p.stat().st_size>20_000_000]
+          assert apks,'No compiled ahbegram APK'
+          apk=max(apks,key=lambda p:p.stat().st_mtime)
+          with ZipFile(apk) as file: names=set(file.namelist())
+          assert 'classes.dex' in names
+          assert any(re.search(r'/libtmessages\\.[0-9]+\\.so$',n) for n in names),'Missing Forkgram native engine'
+          assert not any(n.endswith('/libflutter.so') for n in names)
+          aapt=str(Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0/aapt')
+          result=subprocess.check_output([aapt,'dump','badging',str(apk)],text=True)
+          match=re.search(r"(?m)^package: name='([^']+)'",result)
+          assert match and match.group(1)=='ir.channel.ahbegram',result[:400]
+          assert "application-label:'ahbegram'" in result,result[:500]
+          print('One independent APK:',match.group(1),apk.stat().st_size)
+          dst=Path('build-reports/ahbegram-ARM64-PREVIEW-UNTESTED.apk')
+          shutil.copyfile(apk,dst)
+          print('PREVIEW ONLY: server API-check and login on a physical device are NOT verified.')
+          PY
+      - name: Archive preview for device tests, never describe as verified release
+        uses: actions/upload-artifact@v4
+        with:
+          name: AHBEGRAM-ARM64-PREVIEW-NOT-DEVICE-TESTED
+          path: |
+            build-reports/ahbegram-ARM64-PREVIEW-UNTESTED.apk
+            build-reports/ahbegram-branding.json
+          if-no-files-found: error
+          retention-days: 7
