@@ -142,6 +142,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
   String draftSectionTitle = '';
   List<Map<String, String>>? cachedInstalledApps;
   DateTime? installedAppsFetchedAt;
+  final Set<String> launchingApps = <String>{};
 
   @override
   void initState() {
@@ -683,36 +684,58 @@ class _GozarLauncherState extends State<GozarLauncher> {
     }
   }
 
+  Future<void> launchApp(GozarShortcut app) async {
+    // Samsung-like launch behaviour: one tap maps to one native launch.
+    // Ignore accidental double taps while Android is bringing the target
+    // activity to the foreground.
+    if (!launchingApps.add(app.key)) return;
+    try {
+      await widget.onOpenApp(app);
+    } finally {
+      Future<void>.delayed(const Duration(milliseconds: 420), () {
+        launchingApps.remove(app.key);
+      });
+    }
+  }
+
   Widget appTile(GozarLauncherSection section,
       GozarShortcut app, double cellWidth, {bool interactive = true}) {
-    final size = math.min(math.max(section.iconSize, 72.0), cellWidth - 8);
+    // Four columns with large artwork. Keep the touch target generous while
+    // avoiding the card-like boxes that made the previous launcher look small.
+    final size = math.min(math.max(section.iconSize, 76.0), cellWidth - 4);
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: InkResponse(
         key: ValueKey('gozar-launcher-open-' + app.key),
-        borderRadius: BorderRadius.circular(18),
-        onTap: interactive && !reorderMode
-            ? () => widget.onOpenApp(app) : null,
+        radius: cellWidth * .52,
+        highlightShape: BoxShape.circle,
+        containedInkWell: false,
+        onTap: interactive && !reorderMode ? () => launchApp(app) : null,
         onLongPress: interactive && !reorderMode
             ? () => openAppOptions(section, app) : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Column(children: [
+        child: Semantics(
+          button: true,
+          label: app.title,
+          child: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
             SizedBox(
-              height: size + 3,
+              height: size + 2,
               width: double.infinity,
               child: Center(child: RepaintBoundary(
+                key: ValueKey('gozar-launcher-icon-' + app.key),
                 child: GozarShortcutIcon(shortcut: app, size: size))),
             ),
-            const SizedBox(height: 7),
-            Text(app.title,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: GozarPalette.text, fontSize: 11.5,
-                fontWeight: FontWeight.w600)),
+            const SizedBox(height: 5),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(app.title,
+                maxLines: 2,
+                softWrap: true,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: GozarPalette.text, fontSize: 12,
+                  height: 1.08, fontWeight: FontWeight.w600)),
+            ),
           ]),
         ),
       ),
@@ -737,7 +760,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
             ? LongPressDraggable<String>(
                 key: ValueKey('gozar-launcher-drag-' + app.key),
                 data: app.key,
-                delay: const Duration(milliseconds: 320),
+                delay: const Duration(milliseconds: 220),
                 maxSimultaneousDrags: 1,
                 feedback: Material(
                   color: Colors.transparent,
@@ -765,8 +788,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
   Widget sectionPage(GozarLauncherSection section) => LayoutBuilder(
     builder: (context, constraints) {
       const columns = 4;
-      const horizontalPadding = 12.0;
-      const spacing = 12.0;
+      const horizontalPadding = 16.0;
+      const spacing = 10.0;
       final cellWidth = math.max(0.0,
         (constraints.maxWidth - horizontalPadding * 2 -
           (columns - 1) * spacing) / columns);
@@ -775,14 +798,14 @@ class _GozarLauncherState extends State<GozarLauncher> {
       return GridView.builder(
         key: ValueKey('gozar-launcher-grid-' + section.id),
         padding: const EdgeInsets.fromLTRB(
-            horizontalPadding, 13, horizontalPadding, 16),
-        cacheExtent: 360,
+            horizontalPadding, 18, horizontalPadding, 18),
+        cacheExtent: 720,
         itemCount: section.apps.length + 1,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: columns,
-          mainAxisSpacing: 18,
+          mainAxisSpacing: 22,
           crossAxisSpacing: spacing,
-          childAspectRatio: .80,
+          childAspectRatio: .76,
         ),
         itemBuilder: (context, index) {
           if (index == section.apps.length) {
@@ -795,10 +818,10 @@ class _GozarLauncherState extends State<GozarLauncher> {
               borderRadius: BorderRadius.circular(18),
               child: Column(children: [
                 SizedBox(
-                  height: math.min(76.0, cellWidth - 8) + 5,
+                  height: math.min(78.0, cellWidth - 4) + 4,
                   child: Center(child: Container(
-                    width: math.min(72.0, cellWidth - 8),
-                    height: math.min(72.0, cellWidth - 8),
+                    width: math.min(76.0, cellWidth - 4),
+                    height: math.min(76.0, cellWidth - 4),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(21),
                       color: const Color(0xffe1f1ff),
