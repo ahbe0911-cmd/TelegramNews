@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import android.util.Base64
+import org.json.JSONObject
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -56,6 +58,36 @@ class GozarTelegramWebViewFactory(
                     activePage?.reload()
                     result.success(null)
                 }
+                "setFontEnabled" -> {
+                    activePage?.setFontEnabled(call.argument<Boolean>("enabled") == true)
+                    result.success(null)
+                }
+                "openMtprotoInTelegram" -> {
+                    val server = call.argument<String>("server")?.trim() ?: ""
+                    val port = call.argument<Int>("port") ?: 0
+                    val secret = call.argument<String>("secret")?.trim() ?: ""
+                    if (!server.matches(Regex("^[A-Za-z0-9.-]{1,253}$")) ||
+                        port !in 1..65535 ||
+                        !secret.matches(Regex("(?i)^[0-9a-f]{32,512}$"))) {
+                        result.error("INVALID_PROXY", "Invalid MTProto proxy fields", null)
+                    } else {
+                        try {
+                            // Delegates to the installed Telegram app, not the
+                            // WebView, which cannot speak the MTProto protocol.
+                            val uri = Uri.Builder().scheme("tg").authority("proxy")
+                                .appendQueryParameter("server", server)
+                                .appendQueryParameter("port", port.toString())
+                                .appendQueryParameter("secret", secret).build()
+                            val launch = Intent(Intent.ACTION_VIEW, uri)
+                                .addCategory(Intent.CATEGORY_BROWSABLE)
+                            activity.startActivity(launch)
+                            result.success(null)
+                        } catch (_: Exception) {
+                            result.error("NO_TELEGRAM_APP",
+                                "No Telegram app can handle this proxy link", null)
+                        }
+                    }
+                }
                 "openExternal" -> {
                     try {
                         activity.startActivity(Intent(Intent.ACTION_VIEW,
@@ -94,6 +126,23 @@ class GozarTelegramWebViewFactory(
         private var started = SystemClock.elapsedRealtime()
         private var paused = false
         private var mainFrameFailed = false
+        private var fontEnabled = true
+        // This is the same licensed local font that Gozar uses in Flutter.
+        // Lazy initialization avoids delaying Telegram's first navigation.
+        private val fontCss: String by lazy {
+            val bytes = activity.assets.open(
+                "flutter_assets/assets/fonts/Vazirmatn-Regular.ttf").use {
+                    it.readBytes()
+                }
+            val font = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            "@font-face{font-family:'GozarVazirmatn';" +
+                "src:url(data:font/ttf;base64,$font) format('truetype');" +
+                "font-style:normal;font-weight:100 900;}" +
+                "body,input,textarea,button,[contenteditable='true']," +
+                "[dir='auto']{font-family:'GozarVazirmatn',sans-serif!important;}"
+        }
+        private val downloads = GozarSocialDownloads(
+            activity, web, 0, events)
 
         init {
             frame.addView(web, FrameLayout.LayoutParams(-1, -1))
@@ -112,6 +161,7 @@ class GozarTelegramWebViewFactory(
                 setSupportMultipleWindows(false)
                 javaScriptCanOpenWindowsAutomatically = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                // Retain Chromium's regular web asset/service-worker cache.
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mediaPlaybackRequiresUserGesture = true
                 // NO arbitrary JavaScript injection, WebView JS bridge or
@@ -153,6 +203,7 @@ class GozarTelegramWebViewFactory(
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     progress.visibility = View.GONE
+                    applyFontStyle()
                     if (!mainFrameFailed) {
                         events.invokeMethod("loaded", mapOf(
                             "durationMs" to (SystemClock.elapsedRealtime() - started)))
@@ -201,10 +252,40 @@ class GozarTelegramWebViewFactory(
 
         fun reload() = web.reload()
 
+        fun setFontEnabled(enabled: Boolean) {
+            fontEnabled = enabled
+            applyFontStyle()
+        }
+
+        private fun applyFontStyle() {
+            if (web.url?.let { Uri.parse(it).host } != "web.telegram.org") return
+            val code = try {
+                if (fontEnabled) JSONObject.quote(fontCss) else "null"
+            } catch (_: Exception) {
+                return // Missing asset: retain Telegram's normal font.
+            }
+            // A CSS-only, optional visual style: this script never reads
+            // page text, credentials, DOM contents or Telegram data.
+            web.evaluateJavascript("""
+                (function() {
+                  var old = document.getElementById('gozar-font-style');
+                  if (old) old.remove();
+                  var css = $code;
+                  if (css && document.head) {
+                    var style = document.createElement('style');
+                    style.id = 'gozar-font-style';
+                    style.textContent = css;
+                    document.head.appendChild(style);
+                  }
+                })();
+            """.trimIndent(), null)
+        }
+
         override fun getView(): View = frame
 
         override fun dispose() {
             onDispose(this)
+            downloads.dispose()
             web.stopLoading()
             web.webChromeClient = null
             web.webViewClient = WebViewClient()
