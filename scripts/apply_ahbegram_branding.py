@@ -54,6 +54,9 @@ for path in (CORE / "src/main/res").glob("values*/strings.xml"):
             rf'(<string\s+name="{name}"\s*>)[^<]*(</string>)',
             lambda match: match.group(1) + "ahbegram" + match.group(2),
             value)
+    # Replace the upstream fork name in other visible strings (settings etc.),
+    # not just the three AppName resources.
+    value = value.replace("Fork Client", "ahbegram").replace("Forkgram", "ahbegram")
     if value != original:
         path.write_text(value, encoding="utf-8")
         updated.append(str(path.relative_to(FORK)))
