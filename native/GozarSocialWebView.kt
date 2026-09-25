@@ -140,7 +140,8 @@ class GozarSocialWebViewFactory(
                 val scheme = if (source == null) null else
                     Uri.parse(source).scheme?.lowercase()
                 if (!isImage || source.isNullOrBlank() ||
-                    (scheme != "https" && scheme != "blob")) {
+                    (scheme != "https" && scheme != "blob" &&
+                     !(scheme == "data" && source.startsWith("data:image/")))) {
                     false
                 } else {
                     AlertDialog.Builder(activity)
