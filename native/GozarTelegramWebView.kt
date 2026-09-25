@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Base64
 import org.json.JSONObject
@@ -44,7 +46,70 @@ class GozarTelegramWebViewFactory(
 
     private val events = MethodChannel(messenger, EVENTS)
     private var activePage: TelegramView? = null
+    private var prewarmedPage: TelegramView? = null
     private var tabActive = false
+
+    // Warm the actual Telegram WebView after Gozar's home is visible.
+    // Reuse it on the first tab visit to avoid another cold page navigation.
+    init {
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (activePage == null && prewarmedPage == null &&
+                !activity.isFinishing && !activity.isDestroyed) {
+                prewarmedPage = makePage(activity)
+            }
+        }, 1200)
+    }
+
+    private fun makePage(context: android.content.Context): TelegramView =
+        TelegramView(context, activity, events, ::handleProxyNavigation) { closed ->
+            if (activePage === closed) activePage = null
+            if (prewarmedPage === closed) prewarmedPage = null
+        }
+
+    private fun validatedMtproto(server: String, port: Int, secret: String): Uri? {
+        if (!server.matches(Regex("^[A-Za-z0-9.-]{1,253}$")) ||
+            port !in 1..65535 ||
+            !secret.matches(Regex("(?i)^[0-9a-f]{32,512}$"))) return null
+        return Uri.Builder().scheme("tg").authority("proxy")
+            .appendQueryParameter("server", server)
+            .appendQueryParameter("port", port.toString())
+            .appendQueryParameter("secret", secret).build()
+    }
+
+    private fun validatedMtprotoLink(uri: Uri): Uri? {
+        val fromTelegram = uri.scheme.equals("tg", true) &&
+            uri.host.equals("proxy", true)
+        val fromWeb = uri.scheme.equals("https", true) &&
+            uri.host?.lowercase() in setOf("t.me", "telegram.me") &&
+            uri.path?.trimEnd('/') == "/proxy"
+        if (!fromTelegram && !fromWeb) return null
+        return try {
+            val server = uri.getQueryParameter("server")?.trim() ?: return null
+            val port = uri.getQueryParameter("port")?.toIntOrNull() ?: return null
+            val secret = uri.getQueryParameter("secret")?.trim() ?: return null
+            validatedMtproto(server, port, secret)
+        } catch (_: Exception) { null }
+    }
+
+    private fun launchProxy(uri: Uri): Boolean = try {
+        activity.startActivity(Intent(Intent.ACTION_VIEW, uri)
+            .addCategory(Intent.CATEGORY_BROWSABLE))
+        true
+    } catch (_: Exception) { false }
+
+    private fun handleProxyNavigation(uri: Uri): Boolean {
+        val isLink = (uri.scheme.equals("tg", true) &&
+                uri.host.equals("proxy", true)) ||
+            (uri.scheme.equals("https", true) &&
+                uri.host?.lowercase() in setOf("t.me", "telegram.me") &&
+                uri.path?.trimEnd('/') == "/proxy")
+        if (!isLink) return false
+        val target = validatedMtprotoLink(uri)
+        if (target == null || !launchProxy(target)) {
+            events.invokeMethod("proxyLinkError", null)
+        }
+        return true
+    }
 
     val controls = MethodChannel(messenger, CONTROLS).also { channel ->
         channel.setMethodCallHandler { call, result ->
@@ -66,26 +131,28 @@ class GozarTelegramWebViewFactory(
                     val server = call.argument<String>("server")?.trim() ?: ""
                     val port = call.argument<Int>("port") ?: 0
                     val secret = call.argument<String>("secret")?.trim() ?: ""
-                    if (!server.matches(Regex("^[A-Za-z0-9.-]{1,253}$")) ||
-                        port !in 1..65535 ||
-                        !secret.matches(Regex("(?i)^[0-9a-f]{32,512}$"))) {
+                    val uri = validatedMtproto(server, port, secret)
+                    if (uri == null) {
                         result.error("INVALID_PROXY", "Invalid MTProto proxy fields", null)
+                    } else if (!launchProxy(uri)) {
+                        result.error("NO_TELEGRAM_APP",
+                            "No Telegram app can handle this proxy link", null)
                     } else {
-                        try {
-                            // Delegates to the installed Telegram app, not the
-                            // WebView, which cannot speak the MTProto protocol.
-                            val uri = Uri.Builder().scheme("tg").authority("proxy")
-                                .appendQueryParameter("server", server)
-                                .appendQueryParameter("port", port.toString())
-                                .appendQueryParameter("secret", secret).build()
-                            val launch = Intent(Intent.ACTION_VIEW, uri)
-                                .addCategory(Intent.CATEGORY_BROWSABLE)
-                            activity.startActivity(launch)
-                            result.success(null)
-                        } catch (_: Exception) {
-                            result.error("NO_TELEGRAM_APP",
-                                "No Telegram app can handle this proxy link", null)
-                        }
+                        result.success(null)
+                    }
+                }
+                "openMtprotoLink" -> {
+                    val uri = try {
+                        Uri.parse(call.argument<String>("url")?.trim() ?: "")
+                    } catch (_: Exception) { Uri.EMPTY }
+                    val target = validatedMtprotoLink(uri)
+                    if (target == null) {
+                        result.error("INVALID_PROXY", "Invalid MTProto proxy link", null)
+                    } else if (!launchProxy(target)) {
+                        result.error("NO_TELEGRAM_APP",
+                            "No Telegram app can handle this proxy link", null)
+                    } else {
+                        result.success(null)
                     }
                 }
                 "openExternal" -> {
@@ -105,11 +172,11 @@ class GozarTelegramWebViewFactory(
 
     override fun create(context: android.content.Context, viewId: Int,
                         args: Any?): PlatformView {
-        val page = TelegramView(context, activity, events) { closed ->
-            if (activePage === closed) activePage = null
-        }
+        val page = prewarmedPage ?: makePage(context)
+        prewarmedPage = null
         activePage = page
         page.setActive(tabActive)
+        page.reportPreload()
         return page
     }
 
@@ -117,6 +184,7 @@ class GozarTelegramWebViewFactory(
         context: android.content.Context,
         private val activity: Activity,
         private val events: MethodChannel,
+        private val onProxyNavigation: (Uri) -> Boolean,
         private val onDispose: (TelegramView) -> Unit,
     ) : PlatformView {
         private val frame = FrameLayout(context)
@@ -125,6 +193,9 @@ class GozarTelegramWebViewFactory(
             android.R.attr.progressBarStyleHorizontal)
         private var started = SystemClock.elapsedRealtime()
         private var paused = false
+        private var everActivated = false
+        private var pageFinished = false
+        private var lastLoadMs: Long? = null
         private var mainFrameFailed = false
         private var fontEnabled = true
         // This is the same licensed local font that Gozar uses in Flutter.
@@ -177,6 +248,7 @@ class GozarTelegramWebViewFactory(
                 ): Boolean {
                     if (!request.isForMainFrame) return false
                     val url = request.url
+                    if (onProxyNavigation(url)) return true
                     if (url.scheme == "https" && url.host == "web.telegram.org") {
                         return false
                     }
@@ -197,16 +269,21 @@ class GozarTelegramWebViewFactory(
                     view: WebView, url: String?, favicon: android.graphics.Bitmap?
                 ) {
                     started = SystemClock.elapsedRealtime()
+                    pageFinished = false
+                    lastLoadMs = null
                     mainFrameFailed = false
                     progress.visibility = View.VISIBLE
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     progress.visibility = View.GONE
-                    applyFontStyle()
+                    pageFinished = true
+                    // Defer expensive font injection until the tab is visited.
+                    if (everActivated) applyFontStyle()
                     if (!mainFrameFailed) {
+                        lastLoadMs = SystemClock.elapsedRealtime() - started
                         events.invokeMethod("loaded", mapOf(
-                            "durationMs" to (SystemClock.elapsedRealtime() - started)))
+                            "durationMs" to lastLoadMs))
                     }
                 }
 
@@ -240,8 +317,19 @@ class GozarTelegramWebViewFactory(
             web.loadUrl(OFFICIAL_URL)
         }
 
+        fun reportPreload() {
+            lastLoadMs?.let {
+                events.invokeMethod("loaded", mapOf("durationMs" to it))
+            }
+        }
+
         fun setActive(active: Boolean) {
-            if (!active && !paused) {
+            if (active && !everActivated) {
+                everActivated = true
+                if (pageFinished) applyFontStyle()
+            }
+            // Do not suspend preloading JavaScript before the first tab visit.
+            if (!active && !paused && everActivated) {
                 web.onPause()
                 paused = true
             } else if (active && paused) {
