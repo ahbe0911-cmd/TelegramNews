@@ -139,11 +139,23 @@ class GozarSocialDownloads(
     private fun sniffMime(input: BufferedInputStream, name: String, hint: String): String {
         input.mark(32)
         val bytes = ByteArray(32)
-        val count = try { input.read(bytes) } finally { input.reset() }
+        var count = 0
+        try {
+            while (count < bytes.size) {
+                val read = input.read(bytes, count, bytes.size - count)
+                if (read < 0) break
+                if (read == 0) break
+                count += read
+            }
+        } finally { input.reset() }
         fun matches(vararg header: Int): Boolean =
             count >= header.size && header.indices.all { i ->
                 (bytes[i].toInt() and 0xff) == header[i]
             }
+        val brand = if (count >= 12) String(bytes, 8, 4, Charsets.US_ASCII)
+            else ""
+        val isFtyp = count >= 12 &&
+            String(bytes, 4, 4, Charsets.US_ASCII) == "ftyp"
         val signature = when {
             matches(0xff, 0xd8, 0xff) -> "image/jpeg"
             matches(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) -> "image/png"
@@ -151,8 +163,12 @@ class GozarSocialDownloads(
             matches(0x52, 0x49, 0x46, 0x46) &&
                 count >= 12 && String(bytes, 8, 4, Charsets.US_ASCII) == "WEBP" ->
                 "image/webp"
-            count >= 12 && String(bytes, 4, 4, Charsets.US_ASCII) == "ftyp" ->
-                "video/mp4"
+            isFtyp && brand in setOf("avif", "avis") -> "image/avif"
+            isFtyp && brand in setOf("heic", "heix", "hevc", "hevx", "mif1") ->
+                "image/heic"
+            isFtyp && brand in setOf(
+                "isom", "iso2", "avc1", "mp41", "mp42", "M4V ", "qt  "
+            ) -> "video/mp4"
             matches(0x1a, 0x45, 0xdf, 0xa3) -> "video/webm"
             matches(0x25, 0x50, 0x44, 0x46, 0x2d) -> "application/pdf"
             else -> null
@@ -177,6 +193,8 @@ class GozarSocialDownloads(
             "image/png" -> "png"
             "image/gif" -> "gif"
             "image/webp" -> "webp"
+            "image/avif" -> "avif"
+            "image/heic" -> "heic"
             "video/mp4" -> "mp4"
             "video/webm" -> "webm"
             "application/pdf" -> "pdf"
