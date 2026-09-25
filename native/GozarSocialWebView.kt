@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.webkit.CookieManager
@@ -26,7 +24,7 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 /**
- * Four trusted HTTPS web messenger pages inside the standalone Gozar host.
+ * Three native WebViews alongside the existing Telegram WebView.
  * No TDLib, phone contacts, account access, injected JavaScript, or VPN changes.
  *
  * The WebViews belong to Gozar's UID. That UID is excluded from its own VPN
@@ -44,9 +42,8 @@ class GozarSocialWebViewFactory(
         const val SHAD_ALTERNATE = "https://web.shad.ir/"
 
         val sites = listOf(
-            "https://my.shad.ir/",
-            "https://web.bale.ai/",
             "https://web.rubika.ir/",
+            "https://my.shad.ir/",
             "https://web.eitaa.com/"
         )
     }
@@ -66,7 +63,7 @@ class GozarSocialWebViewFactory(
                 }
                 "alternateShad" -> {
                     val index = call.argument<Int>("index") ?: -1
-                    if (index == 0) {
+                    if (index == 1) {
                         views.firstOrNull { it.index == index }?.alternateShad()
                     }
                     result.success(null)
@@ -121,8 +118,7 @@ class GozarSocialWebViewFactory(
         private var paused = false
         private var triedShadAlternate = false
         private var pageFailed = false
-        private var loadGeneration = 0
-        private val mainHandler = Handler(Looper.getMainLooper())
+        private var everActivated = false
         private val downloads = GozarSocialDownloads(activity, web, index, events)
 
         init {
@@ -149,13 +145,10 @@ class GozarSocialWebViewFactory(
             web.settings.javaScriptCanOpenWindowsAutomatically = false
             web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             web.settings.cacheMode = WebSettings.LOAD_DEFAULT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                web.settings.offscreenPreRaster = true
-            }
+            // Do not pre-rasterize inactive heavyweight pages in GPU memory.
             web.settings.setSupportZoom(false)
-            if (index == 0) {
-                // Some Shad login pages require third-party SSO cookies, and
-                // some reject the default Android WebView user-agent marker.
+            if (index == 1) {
+                // Shad sign-in may need third-party cookies and a browser UA.
                 CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
                 web.settings.userAgentString = web.settings.userAgentString
                     .replace("; wv", "").replace("Version/4.0 ", "")
@@ -180,16 +173,8 @@ class GozarSocialWebViewFactory(
                     loadStarted = SystemClock.elapsedRealtime()
                     pageFailed = false
                     progress.visibility = View.VISIBLE
-                    val generation = ++loadGeneration
-                    if (index == 0 && !triedShadAlternate &&
-                        url?.startsWith(sites[0]) == true) {
-                        mainHandler.postDelayed({
-                            if (generation == loadGeneration &&
-                                !triedShadAlternate && web.progress < 25) {
-                                tryShadFallback()
-                            }
-                        }, 18000)
-                    }
+                    // Avoid timed fallback navigation that used to replace
+                    // Shad's page abruptly while a user was interacting.
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
@@ -207,9 +192,7 @@ class GozarSocialWebViewFactory(
                 ) {
                     if (request.isForMainFrame && response.statusCode >= 400) {
                         pageFailed = true
-                        if (!tryShadFallback()) {
-                            events.invokeMethod("pageError", mapOf("index" to index))
-                        }
+                        events.invokeMethod("pageError", mapOf("index" to index))
                     }
                 }
 
@@ -219,9 +202,7 @@ class GozarSocialWebViewFactory(
                 ) {
                     if (request.isForMainFrame) {
                         pageFailed = true
-                        if (!tryShadFallback()) {
-                            events.invokeMethod("pageError", mapOf("index" to index))
-                        }
+                        events.invokeMethod("pageError", mapOf("index" to index))
                     }
                 }
             }
@@ -235,22 +216,16 @@ class GozarSocialWebViewFactory(
             web.loadUrl(sites[index])
         }
 
-        private fun tryShadFallback(): Boolean {
-            if (index != 0 || triedShadAlternate) return false
-            triedShadAlternate = true
-            web.post { web.loadUrl(SHAD_ALTERNATE) }
-            return true
-        }
-
         fun alternateShad() {
-            if (index != 0) return
+            if (index != 1) return
             triedShadAlternate = true
             web.loadUrl(SHAD_ALTERNATE)
         }
 
         fun updateActive(activeIndex: Int) {
+            if (activeIndex == index) everActivated = true
             val shouldPause = activeIndex != index
-            if (shouldPause && !paused) {
+            if (shouldPause && !paused && everActivated) {
                 web.onPause()
                 paused = true
             } else if (!shouldPause && paused) {
@@ -267,7 +242,6 @@ class GozarSocialWebViewFactory(
 
         override fun dispose() {
             onDisposed(this)
-            mainHandler.removeCallbacksAndMessages(null)
             downloads.dispose()
             web.stopLoading()
             web.webChromeClient = null
