@@ -99,10 +99,20 @@ jobs:
           assert 'https://web.telegram.org/k/' in telegram
           assert 'MIXED_CONTENT_NEVER_ALLOW' in telegram
           assert 'javaScriptCanOpenWindowsAutomatically = false' in telegram
-          assert 'evaluateJavascript' not in telegram
+          assert 'evaluateJavascript' in telegram
+          assert 'openMtprotoInTelegram' in telegram
+          assert 'setFontEnabled' in telegram
+          assert 'GozarSocialDownloads(activity' not in telegram
+          assert 'GozarSocialDownloads(' in telegram
+          assert "Uri.parse(it).host" in telegram
           assert 'GozarSocialWebViewFactory' not in main
           assert not list((root / 'kotlin').rglob('GozarSocialWebView.kt'))
-          assert not list((root / 'kotlin').rglob('GozarSocialDownloads.kt'))
+          downloads = next((root / 'kotlin').rglob('GozarSocialDownloads.kt')).read_text()
+          assert 'MediaStore.Images.Media.EXTERNAL_CONTENT_URI' in downloads
+          assert 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI' in downloads
+          assert 'MediaStore.Downloads.EXTERNAL_CONTENT_URI' in downloads
+          assert 'CookieManager.getInstance().getCookie(url)' in downloads
+          assert 'downloadBlob' in downloads
           main_dart = Path('lib/gozar_main.dart').read_text()
           assert "label: 'شبکه'" not in main_dart
           assert "label: 'تلگرام'" in main_dart
