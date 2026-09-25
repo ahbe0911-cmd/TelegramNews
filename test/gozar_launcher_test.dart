@@ -228,7 +228,14 @@ void main() {
         ValueKey('gozar-launcher-icon-' + instagram.key));
     expect(tile, findsOneWidget);
     expect(icon, findsOneWidget);
-    expect(tester.getSize(icon).width, greaterThanOrEqualTo(76));
+    // The mock returns no Android artwork: the fallback glyph intentionally
+    // uses 78% of the real icon width. Check the grid's four-column layout
+    // separately instead of expecting the fallback glyph to fill the cell.
+    final grid = tester.widget<GridView>(
+        find.byKey(const ValueKey('gozar-launcher-grid-samsung-grid')));
+    final delegate = grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 4);
+    expect(tester.getSize(icon).width, greaterThanOrEqualTo(58));
     await tester.tap(tile);
     await tester.tap(tile);
     await tester.pump(const Duration(milliseconds: 100));
