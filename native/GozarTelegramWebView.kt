@@ -318,8 +318,12 @@ class GozarTelegramWebViewFactory(
         }
 
         fun reportPreload() {
-            lastLoadMs?.let {
-                events.invokeMethod("loaded", mapOf("durationMs" to it))
+            if (mainFrameFailed) {
+                events.invokeMethod("error", null)
+            } else {
+                lastLoadMs?.let {
+                    events.invokeMethod("loaded", mapOf("durationMs" to it))
+                }
             }
         }
 
