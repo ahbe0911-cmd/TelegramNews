@@ -1,6 +1,7 @@
 package ir.channel.telegram_news
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -139,8 +140,35 @@ class GozarTelegramWebViewFactory(
         }
         private val downloads = GozarSocialDownloads(
             activity, web, 0, events)
+        // An explicit long-press Save action also works for images which the
+        // website displays without providing a download button.
+        private fun installImageSave() {
+            web.setOnLongClickListener {
+                val hit = web.hitTestResult
+                val source = hit.extra
+                val type = hit.type
+                val isImage = type == WebView.HitTestResult.IMAGE_TYPE ||
+                    type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                val scheme = if (source == null) null else
+                    Uri.parse(source).scheme?.lowercase()
+                if (!isImage || source.isNullOrBlank() ||
+                    (scheme != "https" && scheme != "blob")) {
+                    false
+                } else {
+                    AlertDialog.Builder(activity)
+                        .setTitle("ذخیرهٔ تصویر")
+                        .setNegativeButton("انصراف", null)
+                        .setPositiveButton("ذخیره در گالری") { _, _ ->
+                            downloads.saveUserDownload(source,
+                                web.settings.userAgentString, null, "image/jpeg")
+                        }.show()
+                    true
+                }
+            }
+        }
 
         init {
+            installImageSave()
             frame.addView(web, FrameLayout.LayoutParams(-1, -1))
             progress.max = 100
             val dp = context.resources.displayMetrics.density
