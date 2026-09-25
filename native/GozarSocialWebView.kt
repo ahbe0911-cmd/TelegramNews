@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import java.io.ByteArrayInputStream
+import org.json.JSONObject
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -41,6 +43,11 @@ class GozarSocialWebViewFactory(
         const val CONTROLS = "ir.channel.telegram_tdnews/gozar_social_controls"
         const val EVENTS = "ir.channel.telegram_tdnews/gozar_social_events"
         const val SHAD_ALTERNATE = "https://web.shad.ir/"
+        private const val FONT_PATH = "/.gozar-assets/vazirmatn-regular.ttf"
+        private const val FONT_ASSET = "flutter_assets/assets/fonts/Vazirmatn-Regular.ttf"
+        private val trustedFontHosts = setOf(
+            "web.rubika.ir", "my.shad.ir", "web.shad.ir", "web.eitaa.com"
+        )
 
         val sites = listOf(
             "https://web.rubika.ir/",
@@ -119,6 +126,7 @@ class GozarSocialWebViewFactory(
         private var paused = false
         private var pageFailed = false
         private var everActivated = false
+        private var fontAppliedToPage = false
         private val downloads = GozarSocialDownloads(activity, web, index, events)
         // An explicit long-press Save action also works for images which the
         // website displays without providing a download button.
@@ -140,11 +148,42 @@ class GozarSocialWebViewFactory(
                         .setNegativeButton("انصراف", null)
                         .setPositiveButton("ذخیره در گالری") { _, _ ->
                             downloads.saveUserDownload(source,
-                                web.settings.userAgentString, null, "image/jpeg")
+                                web.settings.userAgentString, null, null)
                         }.show()
                     true
                 }
             }
+        }
+
+        // Load the licensed font from a virtual same-origin URL. A short CSS
+        // rule avoids base64-encoding a large TTF into JavaScript on the UI thread.
+        private fun applyGozarFont(pageUrl: String?) {
+            if (fontAppliedToPage || pageUrl.isNullOrBlank()) return
+            val uri = try { Uri.parse(pageUrl) } catch (_: Exception) { return }
+            val host = uri.host?.lowercase() ?: return
+            if (uri.scheme != "https" || host !in trustedFontHosts) return
+            fontAppliedToPage = true
+            val css = """
+                @font-face {
+                    font-family: 'GozarVazirmatn';
+                    src: url('https://$host$FONT_PATH') format('truetype');
+                    font-weight: 400;
+                    font-style: normal;
+                }
+                body, input, textarea, button, [contenteditable='true'] {
+                    font-family: 'GozarVazirmatn', sans-serif !important;
+                }
+            """.trimIndent()
+            web.evaluateJavascript("""
+                (function () {
+                    if (document.getElementById('gozar-local-font')) return;
+                    if (!document.head) return;
+                    var style = document.createElement('style');
+                    style.id = 'gozar-local-font';
+                    style.textContent = ${JSONObject.quote(css)};
+                    document.head.appendChild(style);
+                })();
+            """.trimIndent(), null)
         }
 
         init {
@@ -186,6 +225,25 @@ class GozarSocialWebViewFactory(
             }
             CookieManager.getInstance().setAcceptCookie(true)
             web.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView, request: WebResourceRequest
+                ): WebResourceResponse? {
+                    val url = request.url
+                    if (url.scheme == "https" &&
+                        url.host?.lowercase() in trustedFontHosts &&
+                        url.path == FONT_PATH) {
+                        return try {
+                            WebResourceResponse("font/ttf", null,
+                                activity.assets.open(FONT_ASSET))
+                        } catch (_: Exception) {
+                            // Never fetch the virtual resource from the network.
+                            WebResourceResponse("text/plain", "UTF-8",
+                                ByteArrayInputStream(ByteArray(0)))
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView, request: WebResourceRequest
                 ): Boolean {
@@ -199,12 +257,18 @@ class GozarSocialWebViewFactory(
                 ) {
                     loadStarted = SystemClock.elapsedRealtime()
                     pageFailed = false
+                    fontAppliedToPage = false
                     progress.visibility = View.VISIBLE
                     // Avoid timed fallback navigation that used to replace
                     // Shad's page abruptly while a user was interacting.
                 }
 
+                override fun onPageCommitVisible(view: WebView, url: String?) {
+                    applyGozarFont(url)
+                }
+
                 override fun onPageFinished(view: WebView, url: String?) {
+                    applyGozarFont(url)
                     progress.visibility = View.GONE
                     if (pageFailed) return
                     events.invokeMethod("pageFinished", mapOf(
