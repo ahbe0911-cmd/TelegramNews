@@ -621,174 +621,205 @@ class _GozarLauncherState extends State<GozarLauncher> {
     await persist(updated, openIndex: index);
   }
 
-  Widget appTile(GozarLauncherSection section,
-      GozarShortcut app, double cellWidth, {bool controls = true}) {
-    final size = math.min(section.iconSize, cellWidth - 14)
-        .clamp(28.0, 72.0);
-    return InkWell(
-      key: ValueKey('gozar-launcher-open-' + app.key),
-      borderRadius: BorderRadius.circular(16),
-      onTap: controls ? () => widget.onOpenApp(app) : null,
-      child: Column(children: [
-        Expanded(child: Stack(children: [
-          Positioned.fill(child: Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              color: const Color(0xffffffff),
-              border: Border.all(color: GozarPalette.blue.withOpacity(.25)),
+  // A held icon opens an action sheet; it never displays a three-dot badge.
+  // Move activates drag mode so the next hold-and-drag reorders the grid.
+  Future<void> openAppOptions(
+      GozarLauncherSection section, GozarShortcut app) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xfff7fbff),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              key: ValueKey('gozar-launcher-app-options-' + app.key),
+              leading: GozarShortcutIcon(shortcut: app, size: 43),
+              title: Text(app.title, maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('تنظیمات میانبر برنامه'),
             ),
-            child: Center(child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: GozarShortcutIcon(shortcut: app, size: size),
-            )),
-          )),
-          if (controls) Positioned(top: 0, right: 0, child: SizedBox(
-            width: 28, height: 30,
-            child: PopupMenuButton<String>(
-              key: ValueKey('gozar-launcher-app-menu-' + app.key),
-              tooltip: 'ویرایش یا جابه‌جایی برنامه',
-              padding: EdgeInsets.zero,
-              iconSize: 18,
-              icon: const Icon(Icons.more_horiz_rounded,
+            ListTile(
+              key: const ValueKey('gozar-launcher-action-rename'),
+              leading: const Icon(Icons.edit_outlined,
                 color: GozarPalette.cyan),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'rename',
-                  child: Text('ویرایش نام')),
-                PopupMenuItem(value: 'before',
-                  child: Text('انتقال به قبل')),
-                PopupMenuItem(value: 'after',
-                  child: Text('انتقال به بعد')),
-                PopupMenuItem(value: 'remove',
-                  child: Text('حذف از این بخش')),
-              ],
-              onSelected: (action) {
-                switch (action) {
-                  case 'rename':
-                    renameApp(section, app);
-                    return;
-                  case 'before':
-                    moveAppByStep(section, app, -1);
-                    return;
-                  case 'after':
-                    moveAppByStep(section, app, 1);
-                    return;
-                  case 'remove':
-                    removeApp(section, app);
-                    return;
-                }
-              },
+              title: const Text('تغییر نام'),
+              onTap: () => Navigator.pop(sheetContext, 'rename'),
             ),
-          )),
-        ])),
-        const SizedBox(height: 5),
-        Text(app.title, maxLines: 2, overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: GozarPalette.text, fontSize: 10.5)),
-      ]),
+            ListTile(
+              key: const ValueKey('gozar-launcher-action-move'),
+              leading: const Icon(Icons.open_with_rounded,
+                color: GozarPalette.cyan),
+              title: const Text('جابه‌جایی'),
+              subtitle: const Text('آیکون را نگه دارید و به جای جدید بکشید'),
+              onTap: () => Navigator.pop(sheetContext, 'move'),
+            ),
+            ListTile(
+              key: const ValueKey('gozar-launcher-action-remove'),
+              leading: const Icon(Icons.remove_circle_outline_rounded,
+                color: GozarPalette.red),
+              title: const Text('حذف از لانچر'),
+              onTap: () => Navigator.pop(sheetContext, 'remove'),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'rename':
+        await renameApp(section, app);
+        return;
+      case 'move':
+        setState(() { reorderMode = true; });
+        return;
+      case 'remove':
+        await removeApp(section, app);
+        return;
+    }
+  }
+
+  Widget appTile(GozarLauncherSection section,
+      GozarShortcut app, double cellWidth, {bool interactive = true}) {
+    final size = math.min(math.max(section.iconSize, 72.0), cellWidth - 8);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('gozar-launcher-open-' + app.key),
+        borderRadius: BorderRadius.circular(18),
+        onTap: interactive && !reorderMode
+            ? () => widget.onOpenApp(app) : null,
+        onLongPress: interactive && !reorderMode
+            ? () => openAppOptions(section, app) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Column(children: [
+            SizedBox(
+              height: size + 3,
+              width: double.infinity,
+              child: Center(child: RepaintBoundary(
+                child: GozarShortcutIcon(shortcut: app, size: size))),
+            ),
+            const SizedBox(height: 7),
+            Text(app.title,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: GozarPalette.text, fontSize: 11.5,
+                fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
     );
   }
 
-  /// Long-press any program and drop it on a different icon. The Android
-  /// package/component remain untouched when the visual order changes.
   Widget draggableAppTile(GozarLauncherSection section,
       GozarShortcut app, double cellWidth) {
     return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != app.key &&
+      onWillAcceptWithDetails: (details) => reorderMode &&
+          details.data != app.key &&
           section.apps.any((candidate) => candidate.key == details.data),
       onAcceptWithDetails: (details) =>
           reorderApp(section, details.data, app.key),
       builder: (context, accepted, rejected) => Container(
         decoration: accepted.isEmpty ? null : BoxDecoration(
           borderRadius: BorderRadius.circular(18),
+          color: const Color(0xffdbeeff),
           border: Border.all(color: GozarPalette.cyan, width: 2),
         ),
-        child: LongPressDraggable<String>(
-          data: app.key,
-          feedback: Material(
-            color: Colors.transparent,
-            child: SizedBox(
-              width: cellWidth,
-              height: cellWidth / .76,
-              child: Opacity(opacity: .88,
-                child: appTile(section, app, cellWidth, controls: false)),
-            ),
-          ),
-          childWhenDragging: Opacity(
-            opacity: .28,
-            child: appTile(section, app, cellWidth),
-          ),
-          child: appTile(section, app, cellWidth),
-        ),
+        child: reorderMode
+            ? LongPressDraggable<String>(
+                key: ValueKey('gozar-launcher-drag-' + app.key),
+                data: app.key,
+                delay: const Duration(milliseconds: 320),
+                maxSimultaneousDrags: 1,
+                feedback: Material(
+                  color: Colors.transparent,
+                  child: SizedBox(
+                    width: cellWidth,
+                    height: cellWidth / .80,
+                    child: Opacity(opacity: .90,
+                      child: appTile(section, app, cellWidth,
+                        interactive: false)),
+                  ),
+                ),
+                childWhenDragging: Opacity(
+                  opacity: .23,
+                  child: appTile(section, app, cellWidth,
+                    interactive: false),
+                ),
+                child: appTile(section, app, cellWidth,
+                  interactive: false),
+              )
+            : appTile(section, app, cellWidth),
       ),
     );
   }
 
   Widget sectionPage(GozarLauncherSection section) => LayoutBuilder(
     builder: (context, constraints) {
-      final columns = section.columns;
-      final cellWidth = (constraints.maxWidth - 12 -
-          (columns - 1) * 8) / columns;
-      if (section.apps.isEmpty) {
-        return Center(child: Column(
-          mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.apps_rounded,
-            color: GozarPalette.cyan, size: 44),
-          const SizedBox(height: 10),
-          const Text('این بخش هنوز برنامه‌ای ندارد.',
-            style: TextStyle(color: GozarPalette.muted)),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            key: const ValueKey('gozar-launcher-add-apps-empty'),
-            onPressed: () => addApps(section),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('افزودن برنامه'),
-          ),
-        ]));
-      }
+      const columns = 4;
+      const horizontalPadding = 12.0;
+      const spacing = 12.0;
+      final cellWidth = math.max(0.0,
+        (constraints.maxWidth - horizontalPadding * 2 -
+          (columns - 1) * spacing) / columns);
+      // Stable, four-column home-screen geometry; no nested AnimatedContainer
+      // or oversized decorative boxes to shrink the real Android app artwork.
       return GridView.builder(
         key: ValueKey('gozar-launcher-grid-' + section.id),
-        padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
-        // The add tile belongs to EACH section's own scrollable grid and
-        // remains available when there are already four or five app icons.
+        padding: const EdgeInsets.fromLTRB(
+            horizontalPadding, 13, horizontalPadding, 16),
+        cacheExtent: 360,
         itemCount: section.apps.length + 1,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns, mainAxisSpacing: 14,
-          crossAxisSpacing: 8, childAspectRatio: .76,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisSpacing: 18,
+          crossAxisSpacing: spacing,
+          childAspectRatio: .80,
         ),
         itemBuilder: (context, index) {
           if (index == section.apps.length) {
             return InkWell(
               key: ValueKey('gozar-launcher-grid-add-' + section.id),
-              onTap: section.apps.length >=
-                      GozarLauncherStore.maxAppsPerSection
+              onTap: reorderMode ||
+                      section.apps.length >=
+                        GozarLauncherStore.maxAppsPerSection
                   ? null : () => addApps(section),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: const Color(0xffe4f3ff),
-                  border: Border.all(color: GozarPalette.cyan.withOpacity(.6)),
+              borderRadius: BorderRadius.circular(18),
+              child: Column(children: [
+                SizedBox(
+                  height: math.min(76.0, cellWidth - 8) + 5,
+                  child: Center(child: Container(
+                    width: math.min(72.0, cellWidth - 8),
+                    height: math.min(72.0, cellWidth - 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(21),
+                      color: const Color(0xffe1f1ff),
+                      border: Border.all(
+                        color: GozarPalette.cyan.withOpacity(.42))),
+                    child: const Icon(Icons.add_rounded,
+                      color: GozarPalette.cyan, size: 35),
+                  )),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.add_circle_outline_rounded,
-                      color: GozarPalette.cyan, size: 27),
-                    const SizedBox(height: 4),
-                    Text(section.apps.length >=
-                          GozarLauncherStore.maxAppsPerSection
-                          ? 'ظرفیت کامل' : 'افزودن',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: GozarPalette.text, fontSize: 10)),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 5),
+                Text(section.apps.length >=
+                    GozarLauncherStore.maxAppsPerSection
+                    ? 'ظرفیت کامل' : 'افزودن',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: GozarPalette.text, fontSize: 11.5,
+                    fontWeight: FontWeight.w600)),
+              ]),
             );
           }
-          return draggableAppTile(
-              section, section.apps[index], cellWidth);
+          return draggableAppTile(section, section.apps[index], cellWidth);
         },
       );
     },
