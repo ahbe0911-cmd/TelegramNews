@@ -83,6 +83,9 @@ class MainActivity : FlutterActivity() {
 (activity.parent / 'GozarTelegramWebView.kt').write_bytes(
     (root / 'native/GozarTelegramWebView.kt').read_bytes()
 )
+(activity.parent / 'GozarSocialDownloads.kt').write_bytes(
+    (root / 'native/GozarSocialDownloads.kt').read_bytes()
+)
 (activity.parent / 'GozarReminderBridge.kt').write_bytes(
     (root / 'native/GozarReminderBridge.kt').read_bytes()
 )
