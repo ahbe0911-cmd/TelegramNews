@@ -1,4 +1,4 @@
-name: Ahbegram exact-branding validation
+name: Ahbegram branding and API-gate source validation
 
 on:
   workflow_dispatch:
@@ -8,6 +8,8 @@ on:
     paths:
       - '.github/workflows/ahbegram-brand-smoke.yml'
       - 'scripts/apply_ahbegram_branding.py'
+      - 'scripts/apply_ahbegram_api_gate.py'
+      - 'native/ahbegram/**'
       - 'branding/ahbegram-symbol.webp'
       - 'third_party/forkgram'
       - 'third_party/FORKGRAM_PIN.json'
@@ -34,6 +36,8 @@ jobs:
           python3 -m pip install --user Pillow
           python3 -m py_compile scripts/apply_ahbegram_branding.py
           python3 scripts/apply_ahbegram_branding.py
+          python3 -m py_compile scripts/apply_ahbegram_api_gate.py
+          python3 scripts/apply_ahbegram_api_gate.py
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -46,5 +50,8 @@ jobs:
           assert 'android:name="org.telegram.messenger.DefaultIcon"' in manifest
           assert 'android:icon="@mipmap/ic_launcher"' in manifest
           print('Verified: own app label, original uploaded speech-mark launcher icon and density resources.')
-          print('API gate and server validation NOT yet integrated; no APK published by this job.')
+          assert 'ir.channel.ahbegram.AhbegramApiGateActivity' in manifest
+          assert 'android:process=":api_verify"' in manifest
+          assert Path('third_party/forkgram/TMessagesProj/src/main/java/ir/channel/ahbegram/AhbegramApiVerifyService.java').is_file()
+          print('Server-verification native source staged; device/server checks still pending. No APK published by this job.')
           PY
