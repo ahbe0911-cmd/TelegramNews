@@ -30,6 +30,8 @@ public final class AhbegramApiCredentials {
     private static final String KEY_ALIAS = "ahbegram_api_hash_aes_gcm_v1";
     private static final Pattern HASH = Pattern.compile("[0-9a-fA-F]{32}");
 
+    public static volatile boolean verifierProcessPermitted;
+
     private AhbegramApiCredentials() { }
 
     private static SharedPreferences prefs(Context context) {
