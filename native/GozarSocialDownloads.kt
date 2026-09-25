@@ -16,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.io.FileOutputStream
 import java.io.BufferedInputStream
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -113,11 +114,47 @@ class GozarSocialDownloads(
                     }.start()
                 }
                 "blob" -> downloadBlob(url, disposition, mime)
+                "data" -> saveInlineImage(url)
                 else -> notify("downloadError")
             }
         } catch (_: Exception) {
             notify("downloadError")
         }
+    }
+
+    // Some web messengers render received images from data: URLs; they are
+    // not HTTPS downloads and cannot be fetched as a blob: URL. Decode only
+    // a bounded, explicit base64 image after the user's Save action.
+    private fun saveInlineImage(url: String) {
+        val comma = url.indexOf(',')
+        if (comma !in 20..80 || url.length > 12 * 1024 * 1024) {
+            notify("downloadError")
+            return
+        }
+        val mime = url.substring(5, comma).lowercase()
+        if (mime !in setOf(
+            "image/jpeg;base64", "image/png;base64", "image/webp;base64",
+            "image/gif;base64"
+        )) {
+            notify("downloadError")
+            return
+        }
+        notify("downloadStarted")
+        Thread {
+            try {
+                val bytes = Base64.decode(url.substring(comma + 1), Base64.DEFAULT)
+                if (bytes.isEmpty() || bytes.size > 8 * 1024 * 1024) {
+                    throw IllegalStateException("Inline image too large")
+                }
+                val type = mime.substringBefore(';')
+                val name = filename("https://local.invalid/image", null, type)
+                ByteArrayInputStream(bytes).use {
+                    store(it, name, type, 8L * 1024 * 1024)
+                }
+            } catch (_: Exception) {
+                notify("downloadError")
+            }
+        }.start()
     }
 
     private fun filename(url: String, disposition: String?, mime: String?): String {
