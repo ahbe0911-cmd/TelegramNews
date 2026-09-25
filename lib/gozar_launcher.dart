@@ -143,6 +143,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
   List<Map<String, String>>? cachedInstalledApps;
   DateTime? installedAppsFetchedAt;
   final Set<String> launchingApps = <String>{};
+  final Map<String, DateTime> lastLaunch = <String, DateTime>{};
 
   @override
   void initState() {
@@ -688,13 +689,19 @@ class _GozarLauncherState extends State<GozarLauncher> {
     // Samsung-like launch behaviour: one tap maps to one native launch.
     // Ignore accidental double taps while Android is bringing the target
     // activity to the foreground.
-    if (!launchingApps.add(app.key)) return;
+    final now = DateTime.now();
+    final previous = lastLaunch[app.key];
+    if (launchingApps.contains(app.key) ||
+        (previous != null &&
+            now.difference(previous) < const Duration(milliseconds: 420))) {
+      return;
+    }
+    lastLaunch[app.key] = now;
+    launchingApps.add(app.key);
     try {
       await widget.onOpenApp(app);
     } finally {
-      Future<void>.delayed(const Duration(milliseconds: 420), () {
-        launchingApps.remove(app.key);
-      });
+      launchingApps.remove(app.key);
     }
   }
 
