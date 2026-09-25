@@ -50,10 +50,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         SystemVpnBridge.attach(this, flutterEngine)
         GozarReminderBridge.attach(this, flutterEngine)
-        val social = GozarSocialWebViewFactory(
-            this, flutterEngine.dartExecutor.binaryMessenger)
-        flutterEngine.platformViewsController.registry.registerViewFactory(
-            GozarSocialWebViewFactory.VIEW_TYPE, social)
     }
 
     @Suppress("DEPRECATION")
@@ -80,12 +76,10 @@ class MainActivity : FlutterActivity() {
 (activity.parent / 'GozarWebActivity.kt').write_bytes(
     (root / 'native/GozarWebActivity.kt').read_bytes()
 )
-(activity.parent / 'GozarSocialDownloads.kt').write_bytes(
-    (root / 'native/GozarSocialDownloads.kt').read_bytes()
-)
-(activity.parent / 'GozarSocialWebView.kt').write_bytes(
-    (root / 'native/GozarSocialWebView.kt').read_bytes()
-)
+# The Network tab was removed from Gozar. Do not bundle its unused
+# platform view or download bridge in the standalone APK.
+(activity.parent / 'GozarSocialWebView.kt').unlink(missing_ok=True)
+(activity.parent / 'GozarSocialDownloads.kt').unlink(missing_ok=True)
 # No Telegram WebView is shipped with the standalone Gozar variant.
 (activity.parent / 'GozarTelegramWebView.kt').unlink(missing_ok=True)
 (activity.parent / 'GozarReminderBridge.kt').write_bytes(
