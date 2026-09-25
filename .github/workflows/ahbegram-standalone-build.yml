@@ -89,28 +89,7 @@ jobs:
           apk=max(apks,key=lambda p:p.stat().st_mtime)
           with ZipFile(apk) as file: names=set(file.namelist())
           assert 'classes.dex' in names
-          assert any(re.search(r'/libtmessages\.[0-9]+\.so,n) for n in names),'Missing Forkgram native engine'
-          assert not any(n.endswith('/libflutter.so') for n in names)
-          aapt=str(Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0/aapt')
-          result=subprocess.check_output([aapt,'dump','badging',str(apk)],text=True)
-          match=re.search(r"(?m)^package: name='([^']+)'",result)
-          assert match and match.group(1)=='ir.channel.ahbegram',result[:400]
-          assert "application-label:'ahbegram'" in result,result[:500]
-          print('One independent APK:',match.group(1),apk.stat().st_size)
-          dst=Path('build-reports/ahbegram-ARM64-PREVIEW-UNTESTED.apk')
-          shutil.copyfile(apk,dst)
-          print('PREVIEW ONLY: server API-check and login on a physical device are NOT verified.')
-          PY
-      - name: Archive preview for device tests, never describe as verified release
-        uses: actions/upload-artifact@v4
-        with:
-          name: AHBEGRAM-ARM64-PREVIEW-NOT-DEVICE-TESTED
-          path: |
-            build-reports/ahbegram-ARM64-PREVIEW-UNTESTED.apk
-            build-reports/ahbegram-branding.json
-          if-no-files-found: error
-          retention-days: 7
-,n) for n in names),'Missing Forkgram native engine'
+          assert any(re.search(r'/libtmessages\.[0-9]+\.so$',n) for n in names),'Missing Forkgram native engine'
           assert not any(n.endswith('/libflutter.so') for n in names)
           aapt=str(Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0/aapt')
           result=subprocess.check_output([aapt,'dump','badging',str(apk)],text=True)
