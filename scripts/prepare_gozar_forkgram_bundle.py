@@ -94,13 +94,16 @@ script = replace_once(script, "    implementation project(':TMessagesProj')",
     f"    implementation '{coordinate}'\n"
     "    implementation files('libs/libv2ray.aar')",
     'Forkgram host dependencies')
-# Forkgram's legacy Android Tink artifact duplicates hundreds of classes from
-# the newer Tink runtime resolved by Flutter AndroidX secure storage. Retain
-# the newer single copy for this experimental build; verify runtime crypto and
-# login on a physical Android device before allowing user distribution.
+# Gradle dependencyInsight on afatReleaseRuntimeClasspath established:
+#   Forkgram TMessagesProj -> UnifiedPush connector 3.1.2 -> tink 1.18.0
+#   Gozar Flutter secure storage -> androidx.security:security-crypto
+#       and the plugin itself -> tink-android 1.9.0.
+# Keep the Android variant required for encrypted storage and exclude the
+# duplicate non-Android jar on the HOST configuration only. The old workaround
+# excluded tink-android instead, risking missing AndroidKeysetManager at runtime.
 script = replace_once(script,
     "configurations.all {\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'",
-    "configurations.all {\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'\n    exclude group: 'com.google.crypto.tink', module: 'tink-android'",
+    "configurations.all {\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'\n    exclude group: 'com.google.crypto.tink', module: 'tink'",
     'duplicate Tink dependency conflict')
 script = replace_once(script, 'minSdkVersion 21', 'minSdkVersion 24',
     'min Android SDK')
