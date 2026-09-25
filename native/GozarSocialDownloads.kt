@@ -425,6 +425,9 @@ class GozarSocialDownloads(
     fun dispose() {
         transfers.values.forEach { it.abort() }
         transfers.clear()
-        web.removeJavascriptInterface("GozarFileBridge")
+        // A renderer may already have been destroyed by Android.
+        try {
+            web.removeJavascriptInterface("GozarFileBridge")
+        } catch (_: Exception) { /* Nothing remains to detach. */ }
     }
 }
