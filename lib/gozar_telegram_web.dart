@@ -123,12 +123,11 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
   }
 
   Future<void> _configureMtproto() async {
-    final server = TextEditingController();
-    final port = TextEditingController(text: '443');
-    final secret = TextEditingController();
+    var server = '';
+    var port = '443';
+    var secret = '';
     final form = GlobalKey<FormState>();
-    try {
-      final selected = await showDialog<Map<String, Object>>(
+    final selected = await showDialog<Map<String, Object>>(
         context: context,
         builder: (dialog) => AlertDialog(
           title: const Text('پروکسی MTProto'),
@@ -142,7 +141,8 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
               const SizedBox(height: 12),
               TextFormField(
                 key: const ValueKey('gozar-mtproto-server'),
-                controller: server,
+                initialValue: server,
+                onChanged: (value) { server = value; },
                 textDirection: TextDirection.ltr,
                 decoration: const InputDecoration(
                   labelText: 'آدرس سرور'),
@@ -152,7 +152,8 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
               const SizedBox(height: 9),
               TextFormField(
                 key: const ValueKey('gozar-mtproto-port'),
-                controller: port,
+                initialValue: port,
+                onChanged: (value) { port = value; },
                 textDirection: TextDirection.ltr,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'پورت'),
@@ -164,7 +165,8 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
               const SizedBox(height: 9),
               TextFormField(
                 key: const ValueKey('gozar-mtproto-secret'),
-                controller: secret,
+                initialValue: secret,
+                onChanged: (value) { secret = value; },
                 textDirection: TextDirection.ltr,
                 obscureText: true,
                 decoration: const InputDecoration(
@@ -183,9 +185,9 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
               onPressed: () {
                 if (form.currentState?.validate() != true) return;
                 Navigator.pop(dialog, <String, Object>{
-                  'server': server.text.trim(),
-                  'port': int.parse(port.text.trim()),
-                  'secret': secret.text.trim(),
+                  'server': server.trim(),
+                  'port': int.parse(port.trim()),
+                  'secret': secret.trim(),
                 });
               },
               child: const Text('باز کردن در برنامه تلگرام')),
@@ -202,11 +204,6 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
           content: Text('برای افزودن MTProto، برنامه تلگرام را '
               'روی گوشی نصب کنید. این پروکسی روی تلگرام وب فعال نمی‌شود.')));
       }
-    } finally {
-      server.dispose();
-      port.dispose();
-      secret.dispose();
-    }
   }
 
   @override
