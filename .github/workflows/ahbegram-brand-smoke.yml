@@ -1,0 +1,50 @@
+name: Ahbegram exact-branding validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ahbegram-standalone
+    paths:
+      - '.github/workflows/ahbegram-brand-smoke.yml'
+      - 'scripts/apply_ahbegram_branding.py'
+      - 'branding/ahbegram-symbol.webp'
+      - 'third_party/forkgram'
+      - 'third_party/FORKGRAM_PIN.json'
+
+permissions:
+  contents: read
+
+jobs:
+  branding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Fetch pinned upstream app
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 third_party/forkgram
+      - name: Apply actual supplied logo and ahbegram app identity
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user Pillow
+          python3 -m py_compile scripts/apply_ahbegram_branding.py
+          python3 scripts/apply_ahbegram_branding.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('build-reports/ahbegram-branding.json').read_text())
+          assert r['application_id']=='ir.channel.ahbegram'
+          for density in ('mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi'):
+              path=Path('third_party/forkgram/TMessagesProj/src/main/res/mipmap-'+density+'/ic_launcher.png')
+              assert path.is_file() and path.stat().st_size>400
+          manifest=Path('third_party/forkgram/TMessagesProj/src/main/AndroidManifest.xml').read_text()
+          assert 'android:name="org.telegram.messenger.DefaultIcon"' in manifest
+          assert 'android:icon="@mipmap/ic_launcher"' in manifest
+          print('Verified: own app label, original uploaded speech-mark launcher icon and density resources.')
+          print('API gate and server validation NOT yet integrated; no APK published by this job.')
+          PY
