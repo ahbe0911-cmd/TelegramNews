@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -125,6 +126,7 @@ class GozarSocialWebViewFactory(
         private var loadStarted = SystemClock.elapsedRealtime()
         private var paused = false
         private var pageFailed = false
+        private var renderGone = false
         private var everActivated = false
         private var fontAppliedToPage = false
         private val downloads = GozarSocialDownloads(activity, web, index, events)
@@ -137,9 +139,12 @@ class GozarSocialWebViewFactory(
                 val type = hit.type
                 val isImage = type == WebView.HitTestResult.IMAGE_TYPE ||
                     type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
-                val scheme = if (source == null) null else
+                val scheme = if (source.isNullOrBlank() ||
+                    source.length > 12 * 1024 * 1024) null else try {
                     Uri.parse(source).scheme?.lowercase()
-                if (!isImage || source.isNullOrBlank() ||
+                } catch (_: Exception) { null }
+                if (renderGone || activity.isFinishing || activity.isDestroyed ||
+                    !isImage || source.isNullOrBlank() ||
                     (scheme != "https" && scheme != "blob" &&
                      !(scheme == "data" && source.startsWith("data:image/")))) {
                     false
@@ -264,6 +269,22 @@ class GozarSocialWebViewFactory(
                     // Shad's page abruptly while a user was interacting.
                 }
 
+                // A Chromium renderer failure should never terminate Gozar.
+                // Flutter recreates only the failed page on the user's retry.
+                override fun onRenderProcessGone(
+                    view: WebView, detail: RenderProcessGoneDetail
+                ): Boolean {
+                    renderGone = true
+                    pageFailed = true
+                    progress.visibility = View.GONE
+                    try {
+                        frame.removeView(web)
+                        web.destroy()
+                    } catch (_: Exception) { /* Renderer is already gone. */ }
+                    events.invokeMethod("rendererGone", mapOf("index" to index))
+                    return true
+                }
+
                 override fun onPageCommitVisible(view: WebView, url: String?) {
                     applyGozarFont(url)
                 }
@@ -314,6 +335,7 @@ class GozarSocialWebViewFactory(
         }
 
         fun updateActive(activeIndex: Int) {
+            if (renderGone) return
             if (activeIndex == index) everActivated = true
             val shouldPause = activeIndex != index
             if (shouldPause && !paused && everActivated) {
@@ -326,7 +348,7 @@ class GozarSocialWebViewFactory(
         }
 
         fun reload() {
-            web.reload()
+            if (!renderGone) web.reload()
         }
 
         override fun getView(): View = frame
@@ -334,11 +356,13 @@ class GozarSocialWebViewFactory(
         override fun dispose() {
             onDisposed(this)
             downloads.dispose()
-            web.stopLoading()
-            web.webChromeClient = null
-            web.webViewClient = WebViewClient()
-            frame.removeView(web)
-            web.destroy()
+            if (!renderGone) {
+                web.stopLoading()
+                web.webChromeClient = null
+                web.webViewClient = WebViewClient()
+                frame.removeView(web)
+                web.destroy()
+            }
         }
     }
 }
