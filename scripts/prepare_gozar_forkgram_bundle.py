@@ -94,6 +94,13 @@ script = replace_once(script, "    implementation project(':TMessagesProj')",
     f"    implementation '{coordinate}'\n"
     "    implementation files('libs/libv2ray.aar')",
     'Forkgram host dependencies')
+# Forkgram's legacy Android Tink artifact duplicates hundreds of classes from
+# the newer Tink runtime resolved by Flutter AndroidX secure storage. Retain
+# the newer single copy for this experimental build; verify runtime crypto and
+# login on a physical Android device before allowing user distribution.
+script = replace_once(script, "configurations.all {\\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'".replace('\n', '\n'),
+    "configurations.all {\\n    exclude group: 'androidx.recyclerview', module: 'recyclerview'\\n    exclude group: 'com.google.crypto.tink', module: 'tink-android'".replace('\n', '\n'),
+    'duplicate Tink dependency conflict')
 script = replace_once(script, 'minSdkVersion 21', 'minSdkVersion 24',
     'min Android SDK')
 # The packaged app is the SAME package as existing Gozar, not a second app.
