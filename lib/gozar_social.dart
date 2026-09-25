@@ -34,6 +34,8 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
       MethodChannel('ir.channel.telegram_tdnews/gozar_social_events');
   final Set<int> visited = {0};
   final Set<int> loadErrors = {};
+  final Set<int> crashedPages = {};
+  final Map<int, int> viewGenerations = {};
   int selected = 0;
 
   @override
@@ -52,7 +54,12 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
     if (nativeIndex is! int ||
         nativeIndex < 0 || nativeIndex >= gozarSocialSites.length) return;
     final page = nativeIndex;
-    if (call.method == 'pageError') {
+    if (call.method == 'rendererGone') {
+      setState(() {
+        crashedPages.add(page);
+        loadErrors.add(page);
+      });
+    } else if (call.method == 'pageError') {
       setState(() => loadErrors.add(page));
     } else if (call.method == 'pageFinished') {
       if (loadErrors.contains(page)) {
@@ -107,7 +114,20 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
   }
 
   void _reload() {
-    setState(() => loadErrors.remove(selected));
+    final crashed = crashedPages.contains(selected);
+    setState(() {
+      loadErrors.remove(selected);
+      if (crashed) {
+        crashedPages.remove(selected);
+        // A WebView whose renderer has died cannot be reloaded: replace only
+        // this platform view, preserving the other tabs and their scroll.
+        viewGenerations[selected] = (viewGenerations[selected] ?? 0) + 1;
+      }
+    });
+    if (crashed) {
+      _setActive();
+      return;
+    }
     unawaited(_controls.invokeMethod<void>(
       'reload', {'index': selected}).catchError((Object _) {}));
   }
@@ -203,7 +223,8 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                   ? Stack(children: [
                       Positioned.fill(child: widget.pageBuilder?.call(i) ??
                         _SocialNativeWebPage(
-                          key: ValueKey('gozar-social-web-' + i.toString()),
+                          key: ValueKey('gozar-social-web-' + i.toString() +
+                            '-' + (viewGenerations[i] ?? 0).toString()),
                           index: i)),
                       if (loadErrors.contains(i) && selected == i)
                         Positioned(bottom: 10, left: 10, right: 10,
