@@ -1,0 +1,33 @@
+name: Propose Forkgram upstream update
+
+# Scheduled runs of a new GitHub Actions workflow only become active once
+# this YAML is present on the repository DEFAULT branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: forkgram-release-proposal
+  cancel-in-progress: false
+
+jobs:
+  propose-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated Forkgram integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/forkgram-embedded-telegram
+          fetch-depth: 0
+          submodules: false
+      - name: Check official upstream releases and open review PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORKGRAM_BASE_BRANCH: feature/forkgram-embedded-telegram
+        run: bash scripts/check_forkgram_update.sh

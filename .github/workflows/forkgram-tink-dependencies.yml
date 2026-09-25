@@ -1,0 +1,93 @@
+name: Diagnose Forkgram + Gozar Tink dependency origins
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/forkgram-embedded-telegram
+    paths:
+      - '.github/workflows/forkgram-tink-dependencies.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forkgram-tink-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate exact release Flutter dependency graph
+        run: |
+          set -euo pipefail
+          mkdir -p assets/fonts build
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Regular.ttf -o assets/fonts/Vazirmatn-Regular.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Bold.ttf -o assets/fonts/Vazirmatn-Bold.ttf
+          python3 scripts/make_gozar_flutter_module.py
+          (cd build/gozar_module && flutter pub get && flutter build aar --no-debug --no-profile)
+      - name: Check out pinned Forkgram sources and dependencies
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          git -c submodule.fetchJobs=6 submodule update --init --depth 1 third_party/forkgram
+          git -C third_party/forkgram -c submodule.fetchJobs=6 submodule update --init --recursive --depth 1
+          curl -fLsS --retry 3 https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar -o build/libv2ray.aar
+          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  build/libv2ray.aar' | sha256sum -c -
+      - name: Stage the SAME combined host without suppressing either Tink dependency
+        env:
+          BUILD_ONLY: '1'
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_gozar_forkgram_bundle.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('third_party/forkgram/TMessagesProj_App/build.gradle')
+          script=path.read_text()
+          needle="    exclude group: 'com.google.crypto.tink', module: 'tink-android'\n"
+          assert script.count(needle)==1, 'Expected the current Tink workaround once'
+          path.write_text(script.replace(needle, '', 1))
+          print('Removed the workaround TEMPORARILY for unbiased dependency diagnostics.')
+          PY
+      - name: Install pinned Android SDK/NDK required during Gradle configuration
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Resolve complete runtime tree and BOTH precise transitive origins
+        working-directory: third_party/forkgram
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          mkdir -p ../../build/tink-report
+          ./gradlew :TMessagesProj_App:dependencies --configuration afatReleaseRuntimeClasspath --no-daemon --no-parallel > ../../build/tink-report/dependencies-before.txt
+          ./gradlew :TMessagesProj_App:dependencyInsight --configuration afatReleaseRuntimeClasspath --dependency com.google.crypto.tink:tink --no-daemon --no-parallel > ../../build/tink-report/tink-before.txt
+          ./gradlew :TMessagesProj_App:dependencyInsight --configuration afatReleaseRuntimeClasspath --dependency com.google.crypto.tink:tink-android --no-daemon --no-parallel > ../../build/tink-report/tink-android-before.txt
+          echo '=== Both Tink dependency paths in runtime graph ==='
+          grep -n -B 10 -A 3 -E 'com.google.crypto.tink:(tink|tink-android):' ../../build/tink-report/dependencies-before.txt || true
+          echo '=== Non-Android Tink dependencyInsight ==='
+          cat ../../build/tink-report/tink-before.txt
+          echo '=== Android Tink dependencyInsight ==='
+          cat ../../build/tink-report/tink-android-before.txt
+      - name: Archive exact pre-exclusion dependency paths
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gozar-Forkgram-Tink-Dependency-Origins
+          path: build/tink-report/
+          retention-days: 7
+          if-no-files-found: error

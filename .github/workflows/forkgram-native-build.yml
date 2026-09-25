@@ -1,0 +1,95 @@
+name: Forkgram source build feasibility (not an integrated APK)
+
+on:
+  push:
+    branches:
+      - feature/forkgram-embedded-telegram
+    paths:
+      - '.github/workflows/forkgram-native-build.yml'
+      - '.gitmodules'
+      - 'third_party/FORKGRAM_PIN.json'
+      - 'third_party/forkgram'
+      - 'scripts/check_forkgram_library.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forkgram-feasibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Fetch pinned Forkgram and its native dependencies
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          git -c submodule.fetchJobs=6 submodule update --init --depth 1 third_party/forkgram
+          git -C third_party/forkgram -c submodule.fetchJobs=6 submodule update --init --recursive --depth 1
+          git submodule status third_party/forkgram
+      - name: Verify upstream source release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess
+          with open('third_party/FORKGRAM_PIN.json', encoding='utf-8') as stream:
+              pin=json.load(stream)
+          head=subprocess.check_output(['git','-C','third_party/forkgram','rev-parse','HEAD'],text=True).strip()
+          assert head == pin['commit'], (head, pin['commit'])
+          assert (subprocess.check_output(['git','-C','third_party/forkgram','status','--porcelain'],text=True).strip() == '')
+          print('Pinned upstream source available:',pin['release_tag'],head)
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Native Android build requirements
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config yasm
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          rustup target list --toolchain stable --installed
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Compile Forkgram baseline (not Gozar)
+        working-directory: third_party/forkgram
+        timeout-minutes: 75
+        env:
+          ABIS: arm64-v8a
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2 --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2 --stacktrace
+      - name: Inspect reusable native library boundary
+        run: |
+          set -euo pipefail
+          find third_party/forkgram/TMessagesProj/build/outputs/aar -name '*.aar' -printf '%s %p\\n'
+          python3 scripts/check_forkgram_library.py \\
+            third_party/forkgram/TMessagesProj/build/outputs/aar/TMessagesProj-release.aar \\
+            --report build-reports/forkgram-library.json
+      - name: Publish native library for same-APK integration work
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forkgram-Core-AAR-ARM64-NOT-A-GOZAR-APK
+          path: |
+            third_party/forkgram/TMessagesProj/build/outputs/aar/TMessagesProj-release.aar
+            build-reports/forkgram-library.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Mark baseline result only
+        run: |
+          echo "Verified the native Forkgram core can be packaged as an Android library."
+          echo "No Gozar integration, Flutter navigation, unified Application, or login tests have passed."

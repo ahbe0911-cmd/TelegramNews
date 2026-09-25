@@ -1,0 +1,142 @@
+name: Experimental same-APK Gozar + native Forkgram
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/forkgram-embedded-telegram
+    paths:
+      - '.github/workflows/gozar-forkgram-integration.yml'
+      - 'scripts/make_gozar_flutter_module.py'
+      - 'scripts/prepare_gozar_forkgram_bundle.py'
+      - 'native/forkgram/**'
+      - 'native/SystemVpnBridge.kt'
+      - 'native/SystemVpnService.kt'
+      - 'native/GozarReminderBridge.kt'
+      - 'native/VpnRoutingPolicy.kt'
+      - 'native/AutomaticBypassPolicy.kt'
+      - 'lib/gozar_*.dart'
+      - 'lib/td_system_vpn.dart'
+      - 'lib/td_vmess_parser.dart'
+      - 'test/td_gozar_app_test.dart'
+      - 'third_party/forkgram'
+      - '.gitmodules'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gozar-forkgram-one-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  combined:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Download Gozar font (OFL)
+        run: |
+          set -euo pipefail
+          mkdir -p assets/fonts
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Regular.ttf -o assets/fonts/Vazirmatn-Regular.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/Vazirmatn-Bold.ttf -o assets/fonts/Vazirmatn-Bold.ttf
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/OFL.txt -o assets/fonts/OFL.txt
+          test -s assets/fonts/Vazirmatn-Regular.ttf
+          test -s assets/fonts/Vazirmatn-Bold.ttf
+      - name: Generate native-hosted Flutter module and test Gozar tabs
+        run: |
+          set -euo pipefail
+          python3 scripts/make_gozar_flutter_module.py
+          mkdir -p build/gozar_module/test
+          sed 's/package:telegram_news/package:gozar_module/g' test/td_gozar_app_test.dart > build/gozar_module/test/td_gozar_app_test.dart
+          cd build/gozar_module
+          flutter pub get
+          flutter analyze --no-fatal-infos lib/gozar_main.dart test/td_gozar_app_test.dart
+          flutter test --reporter expanded test/td_gozar_app_test.dart
+      - name: Package existing Flutter screens as an Android library
+        run: |
+          set -euo pipefail
+          cd build/gozar_module
+          flutter build aar --no-debug --no-profile
+          find build/host/outputs/repo -name 'flutter_release-*.aar' -size +1M -print -quit | grep -q .
+      - name: Obtain pinned upstream Forkgram source and recursive dependencies
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          git -c submodule.fetchJobs=6 submodule update --init --depth 1 third_party/forkgram
+          git -C third_party/forkgram -c submodule.fetchJobs=6 submodule update --init --recursive --depth 1
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+          pin=json.loads(Path('third_party/FORKGRAM_PIN.json').read_text())
+          sha=subprocess.check_output(['git','-C','third_party/forkgram','rev-parse','HEAD'],text=True).strip()
+          assert sha==pin['commit']
+          print('Pinned Forkgram:',pin['release_tag'],sha)
+          PY
+      - name: Configure Android native SDK and Rust cross compilation
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config yasm
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          df -h .
+      - name: Download verified Xray core for unchanged Gozar VPN
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          curl -fL --retry 3 --retry-delay 3 https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar -o build/libv2ray.aar
+          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  build/libv2ray.aar' | sha256sum -c -
+      - name: Assemble ONE native Android host with Flutter and full Forkgram UI
+        env:
+          BUILD_ONLY: '1'
+          FORKGRAM_APP_ID: ${{ secrets.FORKGRAM_APP_ID }}
+          FORKGRAM_APP_HASH: ${{ secrets.FORKGRAM_APP_HASH }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_gozar_forkgram_bundle.py
+          cd third_party/forkgram
+          chmod +x ./gradlew
+          ./gradlew :TMessagesProj_App:dependencies --configuration afatReleaseRuntimeClasspath --no-daemon --no-parallel > ../../build/tink-resolved.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          graph=Path('../../build/tink-resolved.txt').read_text()
+          assert 'com.google.crypto.tink:tink-android:1.9.0' in graph, 'Android secure-storage Tink missing'
+          assert not re.search(r'com\.google\.crypto\.tink:tink:\d', graph), 'Duplicate non-Android Tink still present'
+          print('Runtime dependency verification passed: tink-android 1.9.0 only; non-Android tink excluded.')
+          PY
+          ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2
+      - name: Inspect combined APK without publishing unusable release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          apks=list(Path('third_party/forkgram/TMessagesProj_App/build/outputs/apk').rglob('*.apk'))
+          assert apks, 'Combined APK missing'
+          apk=max(apks,key=lambda p:p.stat().st_mtime)
+          with ZipFile(apk) as z:
+              names=set(z.namelist())
+          assert any(name.endswith('/libflutter.so') for name in names), 'No Flutter engine in combined APK'
+          assert any(name.endswith('/libtmessages.49.so') for name in names), 'No native Forkgram engine in combined APK'
+          assert 'classes.dex' in names, 'No Android bytecode'
+          print('Experimental combined APK classes/native engines verified:',apk.stat().st_size)
+          print('NOT USER-READY: native integration needs device tests, Telegram API credentials, matching release signing key.')
+          PY
