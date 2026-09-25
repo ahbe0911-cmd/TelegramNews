@@ -112,6 +112,15 @@ jobs:
           python3 scripts/prepare_gozar_forkgram_bundle.py
           cd third_party/forkgram
           chmod +x ./gradlew
+          ./gradlew :TMessagesProj_App:dependencies --configuration afatReleaseRuntimeClasspath --no-daemon --no-parallel > ../../build/tink-resolved.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          graph=Path('../../build/tink-resolved.txt').read_text()
+          assert 'com.google.crypto.tink:tink-android:1.9.0' in graph, 'Android secure-storage Tink missing'
+          assert not re.search(r'com\\.google\\.crypto\\.tink:tink:\\d', graph), 'Duplicate non-Android Tink still present'
+          print('Runtime dependency verification passed: tink-android 1.9.0 only; non-Android tink excluded.')
+          PY
           ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2
           ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2
       - name: Inspect combined APK without publishing unusable release
