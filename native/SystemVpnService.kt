@@ -8,6 +8,9 @@ import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.atomic.AtomicBoolean
 import go.Seq
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
@@ -46,15 +49,25 @@ class SystemVpnService : VpnService() {
     private var tunnel: ParcelFileDescriptor? = null
     private var core: CoreController? = null
     private var startupThread: Thread? = null
+    // Never spawn a pile of blocking native measureDelay() calls if the
+    // selected server stops replying or the user taps Test repeatedly.
+    private val probing = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private fun measureConnection(done: (Long?) -> Unit) {
         val selectedCore = synchronized(resourceLock) {
             if (stopping || stage != "running") null else core
         }
-        if (selectedCore == null) {
+        if (selectedCore == null || !probing.compareAndSet(false, true)) {
             done(null)
             return
         }
+        val delivered = AtomicBoolean(false)
+        // Bound the UI wait even if a native DNS/TCP dial stalls. The worker
+        // stays single-flight until measureDelay actually returns.
+        mainHandler.postDelayed({
+            if (delivered.compareAndSet(false, true)) done(null)
+        }, 12000L)
         Thread({
             val delay = try {
                 selectedCore.measureDelay("https://www.gstatic.com/generate_204")
@@ -62,11 +75,15 @@ class SystemVpnService : VpnService() {
             } catch (_: Throwable) {
                 null
             }
-            // A response from a previous session must not repaint a new VPN.
             val current = synchronized(resourceLock) {
                 !stopping && stage == "running" && core === selectedCore
             }
-            done(if (current) delay else null)
+            probing.set(false)
+            mainHandler.post {
+                if (delivered.compareAndSet(false, true)) {
+                    done(if (current) delay else null)
+                }
+            }
         }, "gozar-vpn-health").start()
     }
 
