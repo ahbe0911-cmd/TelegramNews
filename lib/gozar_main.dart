@@ -6,7 +6,7 @@ import 'gozar_daylight_backdrop.dart';
 import 'gozar_subscription.dart';
 import 'gozar_shortcuts.dart';
 import 'gozar_launcher.dart';
-import 'gozar_telegram_web.dart';
+import 'gozar_social.dart';
 import 'gozar_notes_screen.dart';
 import 'gozar_notes_store.dart';
 import 'gozar_dashboard_clock.dart';
@@ -1552,8 +1552,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       if (!visitedPages.contains(index)) return const SizedBox.shrink();
       switch (index) {
         case 0: return _home();
-        case 1: return GozarTelegramWeb(
-          key: const ValueKey('gozar-telegram-tab'),
+        case 1: return GozarSocialTab(
+          key: const ValueKey('gozar-network-tab'),
           active: currentPage == 1,
         );
         case 2: return launcherPage;
@@ -1648,10 +1648,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                       ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'خانه'),
               NavigationDestination(
-                icon: const Icon(Icons.send_outlined),
-                selectedIcon: const Icon(Icons.send_rounded,
+                icon: const Icon(Icons.language_outlined),
+                selectedIcon: const Icon(Icons.language_rounded,
                     color: GozarPalette.daylightAccent),
-                label: 'تلگرام'),
+                label: 'شبکه'),
               NavigationDestination(
                 icon: const Icon(Icons.grid_view_outlined),
                 selectedIcon: Icon(Icons.grid_view_rounded,
