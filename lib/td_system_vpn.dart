@@ -132,7 +132,8 @@ String buildFullDeviceXrayConfig(String supplied) {
       if (!const ['none', 'tls', 'reality'].contains(security)) {
         throw const FormatException('نوع امنیت کانفیگ پشتیبانی نمی‌شود.');
       }
-      if (!const ['tcp', 'ws', 'grpc', 'httpupgrade'].contains(network)) {
+      if (!const ['tcp', 'ws', 'grpc', 'httpupgrade', 'xhttp']
+          .contains(network)) {
         throw const FormatException('نوع انتقال این لینک پشتیبانی نمی‌شود.');
       }
       if (params['encryption'] != null && params['encryption'] != 'none') {
@@ -174,6 +175,17 @@ String buildFullDeviceXrayConfig(String supplied) {
         };
       } else if (network == 'grpc') {
         stream['grpcSettings'] = {'serviceName': params['serviceName'] ?? ''};
+      } else if (network == 'xhttp') {
+        final mode = (params['mode'] ?? 'auto').toLowerCase();
+        if (!const ['auto', 'packet-up', 'stream-up', 'stream-one']
+            .contains(mode)) {
+          throw const FormatException('حالت انتقال XHTTP معتبر نیست.');
+        }
+        stream['xhttpSettings'] = {
+          'path': params['path'] ?? '/',
+          'mode': mode,
+          if ((params['host'] ?? '').isNotEmpty) 'host': params['host'],
+        };
       }
       primary = {
         'protocol': 'vless',
@@ -189,7 +201,8 @@ String buildFullDeviceXrayConfig(String supplied) {
         throw const FormatException('این نسخه Trojan با TLS را می‌پذیرد.');
       }
       final network = (params['type'] ?? 'tcp').toLowerCase();
-      if (!const ['tcp', 'ws'].contains(network)) {
+      if (!const ['tcp', 'ws', 'grpc', 'httpupgrade', 'xhttp']
+          .contains(network)) {
         throw const FormatException('این انتقال Trojan پشتیبانی نمی‌شود.');
       }
       primary = {
@@ -203,11 +216,32 @@ String buildFullDeviceXrayConfig(String supplied) {
             'serverName': params['sni'] ?? uri.host,
             'allowInsecure': false,
             if ((params['fp'] ?? '').isNotEmpty) 'fingerprint': params['fp'],
+            if ((params['alpn'] ?? '').isNotEmpty)
+              'alpn': params['alpn']!.split(','),
           },
           if (network == 'ws') 'wsSettings': {
             'path': params['path'] ?? '/',
             if ((params['host'] ?? '').isNotEmpty)
               'headers': {'Host': params['host']},
+          },
+          if (network == 'grpc') 'grpcSettings': {
+            'serviceName': params['serviceName'] ?? '',
+          },
+          if (network == 'httpupgrade') 'httpupgradeSettings': {
+            'path': params['path'] ?? '/',
+            if ((params['host'] ?? '').isNotEmpty) 'host': params['host'],
+          },
+          if (network == 'xhttp') 'xhttpSettings': {
+            'path': params['path'] ?? '/',
+            'mode': (() {
+              final mode = (params['mode'] ?? 'auto').toLowerCase();
+              if (!const ['auto', 'packet-up', 'stream-up', 'stream-one']
+                  .contains(mode)) {
+                throw const FormatException('حالت انتقال XHTTP معتبر نیست.');
+              }
+              return mode;
+            })(),
+            if ((params['host'] ?? '').isNotEmpty) 'host': params['host'],
           },
         },
       };
