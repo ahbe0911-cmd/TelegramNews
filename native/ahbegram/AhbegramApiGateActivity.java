@@ -176,6 +176,8 @@ public final class AhbegramApiGateActivity extends Activity {
         candidateHash = hash;
         busy = true;
         verify.setEnabled(false);
+        idField.setEnabled(false);
+        hashField.setEnabled(false);
         status.setText("در حال استعلام از سرور تلگرام…");
         Intent probe = new Intent(this, AhbegramApiVerifyService.class);
         try {
@@ -189,7 +191,10 @@ public final class AhbegramApiGateActivity extends Activity {
     private void deliver(String code) {
         if (!busy) return;
         busy = false;
+        final String checkedHash = candidateHash;
         candidateHash = null;
+        idField.setEnabled(true);
+        hashField.setEnabled(true);
         if (bound) {
             try {
                 unbindService(service);
@@ -198,10 +203,9 @@ public final class AhbegramApiGateActivity extends Activity {
         }
         remote = null;
         if ("verified".equals(code)) {
-            String pair = hashField.getText().toString().trim();
             try {
                 // Only this real server-backed result unlocks the phone stage.
-                AhbegramApiCredentials.saveVerified(this, candidateId, pair);
+                AhbegramApiCredentials.saveVerified(this, candidateId, checkedHash);
                 hashField.getText().clear();
                 next();
                 return;
