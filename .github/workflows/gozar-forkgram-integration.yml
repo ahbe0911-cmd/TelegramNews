@@ -118,7 +118,7 @@ jobs:
           from pathlib import Path
           graph=Path('../../build/tink-resolved.txt').read_text()
           assert 'com.google.crypto.tink:tink-android:1.9.0' in graph, 'Android secure-storage Tink missing'
-          assert not re.search(r'com\\.google\\.crypto\\.tink:tink:\\d', graph), 'Duplicate non-Android Tink still present'
+          assert not re.search(r'com\.google\.crypto\.tink:tink:\d', graph), 'Duplicate non-Android Tink still present'
           print('Runtime dependency verification passed: tink-android 1.9.0 only; non-Android tink excluded.')
           PY
           ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2
