@@ -15,6 +15,7 @@ import android.webkit.WebView
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.io.FileOutputStream
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -132,22 +133,70 @@ class GozarSocialDownloads(
         }
     }
 
+    // Websites often send image downloads as application/octet-stream, or
+    // label a PNG as JPEG. Detect common media signatures *without consuming*
+    // any bytes, so gallery registration uses the actual file type.
+    private fun sniffMime(input: BufferedInputStream, name: String, hint: String): String {
+        input.mark(32)
+        val bytes = ByteArray(32)
+        val count = try { input.read(bytes) } finally { input.reset() }
+        fun matches(vararg header: Int): Boolean =
+            count >= header.size && header.indices.all { i ->
+                (bytes[i].toInt() and 0xff) == header[i]
+            }
+        val signature = when {
+            matches(0xff, 0xd8, 0xff) -> "image/jpeg"
+            matches(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) -> "image/png"
+            matches(0x47, 0x49, 0x46, 0x38) -> "image/gif"
+            matches(0x52, 0x49, 0x46, 0x46) &&
+                count >= 12 && String(bytes, 8, 4, Charsets.US_ASCII) == "WEBP" ->
+                "image/webp"
+            count >= 12 && String(bytes, 4, 4, Charsets.US_ASCII) == "ftyp" ->
+                "video/mp4"
+            matches(0x1a, 0x45, 0xdf, 0xa3) -> "video/webm"
+            matches(0x25, 0x50, 0x44, 0x46, 0x2d) -> "application/pdf"
+            else -> null
+        }
+        if (signature != null) return signature
+        val declared = hint.substringBefore(';').trim().lowercase()
+        val inferred = URLConnection.guessContentTypeFromName(name)
+        return when {
+            declared.isBlank() || declared == "application/octet-stream" ->
+                inferred ?: "application/octet-stream"
+            declared == "text/plain" && inferred != null -> inferred
+            else -> declared
+        }
+    }
+
     private fun store(input: InputStream, name: String, mimeHint: String, limit: Long) {
-        val mime = if (mimeHint.isBlank() || mimeHint == "application/octet-stream") {
-            URLConnection.guessContentTypeFromName(name) ?: "application/octet-stream"
-        } else mimeHint
+        val buffered = BufferedInputStream(input)
+        val mime = sniffMime(buffered, name, mimeHint)
         val gallery = mime.startsWith("image/") || mime.startsWith("video/")
-        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
         val inferred = when (mime) {
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            "image/gif" -> "gif"
+            "image/webp" -> "webp"
+            "video/mp4" -> "mp4"
+            "video/webm" -> "webm"
             "application/pdf" -> "pdf"
             "application/vnd.android.package-archive" -> "apk"
-            else -> extension
+            else -> MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
         }
-        val hasExtension = name.substringAfterLast('.', "").let {
-            it.length in 2..6 && it.all { c -> c.isLetterOrDigit() }
-        }
-        val displayName = if (!inferred.isNullOrBlank() && !hasExtension) {
-            "$name.$inferred"
+        val ext = name.substringAfterLast('.', "").lowercase()
+        val validExtension = ext.length in 2..6 &&
+            ext.all { it.isLetterOrDigit() } &&
+            // URLUtil may call an unknown blob 'download.bin', even when
+            // the content is a PNG or a video.
+            ext !in setOf("bin", "dat", "tmp") &&
+            (!gallery || inferred.isNullOrBlank() ||
+                ext == inferred || (mime == "image/jpeg" && ext == "jpeg"))
+        val baseName = if (ext in setOf("bin", "dat", "tmp") ||
+            (gallery && !validExtension && name.contains('.'))) {
+            name.substringBeforeLast('.')
+        } else name
+        val displayName = if (!inferred.isNullOrBlank() && !validExtension) {
+            "$baseName.$inferred"
         } else name
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val collection = when {
@@ -173,7 +222,7 @@ class GozarSocialDownloads(
                     val buffer = ByteArray(65536)
                     var written = 0L
                     while (true) {
-                        val count = input.read(buffer)
+                        val count = buffered.read(buffer)
                         if (count < 0) break
                         written += count
                         if (written > limit) throw IllegalStateException("File too large")
@@ -196,7 +245,7 @@ class GozarSocialDownloads(
             ) ?: throw IllegalStateException("Storage unavailable")
             directory.mkdirs()
             val output = File(directory, displayName)
-            output.outputStream().use { dest -> input.copyTo(dest) }
+            output.outputStream().use { dest -> buffered.copyTo(dest) }
             if (gallery) MediaScannerConnection.scanFile(
                 activity, arrayOf(output.absolutePath), arrayOf(mime), null
             )
