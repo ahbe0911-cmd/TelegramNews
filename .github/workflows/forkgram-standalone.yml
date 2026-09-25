@@ -1,0 +1,131 @@
+name: Build independent Forkgram Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/forkgram-standalone
+    paths:
+      - '.github/workflows/forkgram-standalone.yml'
+      - '.gitmodules'
+      - 'third_party/FORKGRAM_PIN.json'
+      - 'third_party/forkgram'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forkgram-standalone-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-forkgram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch pinned standalone Forkgram and all native dependencies
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          git -c submodule.fetchJobs=6 submodule update --init --depth 1 third_party/forkgram
+          git -C third_party/forkgram -c submodule.fetchJobs=6 submodule update --init --recursive --depth 1
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          pin=json.loads(Path('third_party/FORKGRAM_PIN.json').read_text())
+          actual=subprocess.check_output(['git','-C','third_party/forkgram','rev-parse','HEAD'],text=True).strip()
+          assert actual==pin['commit'], 'Unexpected upstream commit'
+          print('Standalone upstream release:',pin['release_tag'], actual)
+          PY
+      - name: Install native Android build prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake golang gperf meson nasm ninja-build pkg-config yasm
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Configure independent app credentials without writing them to git
+        env:
+          TELEGRAM_API_ID: ${{ secrets.FORKGRAM_APP_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.FORKGRAM_APP_HASH }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          app_id=os.environ.get('TELEGRAM_API_ID','').strip()
+          app_hash=os.environ.get('TELEGRAM_API_HASH','').strip()
+          assert bool(app_id)==bool(app_hash), 'Configure both FORKGRAM_APP_ID and FORKGRAM_APP_HASH secrets'
+          out=Path('build-reports')
+          out.mkdir(exist_ok=True)
+          if not app_id:
+              (out/'credentials-mode.txt').write_text('BUILD_ONLY: API credentials not provided; do not distribute or expect Telegram login.\n')
+              print('BUILD ONLY: no Telegram API credentials; artifact will be explicitly labeled NOT FOR LOGIN.')
+          else:
+              assert app_id.isdecimal() and int(app_id)>0, 'Invalid API ID'
+              assert re.fullmatch('[0-9a-fA-F]{32}',app_hash), 'Invalid API hash'
+              props=Path('third_party/forkgram/gradle.properties')
+              data=props.read_text()
+              data,n=re.subn(r'^APP_ID=.*$',lambda _: 'APP_ID='+app_id,data,count=1,flags=re.M)
+              assert n==1
+              data,n=re.subn(r'^APP_HASH=.*$',lambda _: 'APP_HASH='+app_hash,data,count=1,flags=re.M)
+              assert n==1
+              props.write_text(data)
+              (out/'credentials-mode.txt').write_text('Configured with private API credentials. APK uses upstream TEST signing key; not a production release.\n')
+              print('Telegram API credentials applied privately; test signing remains.')
+          PY
+      - name: Build pure Forkgram (no Gozar, VPN, WebView or Flutter)
+        timeout-minutes: 75
+        working-directory: third_party/forkgram
+        env:
+          ABIS: arm64-v8a
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :TMessagesProj:buildNativeDeps --no-daemon --no-parallel --max-workers=2 --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --no-parallel --max-workers=2 --stacktrace
+      - name: Verify independently installable APK layout
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import re,shutil,subprocess
+          output=Path('third_party/forkgram/TMessagesProj_App/build/outputs/apk')
+          apks=[p for p in output.rglob('*.apk') if p.stat().st_size>20_000_000]
+          assert apks, 'Standalone APK was not produced'
+          apk=max(apks,key=lambda p:p.stat().st_mtime)
+          with ZipFile(apk) as z:
+              names=set(z.namelist())
+          assert 'classes.dex' in names
+          assert any(re.search(r'/libtmessages\.[0-9]+\.so$',n) for n in names), 'Forkgram native engine missing'
+          assert not any(n.endswith('/libflutter.so') for n in names), 'Unexpected Gozar/Flutter package'
+          aapt=str(Path(__import__('os').environ['ANDROID_HOME'])/'build-tools/36.0.0/aapt')
+          badging=subprocess.check_output([aapt,'dump','badging',str(apk)],text=True)
+          package=re.search(r"(?m)^package: name='([^']+)'",badging)
+          assert package and package.group(1).startswith(('org.forkclient.messenger','org.forkgram.messenger')), 'Unexpected package name'
+          target=Path('build-reports/Forkgram-Standalone-ARM64.apk')
+          shutil.copyfile(apk,target)
+          print('STANDALONE APK:',target, 'package:',package.group(1),'bytes:',target.stat().st_size)
+          print('This is NOT combined with Gozar. Physical device tests and own release signing still required.')
+          PY
+      - name: Upload standalone test APK and build status
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forkgram-Standalone-ARM64-TEST-SIGNED-CHECK-CREDENTIALS
+          path: |
+            build-reports/Forkgram-Standalone-ARM64.apk
+            build-reports/credentials-mode.txt
+          if-no-files-found: error
+          retention-days: 7
