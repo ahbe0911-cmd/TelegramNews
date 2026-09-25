@@ -50,10 +50,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         SystemVpnBridge.attach(this, flutterEngine)
         GozarReminderBridge.attach(this, flutterEngine)
-        val telegram = GozarTelegramWebViewFactory(
-            this, flutterEngine.dartExecutor.binaryMessenger)
-        flutterEngine.platformViewsController.registry.registerViewFactory(
-            GozarTelegramWebViewFactory.VIEW_TYPE, telegram)
         val social = GozarSocialWebViewFactory(
             this, flutterEngine.dartExecutor.binaryMessenger)
         flutterEngine.platformViewsController.registry.registerViewFactory(
@@ -79,13 +75,10 @@ class MainActivity : FlutterActivity() {
     }
 }
 ''')
-# Gozar has no TDLib, Telegram sign-in or private Telegram SOCKS process.
+# Gozar has no TDLib, Telegram WebView, sign-in or private Telegram SOCKS process.
 # This activity exists only in the standalone VPN build, never in news/cafe.
 (activity.parent / 'GozarWebActivity.kt').write_bytes(
     (root / 'native/GozarWebActivity.kt').read_bytes()
-)
-(activity.parent / 'GozarTelegramWebView.kt').write_bytes(
-    (root / 'native/GozarTelegramWebView.kt').read_bytes()
 )
 (activity.parent / 'GozarSocialDownloads.kt').write_bytes(
     (root / 'native/GozarSocialDownloads.kt').read_bytes()
@@ -93,6 +86,8 @@ class MainActivity : FlutterActivity() {
 (activity.parent / 'GozarSocialWebView.kt').write_bytes(
     (root / 'native/GozarSocialWebView.kt').read_bytes()
 )
+# No Telegram WebView is shipped with the standalone Gozar variant.
+(activity.parent / 'GozarTelegramWebView.kt').unlink(missing_ok=True)
 (activity.parent / 'GozarReminderBridge.kt').write_bytes(
     (root / 'native/GozarReminderBridge.kt').read_bytes()
 )
