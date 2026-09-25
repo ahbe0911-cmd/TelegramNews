@@ -6,7 +6,6 @@ import 'gozar_daylight_backdrop.dart';
 import 'gozar_subscription.dart';
 import 'gozar_shortcuts.dart';
 import 'gozar_launcher.dart';
-import 'gozar_social.dart';
 import 'gozar_notes_screen.dart';
 import 'gozar_notes_store.dart';
 import 'gozar_dashboard_clock.dart';
@@ -133,7 +132,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       onChanged: () { notesRevision.value++; });
     GozarReminderBridge.channel.setMethodCallHandler((call) async {
       if (call.method == 'openNotes' && mounted) {
-        setState(() { visitedPages.add(3); currentPage = 3; });
+        setState(() { visitedPages.add(2); currentPage = 2; });
       }
     });
     // A tap on a reminder while the process was stopped opens the Notes tab.
@@ -142,7 +141,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         final opened = await GozarReminderBridge.channel
             .invokeMethod<bool>('takeOpenedReminder') ?? false;
         if (opened && mounted) {
-          setState(() { visitedPages.add(3); currentPage = 3; });
+          setState(() { visitedPages.add(2); currentPage = 2; });
         }
       } catch (_) { /* Widget tests and unsupported hosts. */ }
     });
@@ -341,9 +340,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       profile.clear();
       // The server editor now lives inside Settings; do not route back
       // to Home where the user cannot enter the newly selected config.
-      visitedPages.add(4);
+      visitedPages.add(3);
       showServerSettings = true;
-      currentPage = 4;
+      currentPage = 3;
     });
   }
 
@@ -1181,9 +1180,9 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               color: GozarPalette.daylightInk, fontSize: 11))),
           TextButton(
             onPressed: () => setState(() {
-              visitedPages.add(4);
+              visitedPages.add(3);
               showServerSettings = true;
-              currentPage = 4;
+              currentPage = 3;
             }),
             child: const Text('تغییر سرور', style: TextStyle(
               color: GozarPalette.daylightAccent, fontSize: 11)),
@@ -1284,8 +1283,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         preferences: widget.preferences,
         refresh: notesRevision,
         onOpen: () => setState(() {
-          visitedPages.add(3);
-          currentPage = 3;
+          visitedPages.add(2);
+          currentPage = 2;
         }),
       ),
     ],
@@ -1552,12 +1551,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       if (!visitedPages.contains(index)) return const SizedBox.shrink();
       switch (index) {
         case 0: return _home();
-        case 1: return GozarSocialTab(
-          key: const ValueKey('gozar-network-tab'),
-          active: currentPage == 1,
-        );
-        case 2: return launcherPage;
-        case 3: return notesPage;
+        case 1: return launcherPage;
+        case 2: return notesPage;
         default: return _security();
       }
     }
@@ -1569,7 +1564,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         else const Positioned.fill(child: ColoredBox(
           color: Color(0xffeaf6ff))),
         SafeArea(child: Column(children: [
-          if (currentPage != 1 && currentPage != 2) Padding(
+          if (currentPage != 1) Padding(
             padding: const EdgeInsets.fromLTRB(18, 7, 18, 8),
             child: Row(children: [
               Icon(Icons.shield_outlined,
@@ -1621,7 +1616,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           ),
           Expanded(child: IndexedStack(
             index: currentPage,
-            children: [for (var index = 0; index < 5; index++) tab(index)],
+            children: [for (var index = 0; index < 4; index++) tab(index)],
           )),
           Theme(
             data: Theme.of(context).copyWith(
@@ -1647,11 +1642,6 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                     color: currentPage == 0
                       ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'خانه'),
-              NavigationDestination(
-                icon: const Icon(Icons.language_outlined),
-                selectedIcon: const Icon(Icons.language_rounded,
-                    color: GozarPalette.daylightAccent),
-                label: 'شبکه'),
               NavigationDestination(
                 icon: const Icon(Icons.grid_view_outlined),
                 selectedIcon: Icon(Icons.grid_view_rounded,
