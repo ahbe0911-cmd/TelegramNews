@@ -41,13 +41,13 @@ application = once(application,
     "            return;\n        }", "post-init network gate")
 application = once(application,
     "        AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);",
-    "        if (ir.channel.ahbegram.AhbegramApiCredentials.isConfigured(this)) {\\n"
-    "            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);\\n"
+    "        if (ir.channel.ahbegram.AhbegramApiCredentials.isConfigured(this)) {\n"
+    "            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);\n"
     "        }", "prevent push network init without credentials")
 application = once(application,
     "        ProxyRotationController.init();",
-    "        if (ir.channel.ahbegram.AhbegramApiCredentials.isConfigured(this)) {\\n"
-    "            ProxyRotationController.init();\\n"
+    "        if (ir.channel.ahbegram.AhbegramApiCredentials.isConfigured(this)) {\n"
+    "            ProxyRotationController.init();\n"
     "        }", "prevent proxy network init without credentials")
 APPLOADER.write_text(application)
 
