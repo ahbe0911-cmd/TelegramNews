@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'gozar_telegram_web.dart';
 import 'gozar_visuals.dart';
 
 class GozarSocialSite {
@@ -13,7 +12,6 @@ class GozarSocialSite {
 }
 
 const gozarSocialSites = <GozarSocialSite>[
-  GozarSocialSite('تلگرام', 'web.telegram.org', Color(0xff298bcf)),
   GozarSocialSite('روبیکا', 'web.rubika.ir', Color(0xff785cb5)),
   GozarSocialSite('شاد', 'my.shad.ir', Color(0xff2484bd)),
   GozarSocialSite('ایتا', 'web.eitaa.com', Color(0xffd3a336)),
@@ -34,8 +32,6 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
       MethodChannel('ir.channel.telegram_tdnews/gozar_social_controls');
   static const _events =
       MethodChannel('ir.channel.telegram_tdnews/gozar_social_events');
-  static const _telegram =
-      MethodChannel('ir.channel.telegram_tdnews/gozar_telegram_controls');
   final Set<int> visited = {0};
   final Set<int> loadErrors = {};
   int selected = 0;
@@ -53,8 +49,9 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
     if (!mounted || call.arguments is! Map) return;
     final data = call.arguments as Map;
     final nativeIndex = data['index'];
-    if (nativeIndex is! int || nativeIndex < 0 || nativeIndex > 2) return;
-    final page = nativeIndex + 1;
+    if (nativeIndex is! int ||
+        nativeIndex < 0 || nativeIndex >= gozarSocialSites.length) return;
+    final page = nativeIndex;
     if (call.method == 'pageError') {
       setState(() => loadErrors.add(page));
     } else if (call.method == 'pageFinished') {
@@ -79,7 +76,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
   }
 
   void _setActive() {
-    final nativeIndex = widget.active && selected > 0 ? selected - 1 : -1;
+    final nativeIndex = widget.active ? selected : -1;
     unawaited(_controls.invokeMethod<void>(
       'setActive', {'index': nativeIndex}).catchError((Object _) {}));
   }
@@ -110,20 +107,14 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
   }
 
   void _reload() {
-    if (selected == 0) {
-      unawaited(_telegram.invokeMethod<void>('reload')
-          .catchError((Object _) {}));
-      return;
-    }
     setState(() => loadErrors.remove(selected));
     unawaited(_controls.invokeMethod<void>(
-      'reload', {'index': selected - 1}).catchError((Object _) {}));
+      'reload', {'index': selected}).catchError((Object _) {}));
   }
 
   void _openBrowser() {
-    final channel = selected == 0 ? _telegram : _controls;
-    final args = selected == 0 ? null : {'index': selected - 1};
-    unawaited(channel.invokeMethod<void>('openExternal', args)
+    unawaited(_controls.invokeMethod<void>(
+      'openExternal', {'index': selected})
         .catchError((Object _) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -184,7 +175,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
             onSelected: (action) {
               if (action == 'reload') _reload();
               if (action == 'browser') _openBrowser();
-              if (action == 'alternateShad' && selected == 2) {
+              if (action == 'alternateShad' && selected == 1) {
                 unawaited(_controls.invokeMethod<void>(
                   'alternateShad', {'index': 1}).catchError((Object _) {}));
               }
@@ -194,7 +185,7 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
                 child: Text('بارگذاری مجدد')),
               const PopupMenuItem(value: 'browser',
                 child: Text('باز کردن در مرورگر گوشی')),
-              if (selected == 2)
+              if (selected == 1)
                 const PopupMenuItem(value: 'alternateShad',
                   child: Text('آدرس جایگزین شاد')),
             ],
@@ -211,12 +202,9 @@ class _GozarSocialTabState extends State<GozarSocialTab> {
               visited.contains(i)
                   ? Stack(children: [
                       Positioned.fill(child: widget.pageBuilder?.call(i) ??
-                        (i == 0
-                            ? GozarTelegramWeb(
-                                active: widget.active && selected == 0)
-                            : _SocialNativeWebPage(
-                                key: ValueKey('gozar-social-web-' + i.toString()),
-                                index: i - 1))),
+                        _SocialNativeWebPage(
+                          key: ValueKey('gozar-social-web-' + i.toString()),
+                          index: i)),
                       if (loadErrors.contains(i) && selected == i)
                         Positioned(bottom: 10, left: 10, right: 10,
                           child: Material(
