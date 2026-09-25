@@ -106,7 +106,7 @@ class GozarSocialWebViewFactory(
 
     private class SocialPlatformView(
         context: Context,
-        activity: Activity,
+        private val activity: Activity,
         val index: Int,
         private val events: MethodChannel,
         private val onDisposed: (SocialPlatformView) -> Unit,
@@ -117,7 +117,6 @@ class GozarSocialWebViewFactory(
             android.R.attr.progressBarStyleHorizontal)
         private var loadStarted = SystemClock.elapsedRealtime()
         private var paused = false
-        private var triedShadAlternate = false
         private var pageFailed = false
         private var everActivated = false
         private val downloads = GozarSocialDownloads(activity, web, index, events)
@@ -246,7 +245,6 @@ class GozarSocialWebViewFactory(
 
         fun alternateShad() {
             if (index != 1) return
-            triedShadAlternate = true
             web.loadUrl(SHAD_ALTERNATE)
         }
 
