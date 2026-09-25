@@ -37,6 +37,10 @@ replace_one(gradle,
 replace_one(gradle,
             'def appSuffix = fdroid ? "" : ".beta"',
             'def appSuffix = ""')
+# Android Keystore AES/GCM requires API 23; target API 24+ for this native app.
+replace_one(gradle, 'minSdkVersion 21', 'minSdkVersion 24')
+replace_one(gradle, 'minSdkVersion 23', 'minSdkVersion 24')
+
 
 # Label for the Android installer and app settings.
 app_manifest = APP / "src/main/AndroidManifest.xml"
