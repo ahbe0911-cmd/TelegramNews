@@ -144,6 +144,92 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
     }).catchError((Object _) {}));
   }
 
+  Future<void> _configureMtprotoLink() async {
+    var link = '';
+    final form = GlobalKey<FormState>();
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('افزودن پروکسی از لینک کانال'),
+        content: SingleChildScrollView(child: Form(
+          key: form,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('لینک tg://proxy یا https://t.me/proxy را وارد کنید. '
+              'پروکسی در تلگرام نصب‌شده روی گوشی فعال می‌شود، نه وب‌ویو گذر.',
+              style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 12),
+            TextFormField(
+              key: const ValueKey('gozar-mtproto-link'),
+              onChanged: (value) => link = value,
+              textDirection: TextDirection.ltr,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(labelText: 'لینک پروکسی کانال'),
+              validator: (value) => gozarValidMtprotoLink(value ?? '')
+                  ? null : 'لینک MTProto معتبر وارد کنید.'),
+          ]),
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: const Text('انصراف')),
+          FilledButton(
+            key: const ValueKey('gozar-mtproto-link-confirm'),
+            onPressed: () {
+              if (form.currentState?.validate() != true) return;
+              Navigator.pop(dialog, link.trim());
+            },
+            child: const Text('افزودن در برنامه تلگرام')),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await controls.invokeMethod<void>('openMtprotoLink', {'url': selected});
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('برای افزودن پروکسی، تلگرام را روی گوشی نصب کنید. '
+          'این پروکسی روی تلگرام وب فعال نمی‌شود.')));
+    }
+  }
+
+  Future<void> _showConnectionOptions() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('اتصال تلگرام وب'),
+        content: const Text(
+          'حالت عادی: وب‌ویو از اینترنت مجاز برای خود برنامه استفاده می‌کند. '
+          'اگر VPN دیگری روی گوشی فعال باشد و گذر را پوشش دهد، '
+          'اندروید مسیر اتصال را خودکار انتخاب می‌کند.\n\n'
+          'VPN داخلی گذر، به دلیل جلوگیری از حلقهٔ اتصال، '
+          'خود برنامه را از تونل خارج می‌کند. برای استفاده از VPN گذر '
+          'در تلگرام وب، سایت را در مرورگر گوشی باز کنید '
+          '(مرورگر باید در برنامه‌های تحت پوشش VPN باشد).\n\n'
+          'MTProto فقط برای برنامه تلگرام نصب‌شده روی گوشی است.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: const Text('بستن')),
+          TextButton(onPressed: () => Navigator.pop(dialog, 'settings'),
+            child: const Text('تنظیمات VPN گوشی')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, 'browser'),
+            child: const Text('باز کردن در مرورگر با VPN')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (selected == 'browser') _openInBrowser();
+    if (selected == 'settings') {
+      try {
+        await const MethodChannel('ir.channel.telegram_tdnews/system_vpn')
+            .invokeMethod<void>('openVpnSettings');
+      } on PlatformException {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('باز کردن تنظیمات VPN گوشی ممکن نشد.')));
+      }
+    }
+  }
+
   Future<void> _configureMtproto() async {
     var server = '';
     var port = '443';
@@ -264,6 +350,8 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
               if (action == 'browser') _openInBrowser();
               if (action == 'font') _toggleAppFont();
               if (action == 'mtproto') unawaited(_configureMtproto());
+              if (action == 'mtproto_link') unawaited(_configureMtprotoLink());
+              if (action == 'connection') unawaited(_showConnectionOptions());
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'reload',
@@ -274,6 +362,10 @@ class _GozarTelegramWebState extends State<GozarTelegramWeb> {
                 child: Text(useAppFont
                     ? 'استفاده از فونت اصلی سایت'
                     : 'استفاده از فونت فارسی گذر')),
+              const PopupMenuItem(value: 'connection',
+                child: Text('اتصال خودکار و VPN گوشی')),
+              const PopupMenuItem(value: 'mtproto_link',
+                child: Text('افزودن MTProto از لینک کانال')),
               const PopupMenuItem(value: 'mtproto',
                 child: Text('افزودن MTProto در برنامه تلگرام')),
               if (loadMs != null)
