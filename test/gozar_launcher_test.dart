@@ -197,6 +197,46 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('four-column launcher uses large icons and suppresses rapid double launch',
+      (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    const section = GozarLauncherSection(
+      id: 'samsung-grid', title: 'برنامه‌های من', apps: [instagram]);
+    expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+      if (call.method == 'appIcon') return null;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        SystemVpnBridge.channel, null));
+    var launches = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: SizedBox(width: 400, child: GozarLauncher(
+        preferences: prefs,
+        onOpenApp: (app) async {
+          launches++;
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+        },
+      )),
+    )));
+    await tester.pump(const Duration(milliseconds: 250));
+    final tile = find.byKey(
+        ValueKey('gozar-launcher-open-' + instagram.key));
+    final icon = find.byKey(
+        ValueKey('gozar-launcher-icon-' + instagram.key));
+    expect(tile, findsOneWidget);
+    expect(icon, findsOneWidget);
+    expect(tester.getSize(icon).width, greaterThanOrEqualTo(76));
+    await tester.tap(tile);
+    await tester.tap(tile);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(launches, 1);
+    expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('launcher page still adds another app after five icons',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
