@@ -51,7 +51,7 @@ for path in (CORE / "src/main/res").glob("values*/strings.xml"):
     value = original
     for name in names:
         value = re.sub(
-            rf'(<string\\s+name="{name}"\\s*>)[^<]*(</string>)',
+            rf'(<string\s+name="{name}"\s*>)[^<]*(</string>)',
             lambda match: match.group(1) + "ahbegram" + match.group(2),
             value)
     if value != original:
