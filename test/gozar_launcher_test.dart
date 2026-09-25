@@ -235,7 +235,9 @@ void main() {
         find.byKey(const ValueKey('gozar-launcher-grid-samsung-grid')));
     final delegate = grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
     expect(delegate.crossAxisCount, 4);
-    expect(tester.getSize(icon).width, greaterThanOrEqualTo(58));
+    // No native icon bytes are available in the test; the fallback glyph
+    // deliberately occupies 78% of the configurable 64px icon slot.
+    expect(tester.getSize(icon).width, greaterThanOrEqualTo(48));
     await tester.tap(tile);
     await tester.tap(tile);
     await tester.pump(const Duration(milliseconds: 100));
@@ -391,7 +393,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(
         const ValueKey('gozar-launcher-inline-settings')), findsOneWidget);
-    expect(find.text('چیدمان ۴ ستونه · آیکون‌های بزرگ'), findsOneWidget);
+    expect(find.text('تعداد ستون‌های چیدمان'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-launcher-icon-size-slider')),
+        findsOneWidget);
     await tester.enterText(find.byKey(
         const ValueKey('gozar-launcher-inline-name-movies')), 'گرافیک');
     await tester.tap(find.byKey(
