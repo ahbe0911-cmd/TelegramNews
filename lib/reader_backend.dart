@@ -36,13 +36,21 @@ class ReaderBackend {
   }
 
   Future<Map<String, dynamic>?> ensureAccount() async {
-    Map<String, dynamic>? account = await getAccount();
+    Map<String, dynamic>? account;
+    try {
+      account = await getAccount();
+    } catch (_) {
+      account = null;
+    }
     if (account != null) return account;
     try {
       await _request('GET', '/', acceptJson: false);
     } catch (_) {}
-    account = await getAccount();
-    return account;
+    try {
+      return await getAccount();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> getAccount() async {
