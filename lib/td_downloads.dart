@@ -41,6 +41,7 @@ class NewsDownloadService {
       'path': localPath,
       'name': fileName(post),
       'mime': mimeType(post),
+      'folder': news.downloadFolder,
     });
     if (result == null || result.isEmpty) {
       throw StateError('ذخیره فایل کامل نشد.');
