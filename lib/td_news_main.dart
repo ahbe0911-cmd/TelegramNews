@@ -488,17 +488,11 @@ class _TdHomeState extends State<TdHome> {
 
 
   Future<void> forwardNews(NewsPost post) async {
-    if (widget.news.isForwardedToTelegram(post) ||
-        widget.news.isForwardingToTelegram(post)) return;
-    try {
-      await widget.news.forwardNewsToTelegramSaved(post);
-      if (!mounted) return;
-      message(widget.news.isForwardedToTelegram(post)
-          ? 'خبر در Saved Messages تلگرام ذخیره شد.'
-          : 'خبر در صف ارسال به Saved Messages قرار گرفت.');
-    } catch (_) {
-      if (mounted) message('ارسال خبر به Saved Messages انجام نشد؛ دوباره تلاش کنید.');
-    }
+    await widget.news.toggleSaved(post);
+    if (!mounted) return;
+    message(widget.news.isSaved(post)
+        ? 'خبر در ذخیره‌های برنامه نگهداری شد.'
+        : 'خبر از ذخیره‌ها حذف شد.');
   }
 
   Future<void> savePost(NewsPost post) async {
@@ -811,23 +805,20 @@ class _TdHomeState extends State<TdHome> {
               IntrinsicHeight(child: Row(children: [
                 Expanded(child: TextButton.icon(
                   key: ValueKey('bookmark-' + post.key),
-                  onPressed: widget.news.isForwardedToTelegram(post) ||
-                      widget.news.isForwardingToTelegram(post)
-                      ? null : () => unawaited(forwardNews(post)),
+                  onPressed: () => unawaited(forwardNews(post)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     minimumSize: const Size(44, 48),
-                    foregroundColor: widget.news.isForwardedToTelegram(post)
+                    foregroundColor: widget.news.isSaved(post)
                         ? colors.primary : colors.onSurface),
-                  icon: Icon(widget.news.isForwardedToTelegram(post)
+                  icon: Icon(widget.news.isSaved(post)
                       ? Icons.star_rounded : Icons.star_border_rounded, size: 22),
-                  label: Text(widget.news.isForwardedToTelegram(post)
-                      ? 'در تلگرام ذخیره شد'
-                      : widget.news.isForwardingToTelegram(post)
-                          ? 'در حال ارسال…' : 'ذخیره در تلگرام',
+                  label: Text(widget.news.isSaved(post)
+                      ? 'ذخیره شده' : 'ذخیره خبر',
                     style: const TextStyle(fontSize: 11)),
                 )),
-                if (post.mediaFileId != null || post.photoId != null) ...[
+                if (post.mediaFileId != null || post.photoId != null ||
+                    post.remoteMediaUrl != null) ...[
                   VerticalDivider(width: 1, indent: 10, endIndent: 10,
                     color: colors.outlineVariant.withValues(alpha: .4)),
                   Expanded(child: savingPosts.contains(post.key)
