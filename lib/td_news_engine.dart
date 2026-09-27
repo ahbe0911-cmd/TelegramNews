@@ -237,6 +237,163 @@ class TdNewsController extends ChangeNotifier {
     }
   }
 
+  Future<void> startReader() async {
+    if (disposed || busy) return;
+    busy = true;
+    status = 'در حال اتصال مستقیم به سرویس خبر…';
+    changed();
+    try {
+      await reader.ensureAccount();
+      final remote = await reader.getSubscriptions();
+      for (final item in remote) {
+        final channel = item['channel'];
+        if (channel is! Map) continue;
+        final source = _readerSource(Map<String, dynamic>.from(channel));
+        if (source != null) sources[source.id] = source;
+      }
+      await persist();
+      state = 'authorizationStateReady';
+      status = 'اتصال مستقیم به سرویس خبر برقرار است';
+      changed();
+      await refresh();
+    } catch (error) {
+      // Keep the app usable with its locally saved channel list. Pull-to-refresh
+      // will retry the HTTPS backend as soon as connectivity returns.
+      state = 'authorizationStateReady';
+      status = 'سرویس خبر فعلاً پاسخ نداد؛ برای تلاش دوباره تازه‌سازی کنید.';
+      changed();
+    } finally {
+      busy = false;
+      changed();
+    }
+  }
+
+  int _readerSourceId(String username) {
+    var hash = 0x811c9dc5;
+    for (final unit in username.toLowerCase().codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return -(hash == 0 ? 1 : hash);
+  }
+
+  NewsSource? _readerSource(Map<String, dynamic> channel) {
+    final username = channel['username']?.toString().trim() ?? '';
+    if (parsePublicUsername(username) == null) return null;
+    final title = channel['title']?.toString().trim();
+    return NewsSource(
+      _readerSourceId(username),
+      username,
+      title == null || title.isEmpty ? username : title,
+    );
+  }
+
+  int _readerDate(dynamic value) {
+    if (value is int) {
+      // The API normally uses ISO strings, but tolerate epoch seconds/millis.
+      return value > 20000000000 ? value ~/ 1000 : value;
+    }
+    final parsed = DateTime.tryParse(value?.toString() ?? '');
+    return (parsed?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch) ~/ 1000;
+  }
+
+  String _readerText(Map<String, dynamic> post) {
+    final text = post['text']?.toString();
+    if (text != null && text.trim().isNotEmpty) return text.trim();
+    final html = post['html']?.toString();
+    if (html == null || html.trim().isEmpty) return '';
+    return html
+        .replaceAll(RegExp(r'<br\\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .trim();
+  }
+
+  String _readerMediaKind(String? mediaType, String? fileName, String? extra) {
+    final type = mediaType?.toLowerCase() ?? '';
+    final name = fileName?.toLowerCase() ?? '';
+    final meta = extra?.toLowerCase() ?? '';
+    if (name.endsWith('.pdf') || meta.contains('application/pdf')) return 'pdf';
+    if (type.contains('photo') || type.contains('image') || type.contains('sticker')) {
+      return 'photo';
+    }
+    if (type.contains('video') || type.contains('animation') ||
+        name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.mov')) {
+      return 'video';
+    }
+    if (fileName != null && fileName.isNotEmpty) return 'file';
+    return type.isEmpty ? 'none' : 'file';
+  }
+
+  void _recordReaderPost(NewsSource source, Map<String, dynamic> item) {
+    final publicIdRaw = item['id'];
+    final publicId = publicIdRaw is int
+        ? publicIdRaw
+        : int.tryParse(publicIdRaw?.toString() ?? '');
+    if (publicId == null) return;
+
+    String? remoteUrl;
+    String? fileName;
+    String? extra;
+    String? mediaType = item['mediaType']?.toString();
+    double? aspect;
+
+    final document = item['document'];
+    if (document is Map) {
+      final doc = Map<String, dynamic>.from(document);
+      fileName = doc['title']?.toString();
+      extra = doc['extra']?.toString();
+      final url = doc['url']?.toString();
+      if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
+    }
+
+    if (remoteUrl == null) {
+      final url = item['mediaUrl']?.toString();
+      if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
+    }
+
+    final group = item['mediaGroup'];
+    if (remoteUrl == null && group is Map && group['items'] is List) {
+      final items = group['items'] as List;
+      if (items.isNotEmpty && items.first is Map) {
+        final first = Map<String, dynamic>.from(items.first as Map);
+        final url = first['url']?.toString();
+        if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
+        mediaType ??= first['type']?.toString();
+        final width = first['width'];
+        final height = first['height'];
+        if (width is num && height is num && width > 0 && height > 0) {
+          aspect = width.toDouble() / height.toDouble();
+        }
+      }
+    }
+
+    final kind = _readerMediaKind(mediaType, fileName, extra);
+    final key = source.id.toString() + ':' + publicId.toString();
+    final previous = posts[key];
+    posts[key] = NewsPost(
+      source.id,
+      publicId,
+      _readerDate(item['date']),
+      source.title,
+      source.username,
+      _readerText(item),
+      null,
+      kind == 'photo' && previous?.remoteMediaUrl == remoteUrl
+          ? previous?.photoPath
+          : null,
+      mediaKind: kind,
+      mediaPath: previous?.remoteMediaUrl == remoteUrl ? previous?.mediaPath : null,
+      fileName: fileName,
+      photoAspectRatio: aspect ?? previous?.photoAspectRatio,
+      publicMessageId: publicId,
+      remoteMediaUrl: remoteUrl,
+    );
+  }
+
   bool isSaved(NewsPost post) => saved.containsKey(post.key);
 
   List<NewsPost> get savedFeed {
