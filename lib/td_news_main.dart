@@ -11,6 +11,7 @@ import 'package:shamsi_date/shamsi_date.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
+import 'td_telegram_saved_page.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
 import 'td_clock_card.dart';
@@ -41,9 +42,19 @@ class _TdNewsAppState extends State<TdNewsApp> {
   }
 
   Future<void> restoreSession() async {
-    // Public news now uses reader.duckpsycho.dev over ordinary HTTPS. No
-    // Telegram API ID, phone login or VPN is required for the news feed.
-    await news.startReader();
+    const vault = FlutterSecureStorage();
+    try {
+      // Clear credentials left by removed network features, without touching
+      // the Telegram login, news bookmarks or user's saved messages.
+      try { await vault.delete(key: 'td_v2ray_link'); } catch (_) {}
+      try { await vault.delete(key: 'td_manual_mtproto_proxy'); } catch (_) {}
+      try { await widget.preferences.remove('td_manual_mtproto_enabled'); } catch (_) {}
+      final id = int.tryParse(await vault.read(key: 'td_api_id') ?? '');
+      final hash = await vault.read(key: 'td_api_hash');
+      if (id == null || id <= 0 || hash == null || hash.isEmpty) return;
+      final dir = await getApplicationSupportDirectory();
+      await news.start(id, hash, dir.path);
+    } catch (_) { /* Device can still show the manual login form. */ }
   }
 
   @override
@@ -117,7 +128,7 @@ class _TdHomeState extends State<TdHome> {
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
-  int selectedTab = 0; // 0: news, 1: local saved news, 2: settings
+  int selectedTab = 0; // 0: news, 1: Telegram Saved Messages, 2: settings
   bool refreshing = false;
   bool showSearch = false;
   String? inlineVideoKey;
@@ -341,7 +352,7 @@ class _TdHomeState extends State<TdHome> {
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
             ]),
             const SizedBox(height: 9),
-            Text('کانال عمومی از طریق reader.duckpsycho.dev دریافت می‌شود و برای خواندن خبرها نیازی به ورود تلگرام نیست.',
+            Text('با افزودن کانال، حساب تلگرام شما عضو آن می‌شود تا پست‌های جدید دریافت شوند.',
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13)),
             const SizedBox(height: 15),
             TextField(
@@ -356,7 +367,7 @@ class _TdHomeState extends State<TdHome> {
             FilledButton.icon(
               onPressed: submitting || widget.news.busy ? null : addChannel,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('افزودن کانال'),
+              label: const Text('افزودن و عضویت'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(49),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -412,7 +423,7 @@ class _TdHomeState extends State<TdHome> {
                         builder: (dialogContext) => AlertDialog(
                           title: const Text('حذف منبع خبری؟'),
                           content: Text('«' + source.title +
-                            '» از فهرست خبرهای برنامه حذف می‌شود.'),
+                            '» از فهرست خبرهای برنامه حذف می‌شود. عضویت شما در تلگرام تغییر نمی‌کند.'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(dialogContext, false),
@@ -465,9 +476,9 @@ class _TdHomeState extends State<TdHome> {
           Icon(Icons.verified_user_outlined, color: colors.primary),
           const SizedBox(width: 11),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('اتصال خبر', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('حساب تلگرام', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('reader.duckpsycho.dev • اتصال HTTPS مستقیم، بدون نیاز به ورود تلگرام',
+            Text('متصل • اطلاعات ورود در همین گوشی نگهداری می‌شود',
               style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
           ])),
         ])),
@@ -487,11 +498,17 @@ class _TdHomeState extends State<TdHome> {
 
 
   Future<void> forwardNews(NewsPost post) async {
-    await widget.news.toggleSaved(post);
-    if (!mounted) return;
-    message(widget.news.isSaved(post)
-        ? 'خبر در ذخیره‌های برنامه نگهداری شد.'
-        : 'خبر از ذخیره‌ها حذف شد.');
+    if (widget.news.isForwardedToTelegram(post) ||
+        widget.news.isForwardingToTelegram(post)) return;
+    try {
+      await widget.news.forwardNewsToTelegramSaved(post);
+      if (!mounted) return;
+      message(widget.news.isForwardedToTelegram(post)
+          ? 'خبر در Saved Messages تلگرام ذخیره شد.'
+          : 'خبر در صف ارسال به Saved Messages قرار گرفت.');
+    } catch (_) {
+      if (mounted) message('ارسال خبر به Saved Messages انجام نشد؛ دوباره تلاش کنید.');
+    }
   }
 
   Future<void> savePost(NewsPost post) async {
@@ -804,20 +821,23 @@ class _TdHomeState extends State<TdHome> {
               IntrinsicHeight(child: Row(children: [
                 Expanded(child: TextButton.icon(
                   key: ValueKey('bookmark-' + post.key),
-                  onPressed: () => unawaited(forwardNews(post)),
+                  onPressed: widget.news.isForwardedToTelegram(post) ||
+                      widget.news.isForwardingToTelegram(post)
+                      ? null : () => unawaited(forwardNews(post)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     minimumSize: const Size(44, 48),
-                    foregroundColor: widget.news.isSaved(post)
+                    foregroundColor: widget.news.isForwardedToTelegram(post)
                         ? colors.primary : colors.onSurface),
-                  icon: Icon(widget.news.isSaved(post)
+                  icon: Icon(widget.news.isForwardedToTelegram(post)
                       ? Icons.star_rounded : Icons.star_border_rounded, size: 22),
-                  label: Text(widget.news.isSaved(post)
-                      ? 'ذخیره شده' : 'ذخیره خبر',
+                  label: Text(widget.news.isForwardedToTelegram(post)
+                      ? 'در تلگرام ذخیره شد'
+                      : widget.news.isForwardingToTelegram(post)
+                          ? 'در حال ارسال…' : 'ذخیره در تلگرام',
                     style: const TextStyle(fontSize: 11)),
                 )),
-                if (post.mediaFileId != null || post.photoId != null ||
-                    post.remoteMediaUrl != null) ...[
+                if (post.mediaFileId != null || post.photoId != null) ...[
                   VerticalDivider(width: 1, indent: 10, endIndent: 10,
                     color: colors.outlineVariant.withValues(alpha: .4)),
                   Expanded(child: savingPosts.contains(post.key)
@@ -945,43 +965,6 @@ class _TdHomeState extends State<TdHome> {
     );
   }
 
-  Widget savedScreen() {
-    final items = widget.news.savedFeed;
-    if (items.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-        children: [
-          surfacePanel(child: Column(children: [
-            Icon(Icons.bookmark_border_rounded,
-              size: 42, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 12),
-            const Text('هنوز خبری ذخیره نکرده‌اید',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 7),
-            Text('با لمس ستارهٔ هر خبر، آن را برای دسترسی سریع در همین گوشی نگه دارید.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ])),
-        ],
-      );
-    }
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final post = items[index];
-        return KeyedSubtree(
-          key: ValueKey('saved-' + post.key),
-          child: postCard(post, featured: index == 0),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: widget.news,
@@ -1020,7 +1003,8 @@ class _TdHomeState extends State<TdHome> {
                     : selectedTab == 0
                         ? newsScreen(filtered)
                         : selectedTab == 1
-                            ? savedScreen()
+                            ? TelegramSavedMessagesPage(
+                                news: widget.news, embedded: true)
                             : settingsScreen(),
               )),
             ),
@@ -1050,9 +1034,9 @@ class _TdHomeState extends State<TdHome> {
                         label: 'خبرها',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.bookmark_border_rounded),
-                        selectedIcon: Icon(Icons.bookmark_rounded),
-                        label: 'ذخیره‌ها',
+                        icon: Icon(Icons.forum_outlined),
+                        selectedIcon: Icon(Icons.forum_rounded),
+                        label: 'پیام‌های من',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
@@ -1176,20 +1160,30 @@ class NewsArticlePage extends StatelessWidget {
             child: AnimatedBuilder(
               animation: news,
               builder: (context, _) => OutlinedButton.icon(
-                onPressed: () async {
-                  await news.toggleSaved(post);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(news.isSaved(post)
-                        ? 'خبر در ذخیره‌های برنامه نگهداری شد.'
-                        : 'خبر از ذخیره‌ها حذف شد.')));
-                  }
-                },
-                icon: Icon(news.isSaved(post)
+                onPressed: news.isForwardedToTelegram(post) ||
+                        news.isForwardingToTelegram(post)
+                    ? null : () async {
+                      try {
+                        await news.forwardNewsToTelegramSaved(post);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(news.isForwardedToTelegram(post)
+                              ? 'خبر در Saved Messages تلگرام ذخیره شد.'
+                              : 'خبر در صف ارسال به تلگرام قرار گرفت.')));
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('ذخیره خبر در تلگرام ممکن نشد.')));
+                        }
+                      }
+                    },
+                icon: Icon(news.isForwardedToTelegram(post)
                     ? Icons.star_rounded : Icons.star_border_rounded),
-                label: Text(news.isSaved(post)
-                    ? 'خبر ذخیره شده'
-                    : 'ذخیره خبر'),
+                label: Text(news.isForwardedToTelegram(post)
+                    ? 'خبر در تلگرام ذخیره شد'
+                    : news.isForwardingToTelegram(post)
+                        ? 'در حال ارسال خبر…' : 'ذخیره خبر در تلگرام'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
               ),
