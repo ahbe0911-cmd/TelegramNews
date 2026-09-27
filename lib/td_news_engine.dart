@@ -1068,15 +1068,56 @@ class TdNewsController extends ChangeNotifier {
   }
 
   void requestThumbnail(NewsPost post) {
+    if (post.photoPath != null) return;
+    if (post.mediaKind == 'photo' && post.remoteMediaUrl != null) {
+      if (_remoteThumbnailStarted.add(post.key)) {
+        unawaited(_downloadReaderThumbnail(post));
+      }
+      return;
+    }
     final id = post.photoId;
-    if (id == null || post.photoPath != null) return;
+    if (id == null) return;
     photoTargets.putIfAbsent(id, () => <String>{}).add(post.key);
     if (_thumbnailStarted.add(id)) unawaited(downloadPhoto(id));
   }
 
-  /// TDLib caches completed media in app-private storage. Download on demand:
-  /// previews and news updates never request full-length video or PDF files.
+  Future<void> _downloadReaderThumbnail(NewsPost post) async {
+    try {
+      final url = post.remoteMediaUrl;
+      if (url == null || url.isEmpty) return;
+      final path = await reader.downloadMedia(
+        url,
+        cacheKey: 'thumb_' + post.key,
+        suggestedName: post.fileName,
+      );
+      post.photoPath = path;
+      if (post.mediaKind == 'photo') post.mediaPath = path;
+      changed();
+    } catch (_) {
+      // A visible card can request the image again after the next refresh.
+      _remoteThumbnailStarted.remove(post.key);
+    }
+  }
+
+  /// Downloads Reader media over HTTPS, while retaining TDLib as a legacy
+  /// fallback for already-cached posts from older app versions.
   Future<String> ensureMedia(NewsPost post) async {
+    final remote = post.remoteMediaUrl;
+    if (remote != null && remote.isNotEmpty) {
+      final cached = post.mediaPath ??
+          (post.mediaKind == 'photo' ? post.photoPath : null);
+      if (cached != null && cached.isNotEmpty) return cached;
+      final path = await reader.downloadMedia(
+        remote,
+        cacheKey: 'media_' + post.key,
+        suggestedName: post.fileName,
+      );
+      post.mediaPath = path;
+      if (post.mediaKind == 'photo') post.photoPath = path;
+      changed();
+      return path;
+    }
+
     final id = post.mediaFileId ?? (post.mediaKind == 'photo' ? post.photoId : null);
     if (id == null) throw StateError('فایل قابل دانلودی در این پیام پیدا نشد.');
     final cached = post.mediaPath;
