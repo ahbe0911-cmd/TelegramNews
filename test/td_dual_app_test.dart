@@ -54,12 +54,12 @@ void main() {
 
     expect(find.byType(PageView), findsOneWidget);
     expect(find.byKey(const ValueKey('dual-news-page')), findsOneWidget);
-    expect(find.byKey(const ValueKey('dual-cafenet-page')), findsOneWidget);
     expect(find.byKey(const ValueKey('dual-active-0')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('dual-tab-1')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const ValueKey('dual-cafenet-page')), findsOneWidget);
     expect(find.byKey(const ValueKey('dual-active-1')), findsOneWidget);
     expect(prefs.getInt('dual_active_page'), 1);
   });
