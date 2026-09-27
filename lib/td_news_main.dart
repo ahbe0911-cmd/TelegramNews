@@ -117,7 +117,7 @@ class _TdHomeState extends State<TdHome> {
   final search = TextEditingController();
   String filter = '';
   bool submitting = false;
-  int selectedTab = 0; // 0: news, 1: Telegram Saved Messages, 2: settings
+  int selectedTab = 0; // 0: news, 1: local saved news, 2: settings
   bool refreshing = false;
   bool showSearch = false;
   String? inlineVideoKey;
@@ -1176,30 +1176,20 @@ class NewsArticlePage extends StatelessWidget {
             child: AnimatedBuilder(
               animation: news,
               builder: (context, _) => OutlinedButton.icon(
-                onPressed: news.isForwardedToTelegram(post) ||
-                        news.isForwardingToTelegram(post)
-                    ? null : () async {
-                      try {
-                        await news.forwardNewsToTelegramSaved(post);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(news.isForwardedToTelegram(post)
-                              ? 'خبر در Saved Messages تلگرام ذخیره شد.'
-                              : 'خبر در صف ارسال به تلگرام قرار گرفت.')));
-                        }
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('ذخیره خبر در تلگرام ممکن نشد.')));
-                        }
-                      }
-                    },
-                icon: Icon(news.isForwardedToTelegram(post)
+                onPressed: () async {
+                  await news.toggleSaved(post);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(news.isSaved(post)
+                        ? 'خبر در ذخیره‌های برنامه نگهداری شد.'
+                        : 'خبر از ذخیره‌ها حذف شد.')));
+                  }
+                },
+                icon: Icon(news.isSaved(post)
                     ? Icons.star_rounded : Icons.star_border_rounded),
-                label: Text(news.isForwardedToTelegram(post)
-                    ? 'خبر در تلگرام ذخیره شد'
-                    : news.isForwardingToTelegram(post)
-                        ? 'در حال ارسال خبر…' : 'ذخیره خبر در تلگرام'),
+                label: Text(news.isSaved(post)
+                    ? 'خبر ذخیره شده'
+                    : 'ذخیره خبر'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
               ),
