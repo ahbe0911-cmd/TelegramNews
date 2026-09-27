@@ -5,15 +5,17 @@ from pathlib import Path
 import re
 
 parser = argparse.ArgumentParser()
-parser.add_argument('variant', choices=['news', 'cafenet', 'gozar'])
+parser.add_argument('variant', choices=['news', 'cafenet', 'dual', 'gozar'])
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 cafe = args.variant == 'cafenet'
+dual = args.variant == 'dual'
 gozar = args.variant == 'gozar'
 package = ('ir.channel.gozar_vpn' if gozar else
+           'ir.channel.telegram_dual' if dual else
            'ir.channel.telegram_cafenet' if cafe else 'ir.channel.telegram_tdnews')
-label = 'گذر' if gozar else 'کافی‌نت' if cafe else 'نبض خبر'
-folder = 'Gozar' if gozar else 'Cafenet' if cafe else 'NabzKhabar'
+label = 'گذر' if gozar else 'نبض خبر و کافی‌نت' if dual else 'کافی‌نت' if cafe else 'نبض خبر'
+folder = 'Gozar' if gozar else 'NabzKhabar' if dual else 'Cafenet' if cafe else 'NabzKhabar'
 gradle = root / 'android/app/build.gradle.kts'
 source, count = re.subn(r'applicationId = "[^"]+"', f'applicationId = "{package}"', gradle.read_text())
 assert count == 1, 'Expected one application ID'
@@ -25,7 +27,7 @@ manifest.write_text(source)
 activity = next((root / 'android/app/src/main/kotlin').rglob('MainActivity.kt'))
 activity.write_text(activity.read_text().replace('"/NabzKhabar"', f'"/{folder}"'))
 res = root / 'android/app/src/main/res'
-color = '#0C5489' if gozar else '#7043C6' if cafe else '#0866DC'
+color = '#0C5489' if gozar else '#4F5BD5' if dual else '#7043C6' if cafe else '#0866DC'
 # Vector assets stay crisp on A54 and support Android adaptive launcher masks.
 paths = '''<path android:fillColor="#FFFFFFFF" android:pathData="M28,31 L80,31 Q84,31 84,35 L84,67 Q84,71 80,71 L59,71 L59,77 L70,77 L70,81 L38,81 L38,77 L49,77 L49,71 L28,71 Q24,71 24,67 L24,35 Q24,31 28,31 Z"/>
 <path android:fillColor="COLOR" android:pathData="M30,37 L78,37 L78,64 L30,64 Z"/>
