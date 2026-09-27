@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tdlib/tdlib.dart';
 
+import 'reader_backend.dart';
+
 /// The blocking TDLib receive loop runs away from Flutter's UI isolate.
 Future<void> tdWorker(SendPort output) async {
   final input = ReceivePort();
@@ -131,14 +133,19 @@ class NewsPost {
   Uint8List? previewBytes;
   /// Original photo dimensions for an uncropped Telegram-like chat preview.
   double? photoAspectRatio;
+  /// Reader backend fields. TDLib posts leave these null.
+  int? publicMessageId;
+  String? remoteMediaUrl;
 
   NewsPost(this.chatId, this.id, this.date, this.source, this.username, this.body,
       this.photoId, this.photoPath,
       {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName,
-       this.previewBytes, this.photoAspectRatio});
+       this.previewBytes, this.photoAspectRatio, this.publicMessageId,
+       this.remoteMediaUrl});
 
   String get key => chatId.toString() + ':' + id.toString();
-  String get link => 'https://t.me/' + username + '/' + (id >> 20).toString();
+  String get link => 'https://t.me/' + username + '/' +
+      (publicMessageId ?? (id >> 20)).toString();
 }
 
 String? parsePublicUsername(String input) {
@@ -150,6 +157,7 @@ String? parsePublicUsername(String input) {
 
 class TdNewsController extends ChangeNotifier {
   final SharedPreferences prefs;
+  late final ReaderBackend reader = ReaderBackend(prefs);
   final bridge = TdBridge();
   final sources = <int, NewsSource>{};
   /// Channel names awaiting remote resolution; do not block the settings UI.
@@ -160,10 +168,11 @@ class TdNewsController extends ChangeNotifier {
   final downloadWaiters = <int, Completer<String>>{};
   final downloadProgress = <int, double>{};
   final _thumbnailStarted = <int>{};
+  final _remoteThumbnailStarted = <String>{};
   List<NewsPost>? _sortedFeed;
   StreamSubscription<Map<String, dynamic>>? listener;
-  String state = 'setup';
-  String status = 'API ID و API Hash را برای ورود وارد کنید';
+  String state = 'authorizationStateReady';
+  String status = 'در حال اتصال مستقیم به سرویس خبر…';
   bool busy = false;
   bool disposed = false;
   bool parametersSubmitted = false;
@@ -220,6 +229,8 @@ class TdNewsController extends ChangeNotifier {
           mediaKind: item['media_kind'] as String? ?? 'none',
           mediaFileId: item['media_file_id'] as int?,
           fileName: item['file_name'] as String?,
+          publicMessageId: item['public_message_id'] as int?,
+          remoteMediaUrl: item['remote_media_url'] as String?,
         );
         saved[savedPost.key] = savedPost;
       } catch (_) { /* One invalid bookmark must not hide other bookmarks. */ }
@@ -256,6 +267,8 @@ class TdNewsController extends ChangeNotifier {
         'media_kind': post.mediaKind,
         'media_file_id': post.mediaFileId,
         'file_name': post.fileName,
+        'public_message_id': post.publicMessageId,
+        'remote_media_url': post.remoteMediaUrl,
       });
     }).toList());
   }
