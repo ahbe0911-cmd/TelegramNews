@@ -31,8 +31,6 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pumpAndSettle();
     expect(find.text('افزودن کانال عمومی'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('کانال‌های من'), 180,
-        scrollable: find.byType(Scrollable).first);
     expect(find.text('کانال‌های من'), findsOneWidget);
     expect(find.textContaining('WebSocket'), findsNothing);
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
@@ -50,7 +48,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     news.dispose();
   });
-  testWidgets('news star saves locally and saved tab stays offline-friendly',
+  testWidgets('news star sends to Telegram and Saved Messages tab is a chat',
       (tester) async {
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
@@ -62,6 +60,7 @@ void main() {
       ],
     });
     final news = TdNewsController(await SharedPreferences.getInstance());
+    news.state = 'authorizationStateReady';
     news.record({
       'chat_id': -100123456,
       'id': 125 * 1048576,
@@ -75,20 +74,18 @@ void main() {
       textDirection: TextDirection.rtl,
       child: TdHome(news: news, onToggleTheme: () {}, dark: false),
     )));
-    final bookmark = find.byKey(ValueKey('bookmark-' + post.key));
-    expect(bookmark, findsOneWidget);
-    expect(find.text('ذخیره خبر'), findsOneWidget);
-    expect(news.isSaved(post), isFalse);
+    expect(find.byKey(ValueKey('bookmark-' + post.key)), findsOneWidget);
+    expect(find.text('ذخیره در تلگرام'), findsOneWidget);
+    expect(news.isForwardedToTelegram(post), isFalse);
 
-    await tester.tap(bookmark);
+    await tester.tap(find.text('پیام‌های من').last);
     await tester.pumpAndSettle();
-    expect(news.isSaved(post), isTrue);
-    expect(find.text('ذخیره شده'), findsOneWidget);
-
-    await tester.tap(find.text('ذخیره‌ها').last);
-    await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('saved-' + post.key)), findsOneWidget);
-    expect(find.byKey(const ValueKey('telegram-saved-chat')), findsNothing);
+    expect(find.byKey(const ValueKey('telegram-saved-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('saved-chat-composer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('saved-chat-send')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const ValueKey('saved-chat-composer')), 'یادداشت آزمایشی');
+    expect(find.text('یادداشت آزمایشی'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     news.dispose();
@@ -144,7 +141,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('مشاهده عکس با اندازه کامل'),
         220, scrollable: find.byType(Scrollable).last);
     expect(find.text('مشاهده عکس با اندازه کامل'), findsOneWidget);
-    expect(find.text('ذخیره خبر'), findsOneWidget);
+    expect(find.text('ذخیره خبر در تلگرام'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('download-' + post.key)), findsOneWidget);
