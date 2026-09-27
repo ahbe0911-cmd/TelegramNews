@@ -31,6 +31,8 @@ void main() {
     await tester.tap(find.text('تنظیمات'));
     await tester.pumpAndSettle();
     expect(find.text('افزودن کانال عمومی'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('کانال‌های من'), 180,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('کانال‌های من'), findsOneWidget);
     expect(find.textContaining('WebSocket'), findsNothing);
     await tester.scrollUntilVisible(find.text('حالت تاریک'), 220,
