@@ -230,39 +230,41 @@ class _DualNewsAppState extends State<DualNewsApp> {
       theme: ThemeData(useMaterial3: true, fontFamily: 'CustomFont'),
       home: Directionality(
         textDirection: TextDirection.rtl,
-        child: Builder(
-          builder: (context) => Column(
-            children: [
-              _switcher(),
-              Expanded(
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: true,
-                  child: PageView(
-                    key: const ValueKey('dual-page-view'),
-                    controller: pages,
-                    onPageChanged: _setPage,
-                    physics: const PageScrollPhysics(),
-                    children: [
-                      _DualPane(
-                        key: const ValueKey('dual-news-page'),
-                        theme: newsTheme,
-                        news: news,
-                        dark: newsDark,
-                        onToggleTheme: _toggleNewsTheme,
-                      ),
-                      _DualPane(
-                        key: const ValueKey('dual-cafenet-page'),
-                        theme: cafenetTheme,
-                        news: cafenet,
-                        dark: cafenetDark,
-                        onToggleTheme: _toggleCafenetTheme,
-                      ),
-                    ],
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => Column(
+              children: [
+                _switcher(),
+                Expanded(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: PageView(
+                      key: const ValueKey('dual-page-view'),
+                      controller: pages,
+                      onPageChanged: _setPage,
+                      physics: const PageScrollPhysics(),
+                      children: [
+                        _DualPane(
+                          key: const ValueKey('dual-news-page'),
+                          theme: newsTheme,
+                          news: news,
+                          dark: newsDark,
+                          onToggleTheme: _toggleNewsTheme,
+                        ),
+                        _DualPane(
+                          key: const ValueKey('dual-cafenet-page'),
+                          theme: cafenetTheme,
+                          news: cafenet,
+                          dark: cafenetDark,
+                          onToggleTheme: _toggleCafenetTheme,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
