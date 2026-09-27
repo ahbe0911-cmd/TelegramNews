@@ -147,7 +147,7 @@ class _NewsMediaViewerState extends State<NewsMediaViewer> {
               try {
                 await NewsDownloadService.save(widget.news, widget.post);
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('در Downloads/NabzKhabar ذخیره شد.')));
+                  SnackBar(content: Text('در Downloads/' + widget.news.downloadFolder + ' ذخیره شد.')));
               } catch (_) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('ذخیره فایل انجام نشد.')));
