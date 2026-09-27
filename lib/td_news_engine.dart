@@ -150,6 +150,11 @@ String? parsePublicUsername(String input) {
 
 class TdNewsController extends ChangeNotifier {
   final SharedPreferences prefs;
+  final String storagePrefix;
+  final String downloadFolder;
+
+  String _prefKey(String key) =>
+      storagePrefix.isEmpty ? key : storagePrefix + '_' + key;
   final bridge = TdBridge();
   final sources = <int, NewsSource>{};
   /// Channel names awaiting remote resolution; do not block the settings UI.
@@ -189,7 +194,7 @@ class TdNewsController extends ChangeNotifier {
   Future<void> _markForwarded(String key) async {
     forwardingToTelegram.remove(key);
     forwardedToTelegram.add(key);
-    await prefs.setStringList('td_forwarded_to_telegram', forwardedToTelegram.toList());
+    await prefs.setStringList(_prefKey('td_forwarded_to_telegram'), forwardedToTelegram.toList());
     changed();
   }
 
@@ -197,15 +202,19 @@ class TdNewsController extends ChangeNotifier {
   List<NewsPost> get telegramSavedFeed => telegramSavedMessages.values.toList()
     ..sort((a, b) => b.id.compareTo(a.id));
 
-  TdNewsController(this.prefs) {
-    forwardedToTelegram.addAll(prefs.getStringList('td_forwarded_to_telegram') ?? const <String>[]);
-    for (final raw in prefs.getStringList('td_channels') ?? <String>[]) {
+  TdNewsController(
+    this.prefs, {
+    this.storagePrefix = '',
+    this.downloadFolder = 'NabzKhabar',
+  }) {
+    forwardedToTelegram.addAll(prefs.getStringList(_prefKey('td_forwarded_to_telegram')) ?? const <String>[]);
+    for (final raw in prefs.getStringList(_prefKey('td_channels')) ?? <String>[]) {
       try {
         final source = NewsSource.fromJson(jsonDecode(raw) as Map<String, dynamic>);
         sources[source.id] = source;
       } catch (_) { /* Invalid local preference is ignored. */ }
     }
-    for (final raw in prefs.getStringList('td_saved_posts') ?? <String>[]) {
+    for (final raw in prefs.getStringList(_prefKey('td_saved_posts')) ?? <String>[]) {
       try {
         final item = Map<String, dynamic>.from(jsonDecode(raw) as Map);
         final savedPost = NewsPost(
@@ -244,7 +253,7 @@ class TdNewsController extends ChangeNotifier {
     changed();
     // Persist a compact text-and-attachment snapshot: saved posts remain
     // readable even when they leave the 25-message live history window.
-    await prefs.setStringList('td_saved_posts', saved.values.map((post) {
+    await prefs.setStringList(_prefKey('td_saved_posts'), saved.values.map((post) {
       return jsonEncode({
         'chat_id': post.chatId,
         'message_id': post.id,
@@ -647,7 +656,7 @@ class TdNewsController extends ChangeNotifier {
   }
 
   Future<void> persist() async {
-    await prefs.setStringList('td_channels',
+    await prefs.setStringList(_prefKey('td_channels'),
         sources.values.map((v) => jsonEncode(v.toJson())).toList());
   }
 
