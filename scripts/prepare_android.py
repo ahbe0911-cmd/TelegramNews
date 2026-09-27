@@ -128,6 +128,7 @@ if args.profile == 'modern':
             val path = call.argument<String>("path")
             val title = call.argument<String>("name")
             val mime = call.argument<String>("mime") ?: "application/octet-stream"
+            val requestedFolder = call.argument<String>("folder") ?: "NabzKhabar"
             if (path.isNullOrBlank() || title.isNullOrBlank()) {
                 result.error("BAD_FILE", "The file name or path is missing", null)
                 return@setMethodCallHandler
@@ -137,12 +138,13 @@ if args.profile == 'modern':
                     val file = File(path)
                     if (!file.isFile) throw IllegalStateException("Downloaded file is missing")
                     val safe = title.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").take(90)
+                    val safeFolder = requestedFolder.replace(Regex("[^A-Za-z0-9_-]"), "_").take(32)
                     val saved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         val values = ContentValues().apply {
                             put(MediaStore.MediaColumns.DISPLAY_NAME, safe)
                             put(MediaStore.MediaColumns.MIME_TYPE, mime)
                             put(MediaStore.MediaColumns.RELATIVE_PATH,
-                                Environment.DIRECTORY_DOWNLOADS + "/NabzKhabar")
+                                Environment.DIRECTORY_DOWNLOADS + "/" + safeFolder)
                             put(MediaStore.MediaColumns.IS_PENDING, 1)
                         }
                         val uri = contentResolver.insert(
@@ -165,8 +167,9 @@ if args.profile == 'modern':
                             throw error
                         }
                     } else {
-                        val directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                        val root = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                             ?: throw IllegalStateException("Storage unavailable")
+                        val directory = File(root, safeFolder).apply { mkdirs() }
                         val output = File(directory, safe)
                         FileInputStream(file).use { input ->
                             output.outputStream().use { dest ->
