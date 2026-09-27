@@ -169,7 +169,11 @@ class _TdHomeState extends State<TdHome> {
       await vault.write(key: secureKey('td_api_hash'), value: hash);
       apiHash.clear();
       final dir = await getApplicationSupportDirectory();
-      await widget.news.start(id, hash, dir.path);
+      final scopedPath = widget.news.storagePrefix.isEmpty
+          ? dir.path
+          : Directory(dir.path + '/' + widget.news.storagePrefix).path;
+      Directory(scopedPath).createSync(recursive: true);
+      await widget.news.start(id, hash, scopedPath);
     } catch (_) {
       message('تنظیمات ذخیره نشد؛ دوباره تلاش کنید.');
     } finally {
