@@ -5,6 +5,7 @@ on:
     branches: [main, vpn-development, three-independent-apps]
     paths:
       - 'lib/td_news_*.dart'
+      - 'lib/td_dual_main.dart'
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
       - 'lib/gozar_main.dart'
@@ -92,6 +93,8 @@ jobs:
             artifact: NabzKhabar-News-A54
           - variant: cafenet
             artifact: Cafenet-A54
+          - variant: dual
+            artifact: NabzKhabar-Cafenet-A54
           - variant: gozar
             artifact: Gozar-A54
     steps:
@@ -223,6 +226,9 @@ jobs:
       - name: Verify home and settings layout
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_ui_test.dart
+      - name: Verify dual swipe pages and isolated settings
+        if: matrix.variant == 'dual'
+        run: flutter test test/td_dual_app_test.dart
       - name: Verify lazy inline video and justified Persian text
         if: matrix.variant != 'gozar'
         run: flutter test test/td_inline_video_test.dart
@@ -240,6 +246,8 @@ jobs:
         run: |
           if [ "${{ matrix.variant }}" = "gozar" ]; then
             TARGET=lib/gozar_main.dart
+          elif [ "${{ matrix.variant }}" = "dual" ]; then
+            TARGET=lib/td_dual_main.dart
           else
             TARGET=lib/td_news_main.dart
           fi
