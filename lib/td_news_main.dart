@@ -11,7 +11,6 @@ import 'package:shamsi_date/shamsi_date.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'td_news_engine.dart';
-import 'td_telegram_saved_page.dart';
 import 'td_media_viewer.dart';
 import 'td_inline_video.dart';
 import 'td_clock_card.dart';
@@ -342,7 +341,7 @@ class _TdHomeState extends State<TdHome> {
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
             ]),
             const SizedBox(height: 9),
-            Text('با افزودن کانال، حساب تلگرام شما عضو آن می‌شود تا پست‌های جدید دریافت شوند.',
+            Text('کانال عمومی از طریق reader.duckpsycho.dev دریافت می‌شود و برای خواندن خبرها نیازی به ورود تلگرام نیست.',
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13)),
             const SizedBox(height: 15),
             TextField(
@@ -357,7 +356,7 @@ class _TdHomeState extends State<TdHome> {
             FilledButton.icon(
               onPressed: submitting || widget.news.busy ? null : addChannel,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('افزودن و عضویت'),
+              label: const Text('افزودن کانال'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(49),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -413,7 +412,7 @@ class _TdHomeState extends State<TdHome> {
                         builder: (dialogContext) => AlertDialog(
                           title: const Text('حذف منبع خبری؟'),
                           content: Text('«' + source.title +
-                            '» از فهرست خبرهای برنامه حذف می‌شود. عضویت شما در تلگرام تغییر نمی‌کند.'),
+                            '» از فهرست خبرهای برنامه حذف می‌شود.'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(dialogContext, false),
@@ -466,9 +465,9 @@ class _TdHomeState extends State<TdHome> {
           Icon(Icons.verified_user_outlined, color: colors.primary),
           const SizedBox(width: 11),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('حساب تلگرام', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('اتصال خبر', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('متصل • اطلاعات ورود در همین گوشی نگهداری می‌شود',
+            Text('reader.duckpsycho.dev • اتصال HTTPS مستقیم، بدون نیاز به ورود تلگرام',
               style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant)),
           ])),
         ])),
@@ -946,6 +945,43 @@ class _TdHomeState extends State<TdHome> {
     );
   }
 
+  Widget savedScreen() {
+    final items = widget.news.savedFeed;
+    if (items.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        children: [
+          surfacePanel(child: Column(children: [
+            Icon(Icons.bookmark_border_rounded,
+              size: 42, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 12),
+            const Text('هنوز خبری ذخیره نکرده‌اید',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 7),
+            Text('با لمس ستارهٔ هر خبر، آن را برای دسترسی سریع در همین گوشی نگه دارید.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ])),
+        ],
+      );
+    }
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final post = items[index];
+        return KeyedSubtree(
+          key: ValueKey('saved-' + post.key),
+          child: postCard(post, featured: index == 0),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: widget.news,
@@ -984,8 +1020,7 @@ class _TdHomeState extends State<TdHome> {
                     : selectedTab == 0
                         ? newsScreen(filtered)
                         : selectedTab == 1
-                            ? TelegramSavedMessagesPage(
-                                news: widget.news, embedded: true)
+                            ? savedScreen()
                             : settingsScreen(),
               )),
             ),
@@ -1015,9 +1050,9 @@ class _TdHomeState extends State<TdHome> {
                         label: 'خبرها',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.forum_outlined),
-                        selectedIcon: Icon(Icons.forum_rounded),
-                        label: 'پیام‌های من',
+                        icon: Icon(Icons.bookmark_border_rounded),
+                        selectedIcon: Icon(Icons.bookmark_rounded),
+                        label: 'ذخیره‌ها',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
