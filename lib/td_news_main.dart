@@ -31,7 +31,10 @@ class TdNewsApp extends StatefulWidget {
 }
 
 class _TdNewsAppState extends State<TdNewsApp> {
-  late final TdNewsController news = TdNewsController(widget.preferences);
+  late final TdNewsController news = TdNewsController(
+    widget.preferences,
+    downloadFolder: AppBrand.downloadFolder,
+  );
   bool dark = false;
 
   @override
@@ -148,6 +151,10 @@ class _TdHomeState extends State<TdHome> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
+  String secureKey(String key) => widget.news.storagePrefix.isEmpty
+      ? key
+      : widget.news.storagePrefix + '_' + key;
+
   Future<void> connect() async {
     final id = int.tryParse(apiId.text.trim());
     final hash = apiHash.text.trim();
@@ -158,8 +165,8 @@ class _TdHomeState extends State<TdHome> {
     setState(() { submitting = true; });
     try {
       const vault = FlutterSecureStorage();
-      await vault.write(key: 'td_api_id', value: id.toString());
-      await vault.write(key: 'td_api_hash', value: hash);
+      await vault.write(key: secureKey('td_api_id'), value: id.toString());
+      await vault.write(key: secureKey('td_api_hash'), value: hash);
       apiHash.clear();
       final dir = await getApplicationSupportDirectory();
       await widget.news.start(id, hash, dir.path);
@@ -516,7 +523,7 @@ class _TdHomeState extends State<TdHome> {
     setState(() {});
     try {
       await NewsDownloadService.save(widget.news, post);
-      message('فایل در پوشه Downloads/${AppBrand.downloadFolder} ذخیره شد.');
+      message('فایل در پوشه Downloads/' + widget.news.downloadFolder + ' ذخیره شد.');
     } catch (_) {
       message('ذخیره فایل انجام نشد؛ اینترنت و فضای گوشی را بررسی کنید.');
     } finally {
