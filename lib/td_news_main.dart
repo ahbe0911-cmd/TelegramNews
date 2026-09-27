@@ -42,19 +42,9 @@ class _TdNewsAppState extends State<TdNewsApp> {
   }
 
   Future<void> restoreSession() async {
-    const vault = FlutterSecureStorage();
-    try {
-      // Clear credentials left by removed network features, without touching
-      // the Telegram login, news bookmarks or user's saved messages.
-      try { await vault.delete(key: 'td_v2ray_link'); } catch (_) {}
-      try { await vault.delete(key: 'td_manual_mtproto_proxy'); } catch (_) {}
-      try { await widget.preferences.remove('td_manual_mtproto_enabled'); } catch (_) {}
-      final id = int.tryParse(await vault.read(key: 'td_api_id') ?? '');
-      final hash = await vault.read(key: 'td_api_hash');
-      if (id == null || id <= 0 || hash == null || hash.isEmpty) return;
-      final dir = await getApplicationSupportDirectory();
-      await news.start(id, hash, dir.path);
-    } catch (_) { /* Device can still show the manual login form. */ }
+    // Public news now uses reader.duckpsycho.dev over ordinary HTTPS. No
+    // Telegram API ID, phone login or VPN is required for the news feed.
+    await news.startReader();
   }
 
   @override
