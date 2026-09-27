@@ -7,8 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tdlib/tdlib.dart';
 
-import 'reader_backend.dart';
-
 /// The blocking TDLib receive loop runs away from Flutter's UI isolate.
 Future<void> tdWorker(SendPort output) async {
   final input = ReceivePort();
@@ -133,19 +131,14 @@ class NewsPost {
   Uint8List? previewBytes;
   /// Original photo dimensions for an uncropped Telegram-like chat preview.
   double? photoAspectRatio;
-  /// Reader backend fields. TDLib posts leave these null.
-  int? publicMessageId;
-  String? remoteMediaUrl;
 
   NewsPost(this.chatId, this.id, this.date, this.source, this.username, this.body,
       this.photoId, this.photoPath,
       {this.mediaKind = 'none', this.mediaFileId, this.mediaPath, this.fileName,
-       this.previewBytes, this.photoAspectRatio, this.publicMessageId,
-       this.remoteMediaUrl});
+       this.previewBytes, this.photoAspectRatio});
 
   String get key => chatId.toString() + ':' + id.toString();
-  String get link => 'https://t.me/' + username + '/' +
-      (publicMessageId ?? (id >> 20)).toString();
+  String get link => 'https://t.me/' + username + '/' + (id >> 20).toString();
 }
 
 String? parsePublicUsername(String input) {
@@ -157,7 +150,6 @@ String? parsePublicUsername(String input) {
 
 class TdNewsController extends ChangeNotifier {
   final SharedPreferences prefs;
-  late final ReaderBackend reader = ReaderBackend(prefs);
   final bridge = TdBridge();
   final sources = <int, NewsSource>{};
   /// Channel names awaiting remote resolution; do not block the settings UI.
@@ -168,11 +160,10 @@ class TdNewsController extends ChangeNotifier {
   final downloadWaiters = <int, Completer<String>>{};
   final downloadProgress = <int, double>{};
   final _thumbnailStarted = <int>{};
-  final _remoteThumbnailStarted = <String>{};
   List<NewsPost>? _sortedFeed;
   StreamSubscription<Map<String, dynamic>>? listener;
-  String state = 'authorizationStateReady';
-  String status = 'در حال اتصال مستقیم به سرویس خبر…';
+  String state = 'setup';
+  String status = 'API ID و API Hash را برای ورود وارد کنید';
   bool busy = false;
   bool disposed = false;
   bool parametersSubmitted = false;
@@ -229,169 +220,10 @@ class TdNewsController extends ChangeNotifier {
           mediaKind: item['media_kind'] as String? ?? 'none',
           mediaFileId: item['media_file_id'] as int?,
           fileName: item['file_name'] as String?,
-          publicMessageId: item['public_message_id'] as int?,
-          remoteMediaUrl: item['remote_media_url'] as String?,
         );
         saved[savedPost.key] = savedPost;
       } catch (_) { /* One invalid bookmark must not hide other bookmarks. */ }
     }
-  }
-
-  Future<void> startReader() async {
-    if (disposed || busy) return;
-    busy = true;
-    status = 'در حال اتصال مستقیم به سرویس خبر…';
-    changed();
-    try {
-      await reader.ensureAccount();
-      final remote = await reader.getSubscriptions();
-      for (final item in remote) {
-        final channel = item['channel'];
-        if (channel is! Map) continue;
-        final source = _readerSource(Map<String, dynamic>.from(channel));
-        if (source != null) sources[source.id] = source;
-      }
-      await persist();
-      state = 'authorizationStateReady';
-      status = 'اتصال مستقیم به سرویس خبر برقرار است';
-      changed();
-      await refresh();
-    } catch (error) {
-      // Keep the app usable with its locally saved channel list. Pull-to-refresh
-      // will retry the HTTPS backend as soon as connectivity returns.
-      state = 'authorizationStateReady';
-      status = 'سرویس خبر فعلاً پاسخ نداد؛ برای تلاش دوباره تازه‌سازی کنید.';
-      changed();
-    } finally {
-      busy = false;
-      changed();
-    }
-  }
-
-  int _readerSourceId(String username) {
-    var hash = 0x811c9dc5;
-    for (final unit in username.toLowerCase().codeUnits) {
-      hash ^= unit;
-      hash = (hash * 0x01000193) & 0x7fffffff;
-    }
-    return -(hash == 0 ? 1 : hash);
-  }
-
-  NewsSource? _readerSource(Map<String, dynamic> channel) {
-    final username = channel['username']?.toString().trim() ?? '';
-    if (parsePublicUsername(username) == null) return null;
-    final title = channel['title']?.toString().trim();
-    return NewsSource(
-      _readerSourceId(username),
-      username,
-      title == null || title.isEmpty ? username : title,
-    );
-  }
-
-  int _readerDate(dynamic value) {
-    if (value is int) {
-      // The API normally uses ISO strings, but tolerate epoch seconds/millis.
-      return value > 20000000000 ? value ~/ 1000 : value;
-    }
-    final parsed = DateTime.tryParse(value?.toString() ?? '');
-    return (parsed?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch) ~/ 1000;
-  }
-
-  String _readerText(Map<String, dynamic> post) {
-    final text = post['text']?.toString();
-    if (text != null && text.trim().isNotEmpty) return text.trim();
-    final html = post['html']?.toString();
-    if (html == null || html.trim().isEmpty) return '';
-    return html
-        .replaceAll(RegExp(r'<br\\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]+>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .trim();
-  }
-
-  String _readerMediaKind(String? mediaType, String? fileName, String? extra) {
-    final type = mediaType?.toLowerCase() ?? '';
-    final name = fileName?.toLowerCase() ?? '';
-    final meta = extra?.toLowerCase() ?? '';
-    if (name.endsWith('.pdf') || meta.contains('application/pdf')) return 'pdf';
-    if (type.contains('photo') || type.contains('image') || type.contains('sticker')) {
-      return 'photo';
-    }
-    if (type.contains('video') || type.contains('animation') ||
-        name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.mov')) {
-      return 'video';
-    }
-    if (fileName != null && fileName.isNotEmpty) return 'file';
-    return type.isEmpty ? 'none' : 'file';
-  }
-
-  void _recordReaderPost(NewsSource source, Map<String, dynamic> item) {
-    final publicIdRaw = item['id'];
-    final publicId = publicIdRaw is int
-        ? publicIdRaw
-        : int.tryParse(publicIdRaw?.toString() ?? '');
-    if (publicId == null) return;
-
-    String? remoteUrl;
-    String? fileName;
-    String? extra;
-    String? mediaType = item['mediaType']?.toString();
-    double? aspect;
-
-    final document = item['document'];
-    if (document is Map) {
-      final doc = Map<String, dynamic>.from(document);
-      fileName = doc['title']?.toString();
-      extra = doc['extra']?.toString();
-      final url = doc['url']?.toString();
-      if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
-    }
-
-    if (remoteUrl == null) {
-      final url = item['mediaUrl']?.toString();
-      if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
-    }
-
-    final group = item['mediaGroup'];
-    if (remoteUrl == null && group is Map && group['items'] is List) {
-      final items = group['items'] as List;
-      if (items.isNotEmpty && items.first is Map) {
-        final first = Map<String, dynamic>.from(items.first as Map);
-        final url = first['url']?.toString();
-        if (url != null && url.isNotEmpty) remoteUrl = reader.absoluteUri(url).toString();
-        mediaType ??= first['type']?.toString();
-        final width = first['width'];
-        final height = first['height'];
-        if (width is num && height is num && width > 0 && height > 0) {
-          aspect = width.toDouble() / height.toDouble();
-        }
-      }
-    }
-
-    final kind = _readerMediaKind(mediaType, fileName, extra);
-    final key = source.id.toString() + ':' + publicId.toString();
-    final previous = posts[key];
-    posts[key] = NewsPost(
-      source.id,
-      publicId,
-      _readerDate(item['date']),
-      source.title,
-      source.username,
-      _readerText(item),
-      null,
-      kind == 'photo' && previous?.remoteMediaUrl == remoteUrl
-          ? previous?.photoPath
-          : null,
-      mediaKind: kind,
-      mediaPath: previous?.remoteMediaUrl == remoteUrl ? previous?.mediaPath : null,
-      fileName: fileName,
-      photoAspectRatio: aspect ?? previous?.photoAspectRatio,
-      publicMessageId: publicId,
-      remoteMediaUrl: remoteUrl,
-    );
   }
 
   bool isSaved(NewsPost post) => saved.containsKey(post.key);
@@ -424,8 +256,6 @@ class TdNewsController extends ChangeNotifier {
         'media_kind': post.mediaKind,
         'media_file_id': post.mediaFileId,
         'file_name': post.fileName,
-        'public_message_id': post.publicMessageId,
-        'remote_media_url': post.remoteMediaUrl,
       });
     }).toList());
   }
@@ -732,9 +562,12 @@ class TdNewsController extends ChangeNotifier {
     } finally { busy = false; changed(); }
   }
 
-  /// Adds a public channel through the HTTPS Reader backend. No Telegram
-  /// account or direct Telegram socket is required on the phone.
+  /// Queue discovery immediately. A slow Telegram search must not freeze the
+  /// add-channel button or make users wait for the 40-second request timeout.
   Future<void> addChannel(String raw) async {
+    if (state != 'authorizationStateReady') {
+      throw StateError('ابتدا وارد تلگرام شوید.');
+    }
     final name = parsePublicUsername(raw);
     if (name == null) {
       throw FormatException('آدرس کانال باید مانند t.me/channelname باشد.');
@@ -743,43 +576,36 @@ class TdNewsController extends ChangeNotifier {
         source.username.toLowerCase() == name.toLowerCase())) return;
     if (pendingChannels[name] == 'در حال شناسایی کانال…') return;
     pendingChannels[name] = 'در حال شناسایی کانال…';
-    status = 'در حال بررسی @$name از طریق سرویس خبر…';
+    status = 'کانال @$name در صف بررسی تلگرام قرار گرفت.';
     changed();
-    unawaited(_resolveReaderChannel(name));
+    unawaited(_resolveChannel(name));
   }
 
-  Future<void> _resolveReaderChannel(String name) async {
+  Future<void> _resolveChannel(String name) async {
     try {
-      Map<String, dynamic>? channel;
-      try {
-        channel = await reader.subscribe(name);
-      } on ReaderBackendException catch (error) {
-        // Some deployments can already expose public posts while subscription
-        // mutation is temporarily unavailable. Validate through the feed API.
-        if (error.statusCode != 409) {
-          final page = await reader.getPosts(name);
-          final rawChannel = page['channel'];
-          if (rawChannel is Map) {
-            channel = Map<String, dynamic>.from(rawChannel);
-          }
-        }
-      }
+      final chat = await bridge.request({
+        '@type': 'searchPublicChat', 'username': name,
+      });
       if (disposed || !pendingChannels.containsKey(name)) return;
-      final source = channel == null
-          ? NewsSource(_readerSourceId(name), name, name)
-          : (_readerSource(channel) ??
-              NewsSource(_readerSourceId(name), name, name));
-      sources[source.id] = source;
+      final type = chat['type'];
+      if (type is! Map || type['@type'] != 'chatTypeSupergroup' ||
+          type['is_channel'] != true) {
+        throw StateError('این آدرس کانال عمومی نیست.');
+      }
+      final id = chat['id'];
+      if (id is! int) throw StateError('شناسه کانال معتبر نیست.');
+      sources[id] = NewsSource(id, name, chat['title']?.toString() ?? name);
       await persist();
       pendingChannels.remove(name);
       _sortedFeed = null;
       status = 'کانال @$name به منابع خبری اضافه شد.';
       changed();
-      unawaited(loadHistory(source.id, limit: 25));
+      unawaited(loadHistory(id, limit: 12, onlyLocal: true));
+      unawaited(_joinAndWarm(id));
     } catch (_) {
       if (disposed || !pendingChannels.containsKey(name)) return;
       pendingChannels[name] =
-          'سرویس خبر پاسخ نداد؛ برای تلاش دوباره لمس کنید.';
+          'ارتباط با تلگرام برقرار نشد؛ برای تلاش دوباره لمس کنید.';
       changed();
     }
   }
@@ -789,7 +615,7 @@ class TdNewsController extends ChangeNotifier {
         pendingChannels[name] == 'در حال شناسایی کانال…') return;
     pendingChannels[name] = 'در حال شناسایی کانال…';
     changed();
-    unawaited(_resolveReaderChannel(name));
+    unawaited(_resolveChannel(name));
   }
 
   void cancelPendingChannel(String name) {
@@ -797,20 +623,27 @@ class TdNewsController extends ChangeNotifier {
     changed();
   }
 
+  Future<void> _joinAndWarm(int id) async {
+    try {
+      await bridge.request({'@type': 'joinChat', 'chat_id': id});
+    } catch (error) {
+      // Public channels may already be joined. History can still be attempted
+      // and the UI should stay responsive either way.
+      if (!error.toString().toLowerCase().contains('already')) {
+        status = 'کانال اضافه شد؛ عضویت خودکار کامل نشد.';
+        changed();
+      }
+    }
+    await loadHistory(id, limit: 18);
+  }
+
   Future<void> removeChannel(int id) async {
-    final source = sources[id];
     sources.remove(id);
     posts.removeWhere((_, value) => value.chatId == id);
     _sortedFeed = null;
     await persist();
     changed();
-    if (source != null) {
-      try {
-        await reader.unsubscribe(source.username);
-      } catch (_) {
-        // Local removal must stay fast even if the sync endpoint is offline.
-      }
-    }
+    // Does not leave the channel in the user's Telegram account.
   }
 
   Future<void> persist() async {
@@ -819,44 +652,26 @@ class TdNewsController extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (sources.isEmpty) return;
-    status = 'در حال دریافت تازه‌ترین خبرها…';
-    changed();
-    await Future.wait(sources.values.map((source) =>
-        loadHistory(source.id, limit: 25)));
-    if (!disposed) {
-      status = 'اتصال مستقیم به سرویس خبر برقرار است';
-      changed();
-    }
+    if (state != 'authorizationStateReady') return;
+    // Fetch channel metadata concurrently; avoid serial round-trip delays.
+    await Future.wait(sources.values.map((source) => loadHistory(source.id, limit: 25)));
   }
 
   Future<void> loadHistory(int id, {int limit = 25, bool onlyLocal = false}) async {
-    final source = sources[id];
-    if (source == null) return;
     try {
-      final response = await reader.getPosts(source.username);
-      final remoteChannel = response['channel'];
-      if (remoteChannel is Map) {
-        final updated = _readerSource(Map<String, dynamic>.from(remoteChannel));
-        if (updated != null && updated.id == source.id) {
-          sources[id] = updated;
+      final response = await bridge.request({
+        '@type': 'getChatHistory', 'chat_id': id, 'from_message_id': 0,
+        'offset': 0, 'limit': limit, 'only_local': onlyLocal,
+      });
+      if (response['messages'] is List) {
+        for (final m in response['messages'] as List) {
+          if (m is Map) record(Map<String, dynamic>.from(m), notify: false);
         }
+        _sortedFeed = null;
+        changed();
       }
-      final items = response['posts'];
-      if (items is List) {
-        for (final raw in items.take(limit)) {
-          if (raw is Map) {
-            _recordReaderPost(sources[id] ?? source,
-                Map<String, dynamic>.from(raw));
-          }
-        }
-      }
-      _sortedFeed = null;
-      await persist();
-      changed();
     } catch (_) {
-      status = 'دریافت خبرهای @' + source.username +
-          ' موفق نبود؛ برای تلاش دوباره تازه‌سازی کنید.';
+      status = 'دریافت تاریخچه یکی از کانال‌ها موفق نبود؛ دوباره تلاش کنید.';
       changed();
     }
   }
@@ -1068,56 +883,15 @@ class TdNewsController extends ChangeNotifier {
   }
 
   void requestThumbnail(NewsPost post) {
-    if (post.photoPath != null) return;
-    if (post.mediaKind == 'photo' && post.remoteMediaUrl != null) {
-      if (_remoteThumbnailStarted.add(post.key)) {
-        unawaited(_downloadReaderThumbnail(post));
-      }
-      return;
-    }
     final id = post.photoId;
-    if (id == null) return;
+    if (id == null || post.photoPath != null) return;
     photoTargets.putIfAbsent(id, () => <String>{}).add(post.key);
     if (_thumbnailStarted.add(id)) unawaited(downloadPhoto(id));
   }
 
-  Future<void> _downloadReaderThumbnail(NewsPost post) async {
-    try {
-      final url = post.remoteMediaUrl;
-      if (url == null || url.isEmpty) return;
-      final path = await reader.downloadMedia(
-        url,
-        cacheKey: 'thumb_' + post.key,
-        suggestedName: post.fileName,
-      );
-      post.photoPath = path;
-      if (post.mediaKind == 'photo') post.mediaPath = path;
-      changed();
-    } catch (_) {
-      // A visible card can request the image again after the next refresh.
-      _remoteThumbnailStarted.remove(post.key);
-    }
-  }
-
-  /// Downloads Reader media over HTTPS, while retaining TDLib as a legacy
-  /// fallback for already-cached posts from older app versions.
+  /// TDLib caches completed media in app-private storage. Download on demand:
+  /// previews and news updates never request full-length video or PDF files.
   Future<String> ensureMedia(NewsPost post) async {
-    final remote = post.remoteMediaUrl;
-    if (remote != null && remote.isNotEmpty) {
-      final cached = post.mediaPath ??
-          (post.mediaKind == 'photo' ? post.photoPath : null);
-      if (cached != null && cached.isNotEmpty) return cached;
-      final path = await reader.downloadMedia(
-        remote,
-        cacheKey: 'media_' + post.key,
-        suggestedName: post.fileName,
-      );
-      post.mediaPath = path;
-      if (post.mediaKind == 'photo') post.photoPath = path;
-      changed();
-      return path;
-    }
-
     final id = post.mediaFileId ?? (post.mediaKind == 'photo' ? post.photoId : null);
     if (id == null) throw StateError('فایل قابل دانلودی در این پیام پیدا نشد.');
     final cached = post.mediaPath;
