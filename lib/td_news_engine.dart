@@ -732,12 +732,9 @@ class TdNewsController extends ChangeNotifier {
     } finally { busy = false; changed(); }
   }
 
-  /// Queue discovery immediately. A slow Telegram search must not freeze the
-  /// add-channel button or make users wait for the 40-second request timeout.
+  /// Adds a public channel through the HTTPS Reader backend. No Telegram
+  /// account or direct Telegram socket is required on the phone.
   Future<void> addChannel(String raw) async {
-    if (state != 'authorizationStateReady') {
-      throw StateError('ابتدا وارد تلگرام شوید.');
-    }
     final name = parsePublicUsername(raw);
     if (name == null) {
       throw FormatException('آدرس کانال باید مانند t.me/channelname باشد.');
@@ -746,36 +743,43 @@ class TdNewsController extends ChangeNotifier {
         source.username.toLowerCase() == name.toLowerCase())) return;
     if (pendingChannels[name] == 'در حال شناسایی کانال…') return;
     pendingChannels[name] = 'در حال شناسایی کانال…';
-    status = 'کانال @$name در صف بررسی تلگرام قرار گرفت.';
+    status = 'در حال بررسی @$name از طریق سرویس خبر…';
     changed();
-    unawaited(_resolveChannel(name));
+    unawaited(_resolveReaderChannel(name));
   }
 
-  Future<void> _resolveChannel(String name) async {
+  Future<void> _resolveReaderChannel(String name) async {
     try {
-      final chat = await bridge.request({
-        '@type': 'searchPublicChat', 'username': name,
-      });
-      if (disposed || !pendingChannels.containsKey(name)) return;
-      final type = chat['type'];
-      if (type is! Map || type['@type'] != 'chatTypeSupergroup' ||
-          type['is_channel'] != true) {
-        throw StateError('این آدرس کانال عمومی نیست.');
+      Map<String, dynamic>? channel;
+      try {
+        channel = await reader.subscribe(name);
+      } on ReaderBackendException catch (error) {
+        // Some deployments can already expose public posts while subscription
+        // mutation is temporarily unavailable. Validate through the feed API.
+        if (error.statusCode != 409) {
+          final page = await reader.getPosts(name);
+          final rawChannel = page['channel'];
+          if (rawChannel is Map) {
+            channel = Map<String, dynamic>.from(rawChannel);
+          }
+        }
       }
-      final id = chat['id'];
-      if (id is! int) throw StateError('شناسه کانال معتبر نیست.');
-      sources[id] = NewsSource(id, name, chat['title']?.toString() ?? name);
+      if (disposed || !pendingChannels.containsKey(name)) return;
+      final source = channel == null
+          ? NewsSource(_readerSourceId(name), name, name)
+          : (_readerSource(channel) ??
+              NewsSource(_readerSourceId(name), name, name));
+      sources[source.id] = source;
       await persist();
       pendingChannels.remove(name);
       _sortedFeed = null;
       status = 'کانال @$name به منابع خبری اضافه شد.';
       changed();
-      unawaited(loadHistory(id, limit: 12, onlyLocal: true));
-      unawaited(_joinAndWarm(id));
+      unawaited(loadHistory(source.id, limit: 25));
     } catch (_) {
       if (disposed || !pendingChannels.containsKey(name)) return;
       pendingChannels[name] =
-          'ارتباط با تلگرام برقرار نشد؛ برای تلاش دوباره لمس کنید.';
+          'سرویس خبر پاسخ نداد؛ برای تلاش دوباره لمس کنید.';
       changed();
     }
   }
@@ -785,7 +789,7 @@ class TdNewsController extends ChangeNotifier {
         pendingChannels[name] == 'در حال شناسایی کانال…') return;
     pendingChannels[name] = 'در حال شناسایی کانال…';
     changed();
-    unawaited(_resolveChannel(name));
+    unawaited(_resolveReaderChannel(name));
   }
 
   void cancelPendingChannel(String name) {
@@ -793,27 +797,20 @@ class TdNewsController extends ChangeNotifier {
     changed();
   }
 
-  Future<void> _joinAndWarm(int id) async {
-    try {
-      await bridge.request({'@type': 'joinChat', 'chat_id': id});
-    } catch (error) {
-      // Public channels may already be joined. History can still be attempted
-      // and the UI should stay responsive either way.
-      if (!error.toString().toLowerCase().contains('already')) {
-        status = 'کانال اضافه شد؛ عضویت خودکار کامل نشد.';
-        changed();
-      }
-    }
-    await loadHistory(id, limit: 18);
-  }
-
   Future<void> removeChannel(int id) async {
+    final source = sources[id];
     sources.remove(id);
     posts.removeWhere((_, value) => value.chatId == id);
     _sortedFeed = null;
     await persist();
     changed();
-    // Does not leave the channel in the user's Telegram account.
+    if (source != null) {
+      try {
+        await reader.unsubscribe(source.username);
+      } catch (_) {
+        // Local removal must stay fast even if the sync endpoint is offline.
+      }
+    }
   }
 
   Future<void> persist() async {
@@ -822,26 +819,44 @@ class TdNewsController extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (state != 'authorizationStateReady') return;
-    // Fetch channel metadata concurrently; avoid serial round-trip delays.
-    await Future.wait(sources.values.map((source) => loadHistory(source.id, limit: 25)));
+    if (sources.isEmpty) return;
+    status = 'در حال دریافت تازه‌ترین خبرها…';
+    changed();
+    await Future.wait(sources.values.map((source) =>
+        loadHistory(source.id, limit: 25)));
+    if (!disposed) {
+      status = 'اتصال مستقیم به سرویس خبر برقرار است';
+      changed();
+    }
   }
 
   Future<void> loadHistory(int id, {int limit = 25, bool onlyLocal = false}) async {
+    final source = sources[id];
+    if (source == null) return;
     try {
-      final response = await bridge.request({
-        '@type': 'getChatHistory', 'chat_id': id, 'from_message_id': 0,
-        'offset': 0, 'limit': limit, 'only_local': onlyLocal,
-      });
-      if (response['messages'] is List) {
-        for (final m in response['messages'] as List) {
-          if (m is Map) record(Map<String, dynamic>.from(m), notify: false);
+      final response = await reader.getPosts(source.username);
+      final remoteChannel = response['channel'];
+      if (remoteChannel is Map) {
+        final updated = _readerSource(Map<String, dynamic>.from(remoteChannel));
+        if (updated != null && updated.id == source.id) {
+          sources[id] = updated;
         }
-        _sortedFeed = null;
-        changed();
       }
+      final items = response['posts'];
+      if (items is List) {
+        for (final raw in items.take(limit)) {
+          if (raw is Map) {
+            _recordReaderPost(sources[id] ?? source,
+                Map<String, dynamic>.from(raw));
+          }
+        }
+      }
+      _sortedFeed = null;
+      await persist();
+      changed();
     } catch (_) {
-      status = 'دریافت تاریخچه یکی از کانال‌ها موفق نبود؛ دوباره تلاش کنید.';
+      status = 'دریافت خبرهای @' + source.username +
+          ' موفق نبود؛ برای تلاش دوباره تازه‌سازی کنید.';
       changed();
     }
   }
