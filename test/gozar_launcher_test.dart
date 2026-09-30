@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telegram_news/gozar_launcher.dart';
 import 'package:telegram_news/gozar_shortcuts.dart';
-import 'package:telegram_news/td_system_vpn.dart';
+import 'package:telegram_news/gozar_platform_bridge.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -131,12 +131,12 @@ void main() {
     expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+    messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, (call) async {
       if (call.method == 'appIcon') return null;
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(
-        SystemVpnBridge.channel, null));
+        GozarPlatformBridge.channel, null));
     GozarShortcut? launched;
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: GozarLauncher(preferences: prefs,
@@ -205,12 +205,12 @@ void main() {
     expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+    messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, (call) async {
       if (call.method == 'appIcon') return null;
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(
-        SystemVpnBridge.channel, null));
+        GozarPlatformBridge.channel, null));
     var launches = 0;
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: SizedBox(width: 400, child: GozarLauncher(
@@ -255,12 +255,12 @@ void main() {
     expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+    messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, (call) async {
       if (call.method == 'appIcon') return null;
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(
-        SystemVpnBridge.channel, null));
+        GozarPlatformBridge.channel, null));
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: GozarLauncher(preferences: prefs, onOpenApp: (app) async {}),
     )));
@@ -313,7 +313,7 @@ void main() {
     ]), isTrue);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+    messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, (call) async {
       if (call.method == 'appIcon') return null;
       if (call.method == 'installedApps') {
         return [
@@ -327,7 +327,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(
-        SystemVpnBridge.channel, null));
+        GozarPlatformBridge.channel, null));
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: GozarLauncher(
         preferences: prefs, onOpenApp: (app) async {}),
@@ -370,12 +370,12 @@ void main() {
     expect(await GozarLauncherStore.save(prefs, [section]), isTrue);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemVpnBridge.channel, (call) async {
+    messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, (call) async {
       if (call.method == 'appIcon') return null;
       return null;
     });
     addTearDown(() =>
-      messenger.setMockMethodCallHandler(SystemVpnBridge.channel, null));
+      messenger.setMockMethodCallHandler(GozarPlatformBridge.channel, null));
     GozarShortcut? launched;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: GozarLauncher(preferences: prefs,
