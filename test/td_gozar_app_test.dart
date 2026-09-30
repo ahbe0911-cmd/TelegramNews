@@ -29,15 +29,11 @@ void main() {
         preferences: await SharedPreferences.getInstance()));
     // The requested live neon animation continuously ticks by design.
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('گذر'), findsWidgets);
-    expect(find.byKey(const ValueKey('gozar-power')), findsOneWidget);
-    final dial = find.byKey(const ValueKey('gozar-clock-dial'));
-    expect(dial, findsOneWidget);
-    final dialRect = tester.getRect(dial);
-    final powerRect = tester.getRect(
-        find.byKey(const ValueKey('gozar-power')));
-    expect((dialRect.width - powerRect.width).abs(), lessThan(1.0));
-    expect((dialRect.top - powerRect.top).abs(), lessThan(1.0));
+    expect(find.text('گذر'), findsNothing);
+    // Home is now the launcher and is the default page at every normal start.
+    expect(find.byKey(const ValueKey('gozar-launcher-top-toolbar')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-power')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
@@ -63,8 +59,6 @@ void main() {
         findsNothing);
     // The launcher is now the first bottom tab and is presented as Home;
     // its saved sections and scroll position must remain intact.
-    await tester.tap(find.text('خانه'));
-    await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-launcher-top-toolbar')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-network-tab')), findsNothing);
@@ -76,6 +70,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-open-servers-settings')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-open-wireguard-settings')),
         findsOneWidget);
     await tester.tap(find.byKey(
         const ValueKey('gozar-open-servers-settings')));
@@ -96,6 +92,13 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-vpn-settings')), findsWidgets);
     await tester.tap(find.text('VPN'));
     await tester.pump(const Duration(milliseconds: 250));
+    final dial = find.byKey(const ValueKey('gozar-clock-dial'));
+    expect(dial, findsOneWidget);
+    final dialRect = tester.getRect(dial);
+    final powerRect = tester.getRect(
+        find.byKey(const ValueKey('gozar-power')));
+    expect((dialRect.width - powerRect.width).abs(), lessThan(1.0));
+    expect((dialRect.top - powerRect.top).abs(), lessThan(1.0));
     // VPN uses the large animated power button; manual config and action
     // row live on the Servers page rather than cluttering the home view.
     expect(find.byKey(const ValueKey('gozar-power')), findsOneWidget);
@@ -135,6 +138,8 @@ void main() {
         SystemVpnBridge.channel, null));
     await tester.pumpWidget(GozarApp(preferences: preferences));
     await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('VPN'));
+    await tester.pump(const Duration(milliseconds: 250));
     final card = find.byKey(const ValueKey('gozar-home-due-notes'));
     await tester.scrollUntilVisible(card, 150,
       scrollable: find.descendant(
@@ -275,6 +280,8 @@ void main() {
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('VPN'));
+    await tester.pump(const Duration(milliseconds: 150));
     expect(find.byKey(const ValueKey('gozar-real-connection-result')),
         findsNothing);
     await tester.ensureVisible(find.byKey(const ValueKey('gozar-test-real-connection')));
@@ -312,6 +319,8 @@ void main() {
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('VPN'));
+    await tester.pump(const Duration(milliseconds: 150));
     await tester.ensureVisible(find.byKey(const ValueKey('gozar-test-real-connection')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const ValueKey('gozar-test-real-connection')));
@@ -347,6 +356,8 @@ void main() {
     await tester.pumpWidget(GozarApp(
         preferences: await SharedPreferences.getInstance()));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('VPN'));
+    await tester.pump(const Duration(milliseconds: 150));
     expect(find.text('برای قطع اتصال لمس کنید'), findsOneWidget);
     await tester.tap(find.byTooltip('به‌روزرسانی وضعیت'));
     await tester.pump(const Duration(milliseconds: 50));
@@ -384,6 +395,8 @@ void main() {
       await tester.pumpWidget(GozarApp(
           preferences: await SharedPreferences.getInstance()));
       await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.text('VPN'));
+      await tester.pump(const Duration(milliseconds: 150));
       expect(find.text('برای قطع اتصال لمس کنید'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('gozar-power')));
       await tester.pump(const Duration(milliseconds: 400));
