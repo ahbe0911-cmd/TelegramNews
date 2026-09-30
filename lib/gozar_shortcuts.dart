@@ -128,7 +128,7 @@ class GozarShortcutIcon extends StatefulWidget {
 
 class _GozarShortcutIconState extends State<GozarShortcutIcon> {
   static const _channel =
-      MethodChannel('ir.channel.telegram_tdnews/system_vpn');
+      MethodChannel('ir.channel.telegram_tdnews/gozar_platform');
   static final Map<String, Future<Uint8List?>> _cache = {};
   late Future<Uint8List?> _icon;
 
