@@ -267,23 +267,25 @@ object SystemVpnBridge {
                             WireGuardController.detail = "WireGuard خاموش است."
                         }
                         WireGuardController.stop(activity)
-                        try {
-                            // stopService() only schedules onDestroy(): send an
-                            // ordered command to close the Xray TUN immediately.
-                            activity.startService(
-                                Intent(activity, SystemVpnService::class.java)
-                                    .setAction(SystemVpnService.ACTION_STOP)
-                            )
+                        if (SystemVpnService.stage == "off") {
                             result.success(null)
-                        } catch (error: Exception) {
-                            val stopped = activity.stopService(
-                                Intent(activity, SystemVpnService::class.java)
-                            )
-                            // WireGuard may have been the active engine, so a
-                            // missing Xray service is not a disconnect failure.
-                            if (stopped || activeEngine == "wireguard") result.success(null) else
-                                result.error("VPN_STOP_FAILED",
-                                    "Android could not stop the VPN service", null)
+                        } else {
+                            try {
+                                // stopService() only schedules onDestroy(): send an
+                                // ordered command to close the Xray TUN immediately.
+                                activity.startService(
+                                    Intent(activity, SystemVpnService::class.java)
+                                        .setAction(SystemVpnService.ACTION_STOP)
+                                )
+                                result.success(null)
+                            } catch (error: Exception) {
+                                val stopped = activity.stopService(
+                                    Intent(activity, SystemVpnService::class.java)
+                                )
+                                if (stopped) result.success(null) else
+                                    result.error("VPN_STOP_FAILED",
+                                        "Android could not stop the VPN service", null)
+                            }
                         }
                     }
 
