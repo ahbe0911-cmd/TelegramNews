@@ -33,7 +33,7 @@ class MainActivity : FlutterActivity() {
     }
 ''', 1)
 activity.write_text(code)
-for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'VpnRoutingPolicy.kt', 'AutomaticBypassPolicy.kt', 'InternalTelegramProxyService.kt'):
+for name in ('SystemVpnBridge.kt', 'SystemVpnService.kt', 'WireGuardController.kt', 'VpnRoutingPolicy.kt', 'AutomaticBypassPolicy.kt', 'InternalTelegramProxyService.kt'):
     (activity.parent / name).write_bytes((ROOT / 'native' / name).read_bytes())
 
 manifest = host / 'app/src/main/AndroidManifest.xml'
@@ -88,6 +88,6 @@ source = source.replace('android {', '''android {
         }
     }
 ''', 1)
-source += '\ndependencies { implementation(files("libs/libv2ray.aar")) }\n'
+source += '\ndependencies {\n    implementation(files("libs/libv2ray.aar"))\n    implementation("com.wireguard.android:tunnel:1.0.20260102")\n}\n'
 gradle.write_text(source)
-print('Configured real Android VPN service, platform consent, TUN FD and Xray AAR dependency')
+print('Configured Xray + official WireGuard Android VPN engines and platform consent')
