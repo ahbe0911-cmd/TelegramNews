@@ -629,26 +629,37 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         return;
       }
       final status = native['stage']?.toString() ?? 'off';
+      final engine = native['engine']?.toString() == 'wireguard'
+          ? 'wireguard' : 'xray';
       // A status read that began before a stop request must not repaint
       // "running" over the user's explicit disconnect action.
       if (disconnecting && (status == 'running' || status == 'starting')) {
         return;
       }
-      final nextDetail = switch (status) {
-          'running' => 'تونل اندروید فعال است؛ اتصال اینترنت سرور را '
+      final nextDetail = switch ((engine, status)) {
+          ('wireguard', 'running') => 'تونل WireGuard فعال است.',
+          ('wireguard', 'starting') => 'در حال راه‌اندازی موتور WireGuard…',
+          ('wireguard', 'consent') => 'مجوز VPN اندروید را برای WireGuard تأیید کنید.',
+          ('wireguard', 'stopping') => 'در حال قطع WireGuard…',
+          ('wireguard', 'error') =>
+              native['detail']?.toString() ?? 'موتور WireGuard اجرا نشد.',
+          (_, 'running') => 'تونل Xray فعال است؛ اتصال اینترنت سرور را '
               'با دکمه آزمون جداگانه بررسی کنید.',
-          'starting' => 'در حال راه‌اندازی موتور Xray و تونل اندروید…',
-          'consent' => 'مجوز VPN را در پنجره سیستم تأیید کنید.',
-          'stopping' => 'در حال بستن تونل و توقف موتور VPN…',
-          'error' => 'موتور VPN راه‌اندازی نشد؛ کانفیگ و مجوز اندروید را بررسی کنید.',
+          (_, 'starting') => 'در حال راه‌اندازی موتور Xray و تونل اندروید…',
+          (_, 'consent') => 'مجوز VPN را در پنجره سیستم تأیید کنید.',
+          (_, 'stopping') => 'در حال بستن تونل و توقف موتور VPN…',
+          (_, 'error') => 'موتور VPN راه‌اندازی نشد؛ کانفیگ و مجوز اندروید را بررسی کنید.',
           _ => 'VPN خاموش است.',
         };
-      final clearProbe = status != 'running' &&
-          (testingProxy || proxyVerified != null || proxyLatencyMs != null);
-      if (status != stage || nextDetail != detail || clearProbe) {
+      final clearProbe = status != 'running' || engine != 'xray'
+          ? (testingProxy || proxyVerified != null || proxyLatencyMs != null)
+          : false;
+      if (status != stage || nextDetail != detail ||
+          engine != activeEngine || clearProbe) {
         setState(() {
           stage = status;
           detail = nextDetail;
+          activeEngine = engine;
           if (clearProbe) {
             proxyTestId++;
             testingProxy = false;
@@ -699,11 +710,61 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
+  Future<String?> _chooseConnectionEngine() =>
+      showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('با کدام نوع اکانت وصل شوید؟',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              ListTile(
+                key: const ValueKey('gozar-connect-xray'),
+                leading: const Icon(Icons.hub_outlined),
+                title: const Text('Xray / V2Ray'),
+                subtitle: Text(profiles.isEmpty
+                    ? 'هنوز سرور Xray ذخیره نشده'
+                    : persianDigits(profiles.length) + ' سرور ذخیره‌شده'),
+                onTap: () => Navigator.of(sheet).pop('xray'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                key: const ValueKey('gozar-connect-wireguard'),
+                leading: const Icon(Icons.vpn_key_outlined),
+                title: const Text('WireGuard'),
+                subtitle: Text(wireGuardProfiles.isEmpty
+                    ? 'هنوز اکانت WireGuard ذخیره نشده'
+                    : persianDigits(wireGuardProfiles.length) +
+                        ' اکانت ذخیره‌شده'),
+                onTap: () => Navigator.of(sheet).pop('wireguard'),
+              ),
+            ]),
+          ),
+        ),
+      );
+
   Future<void> connect() async {
     if (busy || disconnecting || stage == 'stopping') return;
+    final engine = await _chooseConnectionEngine();
+    if (engine == null || !mounted) return;
+
+    if (engine == 'wireguard' && wireGuardProfiles.isEmpty) {
+      setState(() {
+        visitedPages.add(3);
+        currentPage = 3;
+        showServerSettings = false;
+        showWireGuardSettings = true;
+      });
+      notice('ابتدا یک اکانت WireGuard در تنظیمات اضافه کنید.');
+      return;
+    }
     final requestId = ++operationId;
     setState(() {
       busy = true;
+      activeEngine = engine;
       proxyTestId++;
       testingProxy = false;
       proxyVerified = null;
@@ -714,14 +775,27 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         throw const FormatException(
           'حداقل یک برنامه را انتخاب کنید یا حالت «همه برنامه‌ها» را بزنید.');
       }
-      final input = profile.text.trim();
-      final config = buildFullDeviceXrayConfig(input);
-      await _vault.write(key: 'gozar_xray_profile', value: input);
-      if (requestId != operationId) return;
-      // Only the selected server is changed; native TUN and routing logic
-      // remains the same as the previous released Gozar build.
-      await SystemVpnBridge.start(config, mode: mode,
-          packages: packages.toList());
+      if (engine == 'wireguard') {
+        final index = selectedWireGuardProfile >= 0 &&
+                selectedWireGuardProfile < wireGuardProfiles.length
+            ? selectedWireGuardProfile : 0;
+        final config = validateWireGuardConfig(
+            wireGuardProfiles[index].config);
+        if (selectedWireGuardProfile != index) {
+          setState(() { selectedWireGuardProfile = index; });
+          await widget.preferences.setInt(
+              'gozar_wireguard_profile_index', index);
+        }
+        await SystemVpnBridge.startWireGuard(config, mode: mode,
+            packages: packages.toList());
+      } else {
+        final input = profile.text.trim();
+        final config = buildFullDeviceXrayConfig(input);
+        await _vault.write(key: 'gozar_xray_profile', value: input);
+        if (requestId != operationId) return;
+        await SystemVpnBridge.start(config, mode: mode,
+            packages: packages.toList());
+      }
       if (requestId != operationId) {
         // Stop can be pressed during the async permission/start operation.
         await SystemVpnBridge.stop();
@@ -729,7 +803,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
       }
       await refresh();
       // Android's permission sheet is asynchronous; do not claim connectivity
-      // until the native service reports that it started its TUN core.
+      // until the selected native engine reports its state.
       for (var i = 0; i < 18 && mounted && requestId == operationId; i++) {
         if (stage == 'running' || stage == 'error' || stage == 'off' ||
             stage == 'stopping') break;
@@ -907,6 +981,19 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   String get serverLabel =>
       selectedProfile >= 0 && selectedProfile < profiles.length
           ? profiles[selectedProfile].name : 'کانفیگ جدید';
+
+  String get wireGuardLabel =>
+      selectedWireGuardProfile >= 0 &&
+          selectedWireGuardProfile < wireGuardProfiles.length
+      ? wireGuardProfiles[selectedWireGuardProfile].name
+      : 'WireGuard';
+
+  String get connectionLabel {
+    if (stage != 'running') return 'نوع اتصال هنگام وصل شدن انتخاب می‌شود';
+    return activeEngine == 'wireguard'
+        ? 'WireGuard • ' + wireGuardLabel
+        : 'Xray • ' + serverLabel;
+  }
 
   Widget _eyebrow(IconData icon, String title, {Color? color}) => Row(
     children: [
