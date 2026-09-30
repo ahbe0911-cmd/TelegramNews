@@ -294,8 +294,8 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                   textDirection: TextDirection.ltr,
                   textAlign: TextAlign.left,
                   decoration: const InputDecoration(
-                    labelText: 'کانفیگ WireGuard',
-                    hintText: '[Interface]\nPrivateKey = ...\n\n[Peer]\nPublicKey = ...',
+                    labelText: 'کانفیگ یا لینک WireGuard',
+                    hintText: 'wireguard://...  یا  [Interface] ... [Peer] ...',
                   ),
                 ),
               ]),
@@ -1737,8 +1737,10 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           _eyebrow(Icons.vpn_key_rounded, 'اکانت‌های WireGuard'),
           const SizedBox(height: 8),
           const Text(
-            'کانفیگ استاندارد WireGuard را با بخش‌های [Interface] و [Peer] '
-            'وارد کنید. PrivateKey فقط در فضای امن گوشی ذخیره می‌شود.',
+            'لینک wireguard:// را مستقیم Paste کنید یا کانفیگ استاندارد '
+            '[Interface] / [Peer] را وارد کنید. برنامه لینک را خودکار '
+            'به فرمت WireGuard تبدیل می‌کند و PrivateKey فقط در فضای امن '
+            'گوشی ذخیره می‌شود.',
             style: TextStyle(color: GozarPalette.muted, fontSize: 12),
           ),
           const SizedBox(height: 12),
