@@ -7,18 +7,19 @@ on:
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
-      - 'lib/gozar_telegram_web.dart'
-      - 'native/GozarTelegramWebView.kt'
-      - 'test/gozar_telegram_web_test.dart'
-      - 'scripts/configure_variant.py'
+      - 'lib/gozar_platform_bridge.dart'
       - 'lib/gozar_notes_store.dart'
       - 'lib/gozar_notes_screen.dart'
-      - 'test/gozar_notes_test.dart'
-      - 'native/GozarReminderBridge.kt'
       - 'lib/gozar_shortcuts.dart'
+      - 'native/GozarPlatformBridge.kt'
+      - 'native/GozarWebActivity.kt'
+      - 'native/GozarReminderBridge.kt'
       - 'test/gozar_launcher_test.dart'
+      - 'test/gozar_notes_test.dart'
+      - 'test/gozar_shortcuts_test.dart'
       - 'test/td_gozar_app_test.dart'
       - 'scripts/configure_gozar_standalone.py'
+      - 'scripts/configure_variant.py'
       - '.github/workflows/gozar-launcher-ci.yml'
 
 permissions:
@@ -42,19 +43,11 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Prepare independent Android VPN host
+      - name: Prepare standalone Gozar Android host
         run: |
           python3 scripts/prepare_android.py --profile modern
           python3 scripts/configure_variant.py gozar
-          python3 scripts/enable_full_vpn.py
           python3 scripts/configure_gozar_standalone.py
-      - name: Install pinned Xray engine
-        run: |
-          mkdir -p android/app/libs
-          curl -fL --retry 3 --retry-delay 3 \
-            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
-            -o android/app/libs/libv2ray.aar
-          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
       - name: Install licensed Vazirmatn assets
         run: |
           mkdir -p assets/fonts
@@ -66,40 +59,41 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_platform_bridge.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/td_gozar_app_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Test Persian notes and in-app calendar
         run: flutter test --reporter expanded test/gozar_notes_test.dart
-      - name: Test Gozar navigation and VPN regressions
+      - name: Test Gozar navigation without network features
         run: |
           flutter test --reporter expanded test/td_gozar_app_test.dart
           flutter test --reporter expanded test/gozar_shortcuts_test.dart
-      - name: Verify standalone Android app launcher
+      - name: Verify standalone Android launcher and absence of tunnel services
         run: |
           python3 - <<'PY'
           from pathlib import Path
           root = Path('android/app/src/main')
-          bridge = next((root / 'kotlin').rglob('SystemVpnBridge.kt')).read_text()
-          for action in ('openShortcutApp', 'appIcon', 'installedApps'):
+          bridge = next((root / 'kotlin').rglob('GozarPlatformBridge.kt')).read_text()
+          for action in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
               assert bridge.count(f'"{action}" ->') == 1, action
-          assert 'InternalTelegramProxyService' not in bridge
+          for forbidden in ('VpnService', 'WireGuard', 'Xray', 'SystemVpnBridge'):
+              assert forbidden not in bridge, forbidden
           main = next((root / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (root / 'AndroidManifest.xml').read_text()
           alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
-          assert 'GozarReminderBridge.attach(this, flutterEngine)' in main
-          assert 'GozarTelegramWebViewFactory' not in main
-          assert not list((root / 'kotlin').rglob('GozarTelegramWebView.kt'))
-          assert 'GozarSocialWebViewFactory' not in main
-          assert not list((root / 'kotlin').rglob('GozarSocialWebView.kt'))
-          assert not list((root / 'kotlin').rglob('GozarSocialDownloads.kt'))
+          assert 'GozarPlatformBridge.attach(this, flutterEngine)' in main
+          assert 'SystemVpnBridge' not in main
+          assert not list((root / 'kotlin').rglob('SystemVpnService.kt'))
+          assert not list((root / 'kotlin').rglob('WireGuardController.kt'))
+          assert 'BIND_VPN_SERVICE' not in manifest
+          assert 'android.net.VpnService' not in manifest
+          assert 'GozarWebActivity' in manifest
           main_dart = Path('lib/gozar_main.dart').read_text()
-          assert "label: 'شبکه'" not in main_dart
-          assert 'GozarSocialTab(' not in main_dart
-          assert main_dart.count('NavigationDestination(') == 4
+          for forbidden in ('VPN', 'WireGuard', 'Xray', 'SystemVpnBridge'):
+              assert forbidden not in main_dart, forbidden
+          assert main_dart.count('NavigationDestination(') == 3
           assert 'GozarLauncher(' in main_dart
           assert 'GozarNotesScreen(' in main_dart
-          assert 'GozarWebActivity' in manifest
           icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
           assert '#0C5489' in icon and '#61E9DA' in icon
           for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
@@ -108,7 +102,7 @@ jobs:
           for action in ('setExactAndAllowWhileIdle', 'setAndAllowWhileIdle',
                          'POST_NOTIFICATIONS', 'ACTION_BOOT_COMPLETED'):
               assert action in alarm, action
-          print('Launcher and native reminder alarm handlers are present.')
+          print('Gozar launcher/notes host contains no tunnel service.')
           PY
       - name: Compile Gozar ARM64 without full artifact quota
         run: |
@@ -117,9 +111,8 @@ jobs:
           python3 scripts/verify_apk_variant.py gozar
           test -s build/app/outputs/flutter-apk/app-release.apk
           sha256sum build/app/outputs/flutter-apk/app-release.apk
-          echo 'Gozar APK compiled and verified; attempting to publish the installable file.'
+          echo 'Gozar APK compiled and verified.'
       - name: Publish verified Gozar launcher APK
-        # Quota exhaustion must not misreport compilation/test success as failure.
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
