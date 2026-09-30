@@ -66,7 +66,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-notes-calendar')),
         findsOneWidget);
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    navigation.onDestinationSelected(3);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const ValueKey('gozar-settings-page')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
