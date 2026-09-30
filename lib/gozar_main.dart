@@ -1409,7 +1409,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
           style: TextStyle(color: connected
               ? const Color(0xff117145) : GozarPalette.daylightMuted,
               fontSize: 11)),
-        if (connected) ...[
+        if (connected && activeEngine == 'xray') ...[
           const SizedBox(height: 6),
           OutlinedButton.icon(
             key: const ValueKey('gozar-test-real-connection'),
@@ -1435,20 +1435,22 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         ],
         const SizedBox(height: 5),
         Row(children: [
-          const Icon(Icons.dns_rounded, size: 15,
-              color: GozarPalette.daylightAccent),
+          Icon(activeEngine == 'wireguard'
+              ? Icons.vpn_key_rounded : Icons.dns_rounded,
+              size: 15, color: GozarPalette.daylightAccent),
           const SizedBox(width: 5),
-          Expanded(child: Text(serverLabel,
+          Expanded(child: Text(connectionLabel,
             maxLines: 1, overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: GozarPalette.daylightInk, fontSize: 11))),
           TextButton(
             onPressed: () => setState(() {
               visitedPages.add(3);
-              showServerSettings = true;
+              showServerSettings = false;
+              showWireGuardSettings = false;
               currentPage = 3;
             }),
-            child: const Text('تغییر سرور', style: TextStyle(
+            child: const Text('مدیریت اکانت‌ها', style: TextStyle(
               color: GozarPalette.daylightAccent, fontSize: 11)),
           ),
         ]),
@@ -1678,7 +1680,114 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     ],
   );
 
-  Widget _security() => showServerSettings
+  Widget _wireGuardCard(int index) {
+    final item = wireGuardProfiles[index];
+    final selected = selectedWireGuardProfile == index;
+    return GozarPanel(
+      glow: selected ? GozarPalette.cyan : GozarPalette.purple,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(selected ? Icons.check_circle_rounded : Icons.vpn_key_outlined,
+              color: selected ? GozarPalette.cyan : GozarPalette.purple),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.name, style: const TextStyle(
+                color: GozarPalette.text,
+                fontSize: 15, fontWeight: FontWeight.w800)),
+              const Text('کانفیگ WireGuard ذخیره‌شده • کلید خصوصی پنهان',
+                style: TextStyle(color: GozarPalette.muted, fontSize: 11)),
+            ],
+          )),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: FilledButton.icon(
+            key: ValueKey('gozar-select-wireguard-' + index.toString()),
+            onPressed: () => unawaited(selectWireGuardProfile(index)),
+            icon: Icon(selected
+                ? Icons.verified_rounded : Icons.radio_button_unchecked),
+            label: Text(selected ? 'اکانت انتخاب‌شده' : 'انتخاب این اکانت'),
+          )),
+          IconButton(
+            tooltip: 'ویرایش اکانت',
+            onPressed: () => unawaited(editWireGuardProfile(index: index)),
+            icon: const Icon(Icons.edit_outlined, color: GozarPalette.muted),
+          ),
+          IconButton(
+            tooltip: 'حذف اکانت',
+            onPressed: stage == 'running'
+                ? null : () => unawaited(deleteWireGuardProfile(index)),
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: GozarPalette.purple),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _wireGuardAccounts() => ListView(
+    key: const ValueKey('gozar-wireguard-settings-page'),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+    children: [
+      GozarPanel(
+        glow: GozarPalette.cyan,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _eyebrow(Icons.vpn_key_rounded, 'اکانت‌های WireGuard'),
+          const SizedBox(height: 8),
+          const Text(
+            'کانفیگ استاندارد WireGuard را با بخش‌های [Interface] و [Peer] '
+            'وارد کنید. PrivateKey فقط در فضای امن گوشی ذخیره می‌شود.',
+            style: TextStyle(color: GozarPalette.muted, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            key: const ValueKey('gozar-add-wireguard'),
+            onPressed: stage == 'running'
+                ? null : () => unawaited(editWireGuardProfile()),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('افزودن اکانت WireGuard'),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      if (wireGuardProfiles.isEmpty)
+        const GozarPanel(
+          child: Text(
+            'هنوز اکانت WireGuard ذخیره نشده است.',
+            style: TextStyle(color: GozarPalette.muted),
+          ),
+        )
+      else
+        for (var i = 0; i < wireGuardProfiles.length; i++) ...[
+          _wireGuardCard(i),
+          const SizedBox(height: 10),
+        ],
+    ],
+  );
+
+  Widget _security() => showWireGuardSettings
+      ? Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(13, 7, 13, 0),
+            child: Row(children: [
+              IconButton(
+                key: const ValueKey('gozar-back-from-wireguard'),
+                onPressed: () => setState(() {
+                  showWireGuardSettings = false;
+                }),
+                icon: const Icon(Icons.arrow_forward_rounded,
+                    color: GozarPalette.cyan),
+              ),
+              const Expanded(child: Text('مدیریت WireGuard',
+                style: TextStyle(color: GozarPalette.text,
+                  fontSize: 17, fontWeight: FontWeight.w800))),
+            ]),
+          ),
+          Expanded(child: _wireGuardAccounts()),
+        ])
+      : showServerSettings
       ? Column(children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(13, 7, 13, 0),
@@ -1721,6 +1830,32 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
               }),
               icon: const Icon(Icons.dns_outlined),
               label: const Text('ورود به مدیریت سرورها'),
+            ),
+          ]),
+      ),
+      const SizedBox(height: 13),
+      GozarPanel(
+        glow: GozarPalette.purple,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _eyebrow(Icons.vpn_key_rounded, 'WireGuard',
+                color: GozarPalette.purple),
+            const SizedBox(height: 8),
+            Text(wireGuardProfiles.isEmpty
+                ? 'افزودن و مدیریت اکانت‌های WireGuard'
+                : persianDigits(wireGuardProfiles.length) +
+                    ' اکانت WireGuard ذخیره‌شده',
+              style: const TextStyle(
+                color: GozarPalette.muted, fontSize: 12)),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              key: const ValueKey('gozar-open-wireguard-settings'),
+              onPressed: () => setState(() {
+                showServerSettings = false;
+                showWireGuardSettings = true;
+              }),
+              icon: const Icon(Icons.vpn_key_outlined),
+              label: const Text('مدیریت اکانت‌های WireGuard'),
             ),
           ]),
       ),
