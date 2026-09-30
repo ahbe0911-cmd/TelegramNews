@@ -1628,11 +1628,21 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
             backgroundColor: const Color(0xfffcfeff),
             indicatorColor: const Color(0xffd3edff),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            selectedIndex: currentPage,
+            // Bottom navigation order is intentionally independent from
+            // the internal page indexes: 1=Launcher(Home), 2=Notes,
+            // 0=VPN, 3=Settings. This keeps VPN/reminder logic unchanged.
+            selectedIndex: switch (currentPage) {
+              1 => 0,
+              2 => 1,
+              0 => 2,
+              _ => 3,
+            },
             onDestinationSelected: (index) {
+              const pages = <int>[1, 2, 0, 3];
+              final page = pages[index];
               setState(() {
-                visitedPages.add(index);
-                currentPage = index;
+                visitedPages.add(page);
+                currentPage = page;
               });
             },
             destinations: [
@@ -1643,17 +1653,17 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
                       ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'خانه'),
               NavigationDestination(
-                icon: const Icon(Icons.grid_view_outlined),
-                selectedIcon: Icon(Icons.grid_view_rounded,
-                    color: currentPage == 0
-                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
-                label: 'لانچر'),
-              NavigationDestination(
                 icon: const Icon(Icons.event_note_outlined),
                 selectedIcon: Icon(Icons.event_note_rounded,
                     color: currentPage == 0
                       ? GozarPalette.daylightAccent : GozarPalette.cyan),
                 label: 'یادداشت'),
+              NavigationDestination(
+                icon: const Icon(Icons.shield_outlined),
+                selectedIcon: Icon(Icons.shield_rounded,
+                    color: currentPage == 0
+                      ? GozarPalette.daylightAccent : GozarPalette.cyan),
+                label: 'VPN'),
               NavigationDestination(
                 icon: const Icon(Icons.settings_outlined),
                 selectedIcon: Icon(Icons.settings_rounded,
