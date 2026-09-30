@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'gozar_shortcuts.dart';
 import 'gozar_visuals.dart';
-import 'td_system_vpn.dart';
+import 'gozar_platform_bridge.dart';
 
 /// Independent of the ten home shortcuts: launcher sections have their own
 /// saved app lists, layout and stable Android launcher Activity identifiers.
@@ -550,7 +550,7 @@ class _GozarLauncherState extends State<GozarLauncher> {
       installed = cached;
     } else {
       try {
-        installed = await SystemVpnBridge.installedApps();
+        installed = await GozarPlatformBridge.installedApps();
         cachedInstalledApps = installed;
         installedAppsFetchedAt = DateTime.now();
       } catch (_) {
