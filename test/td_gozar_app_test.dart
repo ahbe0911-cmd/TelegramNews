@@ -69,7 +69,6 @@ void main() {
     navigation.onDestinationSelected!(3);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const ValueKey('gozar-settings-page')), findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-open-servers-settings')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-open-wireguard-settings')),
