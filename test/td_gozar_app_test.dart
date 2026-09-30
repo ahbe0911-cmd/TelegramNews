@@ -66,8 +66,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-notes-calendar')),
         findsOneWidget);
-    await tester.tap(find.text('تنظیمات'));
-    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const ValueKey('gozar-settings-page')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-open-servers-settings')),
         findsOneWidget);
