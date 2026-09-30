@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'td_system_vpn.dart';
+import 'gozar_vpn.dart';
 
 class GozarSubscriptionNode {
   final String name;
@@ -48,7 +48,7 @@ List<GozarSubscriptionNode> parseGozarSubscription(String payload) {
     final link = match.group(0)!.trim();
     if (!seen.add(link)) continue;
     try {
-      buildFullDeviceXrayConfig(link);
+      buildGozarXrayConfig(link);
       final uri = Uri.tryParse(link);
       final fragment = uri == null ? '' : Uri.decodeComponent(uri.fragment);
       final label = fragment.trim().isNotEmpty
@@ -103,7 +103,7 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
 }
 
 ({String host, int port}) gozarEndpoint(String link) {
-  final config = jsonDecode(buildFullDeviceXrayConfig(link))
+  final config = jsonDecode(buildGozarXrayConfig(link))
       as Map<String, dynamic>;
   final outbound = (config['outbounds'] as List).first as Map;
   final settings = outbound['settings'] as Map;
