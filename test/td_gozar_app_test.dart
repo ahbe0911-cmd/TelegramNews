@@ -41,6 +41,7 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
     expect(find.byKey(const ValueKey('gozar-choose-apps')), findsNothing);
     expect(find.text('خانه'), findsOneWidget);
+    expect(find.text('VPN'), findsOneWidget);
     expect(find.text('شبکه'), findsNothing);
     expect(find.text('تلگرام'), findsNothing);
     expect(find.text('شاد'), findsNothing);
@@ -49,16 +50,20 @@ void main() {
     expect(find.text('ایتا'), findsNothing);
     expect(find.byKey(const ValueKey('gozar-network-tab')), findsNothing);
     expect(find.byType(NavigationDestination), findsNWidgets(4));
-    expect(find.text('لانچر'), findsOneWidget);
+    expect(find.text('لانچر'), findsNothing);
     expect(find.text('یادداشت'), findsOneWidget);
     expect(find.text('تنظیمات'), findsOneWidget);
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(navigation.destinations
+        .map((item) => (item as NavigationDestination).label).toList(),
+        <String>['خانه', 'یادداشت', 'VPN', 'تنظیمات']);
     expect(find.byKey(const ValueKey('gozar-home-notes-widget')),
         findsNothing);
     expect(find.byKey(const ValueKey('gozar-user-shortcut-grid')),
         findsNothing);
-    // The launcher is now the second bottom tab; its saved sections and
-    // scroll position must continue to work without loading a WebView.
-    await tester.tap(find.text('لانچر'));
+    // The launcher is now the first bottom tab and is presented as Home;
+    // its saved sections and scroll position must remain intact.
+    await tester.tap(find.text('خانه'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-launcher-top-toolbar')),
         findsOneWidget);
@@ -89,9 +94,9 @@ void main() {
       ).first,
     );
     expect(find.byKey(const ValueKey('gozar-vpn-settings')), findsWidgets);
-    await tester.tap(find.text('خانه'));
+    await tester.tap(find.text('VPN'));
     await tester.pump(const Duration(milliseconds: 250));
-    // Home uses the large animated power button; manual config and action
+    // VPN uses the large animated power button; manual config and action
     // row live on the Servers page rather than cluttering the home view.
     expect(find.byKey(const ValueKey('gozar-power')), findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-config')), findsNothing);
