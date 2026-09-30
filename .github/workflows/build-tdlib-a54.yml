@@ -9,6 +9,7 @@ on:
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/gozar_vpn.dart'
       - 'lib/gozar_platform_bridge.dart'
       - 'lib/gozar_telegram_web.dart'
       - 'lib/gozar_subscription.dart'
@@ -22,6 +23,8 @@ on:
       - 'native/SystemVpnBridge.kt'
       - 'native/GozarWebActivity.kt'
       - 'native/GozarPlatformBridge.kt'
+      - 'native/GozarVpnBridge.kt'
+      - 'native/GozarVpnService.kt'
       - 'native/GozarTelegramWebView.kt'
       - 'scripts/configure_variant.py'
       - 'native/GozarReminderBridge.kt'
@@ -45,6 +48,7 @@ on:
       - 'test/gozar_wireguard_test.dart'
       - 'test/td_internal_vpn_test.dart'
       - 'test/td_gozar_app_test.dart'
+      - 'test/gozar_vpn_test.dart'
       - 'test/gozar_shortcuts_test.dart'
       - 'test/gozar_notes_test.dart'
       - 'test/gozar_launcher_test.dart'
@@ -116,31 +120,44 @@ jobs:
         run: python3 scripts/prepare_android.py --profile modern
       - name: Configure independent app ID, label and launcher icon
         run: python3 scripts/configure_variant.py ${{ matrix.variant }}
-      - name: Configure standalone Gozar launcher and notes
+      - name: Configure standalone Gozar launcher, notes and Settings VPN
         if: matrix.variant == 'gozar'
         run: python3 scripts/configure_gozar_standalone.py
-      - name: Verify launcher bridge and absence of VPN services
+      - name: Install pinned Xray engine v26.9.9
+        if: matrix.variant == 'gozar'
+        run: |
+          mkdir -p android/app/libs
+          curl -fL --retry 3 --retry-delay 3 \
+            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
+            -o android/app/libs/libv2ray.aar
+          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
+      - name: Verify launcher plus Settings-only Xray VPN
         if: matrix.variant == 'gozar'
         run: |
           python3 - <<'PY'
           from pathlib import Path
           folder = Path('android/app/src/main')
-          bridge = next((folder / 'kotlin').rglob('GozarPlatformBridge.kt')).read_text()
+          launcher = next((folder / 'kotlin').rglob('GozarPlatformBridge.kt')).read_text()
           for method in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
-              assert bridge.count(f'"{method}" ->') == 1, method
-          for forbidden in ('VpnService', 'WireGuard', 'Xray', 'SystemVpnBridge'):
-              assert forbidden not in bridge, forbidden
+              assert launcher.count(f'"{method}" ->') == 1, method
+          vpn = next((folder / 'kotlin').rglob('GozarVpnBridge.kt')).read_text()
+          service = next((folder / 'kotlin').rglob('GozarVpnService.kt')).read_text()
+          assert '"start" ->' in vpn and '"stop" ->' in vpn
+          assert 'Libv2ray.newCoreController' in service
+          assert 'WireGuard' not in vpn + service
           main = next((folder / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (folder / 'AndroidManifest.xml').read_text()
           assert 'GozarPlatformBridge.attach(this, flutterEngine)' in main
+          assert 'GozarVpnBridge.attach(this, flutterEngine)' in main
           assert 'SystemVpnBridge' not in main
-          assert 'BIND_VPN_SERVICE' not in manifest
-          assert 'android.net.VpnService' not in manifest
+          assert 'BIND_VPN_SERVICE' in manifest
+          assert 'android.net.VpnService' in manifest
+          assert 'GozarVpnService' in manifest
           assert not list((folder / 'kotlin').rglob('SystemVpnService.kt'))
           assert not list((folder / 'kotlin').rglob('WireGuardController.kt'))
           assert '.GozarWebActivity' in manifest
           assert 'android.intent.category.LAUNCHER' in manifest
-          print('Verified launcher bridge with no VPN service in Gozar host')
+          print('Verified launcher and Settings-only Xray VPN host')
           PY
       - name: Install the provided open-licensed Vazirmatn typeface for Gozar only
         if: matrix.variant == 'gozar'
@@ -192,7 +209,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Gozar launcher and notes source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_platform_bridge.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart test/gozar_notes_test.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_platform_bridge.dart lib/gozar_vpn.dart lib/gozar_subscription.dart lib/td_vmess_parser.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/td_gozar_app_test.dart test/gozar_vpn_test.dart test/gozar_subscription_test.dart test/gozar_shortcuts_test.dart test/gozar_notes_test.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
@@ -212,9 +229,12 @@ jobs:
       - name: Verify saved launcher sections and Android app launch
         if: matrix.variant == 'gozar'
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
-      - name: Verify standalone Gozar navigation and no VPN UI
+      - name: Verify standalone Gozar Settings-only VPN
         if: matrix.variant == 'gozar'
-        run: flutter test --reporter expanded test/td_gozar_app_test.dart
+        run: |
+          flutter test --reporter expanded test/gozar_vpn_test.dart
+          flutter test --reporter expanded test/gozar_subscription_test.dart
+          flutter test --reporter expanded test/td_gozar_app_test.dart
       - name: Verify home and settings layout
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_ui_test.dart
