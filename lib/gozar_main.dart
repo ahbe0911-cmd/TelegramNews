@@ -29,6 +29,20 @@ class GozarProfile {
   Map<String, String> toJson() => {'name': name, 'link': link};
 }
 
+class GozarWireGuardProfile {
+  final String name;
+  final String config;
+  const GozarWireGuardProfile(this.name, this.config);
+
+  factory GozarWireGuardProfile.fromJson(Map<String, dynamic> input) =>
+      GozarWireGuardProfile(
+        input['name']?.toString() ?? 'WireGuard',
+        input['config']?.toString() ?? '',
+      );
+
+  Map<String, String> toJson() => {'name': name, 'config': config};
+}
+
 /// «گذر» is a standalone VPN: no Telegram account, feed, or TDLib in this APK.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,16 +114,20 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
   int statusReadId = 0;
   Timer? statusTimer;
   bool hideProfile = true;
-  int currentPage = 0;
+  int currentPage = 1;
   // Mount tabs lazily once, then keep their State (launcher page/scroll
   // position, icon futures, settings) alive when switching between tabs.
-  final Set<int> visitedPages = {0};
+  final Set<int> visitedPages = {1};
   late final GozarLauncher launcherPage;
   late final GozarNotesScreen notesPage;
   final ValueNotifier<int> notesRevision = ValueNotifier<int>(0);
   bool showServerSettings = false;
+  bool showWireGuardSettings = false;
   int selectedProfile = -1;
+  int selectedWireGuardProfile = -1;
   List<GozarProfile> profiles = [];
+  List<GozarWireGuardProfile> wireGuardProfiles = [];
+  String activeEngine = 'xray';
   List<GozarShortcut> shortcuts = [];
   final Map<String, int> tcpLatencies = {};
   final Set<String> checkingTcpProfiles = {};
@@ -150,6 +168,7 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
     packages = (widget.preferences.getStringList('gozar_selected_packages')
         ?? const <String>[]).toSet();
     unawaited(_loadProfile());
+    unawaited(_loadWireGuardProfiles());
     unawaited(refresh());
     // Observe OS-initiated disconnects without rebuilding the whole UI every frame.
     statusTimer = Timer.periodic(const Duration(seconds: 2),
@@ -194,6 +213,164 @@ class _GozarHomeState extends State<GozarHome> with WidgetsBindingObserver {
         value: jsonEncode(profiles.map((p) => p.toJson()).toList()));
     await widget.preferences.setInt('gozar_profile_index',
         selectedProfile < 0 ? 0 : selectedProfile);
+  }
+
+  Future<void> _loadWireGuardProfiles() async {
+    try {
+      final encoded = await _vault.read(key: 'gozar_wireguard_profiles_v1');
+      final parsed = encoded == null ? null : jsonDecode(encoded);
+      final saved = <GozarWireGuardProfile>[];
+      if (parsed is List) {
+        for (final entry in parsed) {
+          if (entry is Map) {
+            final item = GozarWireGuardProfile.fromJson(
+                Map<String, dynamic>.from(entry));
+            if (item.config.isNotEmpty) saved.add(item);
+          }
+        }
+      }
+      if (!mounted) return;
+      final preferred =
+          widget.preferences.getInt('gozar_wireguard_profile_index') ?? 0;
+      setState(() {
+        wireGuardProfiles = saved;
+        selectedWireGuardProfile = saved.isEmpty
+            ? -1
+            : preferred.clamp(0, saved.length - 1);
+      });
+    } catch (_) {
+      // Secure storage can be temporarily unavailable; keep the UI usable.
+    }
+  }
+
+  Future<void> _persistWireGuardProfiles() async {
+    await _vault.write(
+      key: 'gozar_wireguard_profiles_v1',
+      value: jsonEncode(wireGuardProfiles.map((p) => p.toJson()).toList()),
+    );
+    await widget.preferences.setInt(
+      'gozar_wireguard_profile_index',
+      selectedWireGuardProfile < 0 ? 0 : selectedWireGuardProfile,
+    );
+  }
+
+  Future<void> editWireGuardProfile({int? index}) async {
+    final editing = index != null &&
+        index >= 0 &&
+        index < wireGuardProfiles.length;
+    final name = TextEditingController(
+      text: editing ? wireGuardProfiles[index].name : '',
+    );
+    final config = TextEditingController(
+      text: editing ? wireGuardProfiles[index].config : '',
+    );
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(editing
+              ? 'ویرایش اکانت WireGuard'
+              : 'افزودن اکانت WireGuard'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                  controller: name,
+                  maxLength: 40,
+                  decoration: const InputDecoration(
+                    labelText: 'نام اکانت',
+                    hintText: 'مثلاً WireGuard شخصی',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('gozar-wireguard-config'),
+                  controller: config,
+                  minLines: 8,
+                  maxLines: 14,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
+                  decoration: const InputDecoration(
+                    labelText: 'کانفیگ WireGuard',
+                    hintText: '[Interface]\nPrivateKey = ...\n\n[Peer]\nPublicKey = ...',
+                  ),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialog).pop(false),
+              child: const Text('انصراف'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  validateWireGuardConfig(config.text);
+                  Navigator.of(dialog).pop(true);
+                } on FormatException catch (error) {
+                  ScaffoldMessenger.of(dialog).showSnackBar(
+                    SnackBar(content: Text(error.message.toString())),
+                  );
+                }
+              },
+              child: const Text('ذخیره'),
+            ),
+          ],
+        ),
+      );
+      if (saved != true || !mounted) return;
+      final cleanConfig = validateWireGuardConfig(config.text);
+      final cleanName = name.text.trim().isEmpty
+          ? 'WireGuard ' + (wireGuardProfiles.length + 1).toString()
+          : name.text.trim();
+      final updated = List<GozarWireGuardProfile>.from(wireGuardProfiles);
+      if (editing) {
+        updated[index] = GozarWireGuardProfile(cleanName, cleanConfig);
+      } else {
+        updated.add(GozarWireGuardProfile(cleanName, cleanConfig));
+      }
+      setState(() {
+        wireGuardProfiles = updated;
+        selectedWireGuardProfile = editing ? index : updated.length - 1;
+      });
+      await _persistWireGuardProfiles();
+      notice('اکانت WireGuard ذخیره شد.');
+    } finally {
+      name.dispose();
+      config.dispose();
+    }
+  }
+
+  Future<void> deleteWireGuardProfile(int index) async {
+    if (stage == 'running') {
+      notice('برای حذف اکانت فعال، ابتدا VPN را قطع کنید.');
+      return;
+    }
+    if (index < 0 || index >= wireGuardProfiles.length) return;
+    final updated = List<GozarWireGuardProfile>.from(wireGuardProfiles)
+      ..removeAt(index);
+    final next = updated.isEmpty
+        ? -1
+        : selectedWireGuardProfile == index
+            ? 0
+            : selectedWireGuardProfile > index
+                ? selectedWireGuardProfile - 1
+                : selectedWireGuardProfile;
+    setState(() {
+      wireGuardProfiles = updated;
+      selectedWireGuardProfile = next;
+    });
+    await _persistWireGuardProfiles();
+  }
+
+  Future<void> selectWireGuardProfile(int index) async {
+    if (index < 0 || index >= wireGuardProfiles.length) return;
+    setState(() { selectedWireGuardProfile = index; });
+    await widget.preferences.setInt('gozar_wireguard_profile_index', index);
   }
 
   Future<void> saveProfile({bool quiet = false}) async {
