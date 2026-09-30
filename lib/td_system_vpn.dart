@@ -100,11 +100,72 @@ class SystemVpnBridge {
   }
 }
 
+/// Converts supported compact wireguard:// links into the standard wg-quick
+/// format consumed by the official WireGuard Android tunnel library.
+String normalizeWireGuardConfig(String supplied) {
+  final input = supplied.trim().replaceAll('\r\n', '\n');
+  if (!input.toLowerCase().startsWith('wireguard://')) return input;
+
+  final uri = Uri.tryParse(input);
+  if (uri == null || uri.scheme.toLowerCase() != 'wireguard') {
+    throw const FormatException('لینک WireGuard معتبر نیست.');
+  }
+  final privateKey = Uri.decodeComponent(uri.userInfo).trim();
+  final host = uri.host.trim();
+  final port = uri.hasPort ? uri.port : 0;
+  if (privateKey.isEmpty || host.isEmpty || port < 1 || port > 65535) {
+    throw const FormatException(
+        'PrivateKey، آدرس سرور یا پورت لینک WireGuard ناقص است.');
+  }
+
+  final params = <String, String>{
+    for (final entry in uri.queryParameters.entries)
+      entry.key.toLowerCase(): entry.value.trim(),
+  };
+  String value(String key, [String fallback = '']) =>
+      params[key.toLowerCase()] ?? fallback;
+
+  final publicKey = value('publickey');
+  final address = value('address');
+  final allowedIps = value('allowedips');
+  if (publicKey.isEmpty || address.isEmpty || allowedIps.isEmpty) {
+    throw const FormatException(
+        'publickey، address یا allowedips در لینک WireGuard وجود ندارد.');
+  }
+
+  final dns = value('dns');
+  final mtu = value('mtu');
+  final keepalive = value('keepalive');
+  final presharedKey = value('presharedkey');
+  final endpointHost = host.contains(':') ? '[$host]' : host;
+
+  final output = StringBuffer()
+    ..writeln('[Interface]')
+    ..writeln('PrivateKey = $privateKey')
+    ..writeln('Address = $address');
+  if (dns.isNotEmpty) output.writeln('DNS = $dns');
+  if (mtu.isNotEmpty) output.writeln('MTU = $mtu');
+  output
+    ..writeln()
+    ..writeln('[Peer]')
+    ..writeln('PublicKey = $publicKey');
+  if (presharedKey.isNotEmpty) {
+    output.writeln('PresharedKey = $presharedKey');
+  }
+  output
+    ..writeln('Endpoint = $endpointHost:$port')
+    ..writeln('AllowedIPs = $allowedIps');
+  if (keepalive.isNotEmpty) {
+    output.writeln('PersistentKeepalive = $keepalive');
+  }
+  return output.toString().trim();
+}
+
 /// Performs fast client-side validation before handing a WireGuard profile
 /// to the official Android tunnel library, which performs the authoritative
 /// cryptographic/config parse on the native side.
 String validateWireGuardConfig(String supplied) {
-  final input = supplied.trim().replaceAll('\r\n', '\n');
+  final input = normalizeWireGuardConfig(supplied);
   if (input.isEmpty) {
     throw const FormatException('کانفیگ WireGuard خالی است.');
   }
@@ -113,19 +174,28 @@ String validateWireGuardConfig(String supplied) {
   }
   final lower = input.toLowerCase();
   if (!lower.contains('[interface]') ||
-      !RegExp(r'^\s*PrivateKey\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
+      !RegExp(r'^\s*PrivateKey\s*=\s*\S+',
+          multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'بخش [Interface] یا PrivateKey در کانفیگ WireGuard وجود ندارد.');
   }
+  if (!RegExp(r'^\s*Address\s*=\s*\S+',
+          multiLine: true, caseSensitive: false).hasMatch(input)) {
+    throw const FormatException(
+        'Address در بخش [Interface] کانفیگ WireGuard وجود ندارد.');
+  }
   if (!lower.contains('[peer]') ||
-      !RegExp(r'^\s*PublicKey\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
+      !RegExp(r'^\s*PublicKey\s*=\s*\S+',
+          multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'بخش [Peer] یا PublicKey در کانفیگ WireGuard وجود ندارد.');
   }
-  if (!RegExp(r'^\s*AllowedIPs\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
+  if (!RegExp(r'^\s*AllowedIPs\s*=\s*\S+',
+          multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException('AllowedIPs در کانفیگ WireGuard وجود ندارد.');
   }
-  if (!RegExp(r'^\s*Endpoint\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
+  if (!RegExp(r'^\s*Endpoint\s*=\s*\S+',
+          multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'Endpoint برای اتصال WireGuard در کانفیگ وجود ندارد.');
   }
