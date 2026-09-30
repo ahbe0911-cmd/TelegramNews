@@ -113,19 +113,19 @@ String validateWireGuardConfig(String supplied) {
   }
   final lower = input.toLowerCase();
   if (!lower.contains('[interface]') ||
-      !RegExp(r'(?mi)^\s*PrivateKey\s*=\s*\S+').hasMatch(input)) {
+      !RegExp(r'^\s*PrivateKey\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'بخش [Interface] یا PrivateKey در کانفیگ WireGuard وجود ندارد.');
   }
   if (!lower.contains('[peer]') ||
-      !RegExp(r'(?mi)^\s*PublicKey\s*=\s*\S+').hasMatch(input)) {
+      !RegExp(r'^\s*PublicKey\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'بخش [Peer] یا PublicKey در کانفیگ WireGuard وجود ندارد.');
   }
-  if (!RegExp(r'(?mi)^\s*AllowedIPs\s*=\s*\S+').hasMatch(input)) {
+  if (!RegExp(r'^\s*AllowedIPs\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException('AllowedIPs در کانفیگ WireGuard وجود ندارد.');
   }
-  if (!RegExp(r'(?mi)^\s*Endpoint\s*=\s*\S+').hasMatch(input)) {
+  if (!RegExp(r'^\s*Endpoint\s*=\s*\S+', multiLine: true, caseSensitive: false).hasMatch(input)) {
     throw const FormatException(
         'Endpoint برای اتصال WireGuard در کانفیگ وجود ندارد.');
   }
