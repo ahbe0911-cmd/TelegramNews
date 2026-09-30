@@ -18,6 +18,12 @@ object SystemVpnBridge {
     private const val REQUEST_VPN = 7301
     private var waitingConfig: String? = null
     private var waitingRouting: VpnRoutingPolicy? = null
+    private var waitingEngine: String = "xray"
+    @Volatile private var activeEngine: String = "xray"
+
+    private fun vpnBusy(): Boolean =
+        SystemVpnService.stage in setOf("running", "starting", "stopping", "consent") ||
+            WireGuardController.stage in setOf("running", "starting", "stopping", "consent")
 
     private fun launcherActivities(activity: Activity):
         List<android.content.pm.ResolveInfo> {
@@ -230,31 +236,104 @@ object SystemVpnBridge {
                             }
                         }
                     }
-                    "status" -> result.success(mapOf(
-                        "stage" to SystemVpnService.stage,
-                        "detail" to SystemVpnService.detail
-                    ))
+                    "status" -> {
+                        val wireGuardActive = WireGuardController.stage != "off"
+                        val xrayActive = SystemVpnService.stage != "off"
+                        val engine = when {
+                            wireGuardActive -> "wireguard"
+                            xrayActive -> "xray"
+                            else -> activeEngine
+                        }
+                        val stage = when (engine) {
+                            "wireguard" -> WireGuardController.stage
+                            else -> SystemVpnService.stage
+                        }
+                        val detail = when (engine) {
+                            "wireguard" -> WireGuardController.detail
+                            else -> SystemVpnService.detail
+                        }
+                        result.success(mapOf(
+                            "stage" to stage,
+                            "detail" to detail,
+                            "engine" to engine
+                        ))
+                    }
                     "stop" -> {
                         // Cancel an outstanding Android permission request too.
                         waitingConfig = null
                         waitingRouting = null
+                        if (WireGuardController.stage == "consent") {
+                            WireGuardController.stage = "off"
+                            WireGuardController.detail = "WireGuard خاموش است."
+                        }
+                        WireGuardController.stop(activity)
                         try {
                             // stopService() only schedules onDestroy(): send an
-                            // ordered command to close the TUN immediately.
+                            // ordered command to close the Xray TUN immediately.
                             activity.startService(
                                 Intent(activity, SystemVpnService::class.java)
                                     .setAction(SystemVpnService.ACTION_STOP)
                             )
                             result.success(null)
                         } catch (error: Exception) {
-                            // On restricted Android builds still request normal
-                            // service teardown, and report failure if that fails.
                             val stopped = activity.stopService(
                                 Intent(activity, SystemVpnService::class.java)
                             )
-                            if (stopped) result.success(null) else
+                            // WireGuard may have been the active engine, so a
+                            // missing Xray service is not a disconnect failure.
+                            if (stopped || activeEngine == "wireguard") result.success(null) else
                                 result.error("VPN_STOP_FAILED",
                                     "Android could not stop the VPN service", null)
+                        }
+                    }
+
+                    "startWireGuard" -> {
+                        val config = call.argument<String>("config")
+                        if (config.isNullOrBlank() || config.length > 1024 * 1024) {
+                            result.error("INVALID_WIREGUARD_CONFIG",
+                                "Invalid WireGuard configuration", null)
+                            return@setMethodCallHandler
+                        }
+                        if (vpnBusy()) {
+                            result.error("VPN_BUSY",
+                                "Wait for the current VPN operation to finish", null)
+                            return@setMethodCallHandler
+                        }
+                        val policy = try {
+                            VpnRoutingPolicy(
+                                call.argument<String>("mode") ?: "all",
+                                call.argument<List<String>>("packages") ?: emptyList(),
+                                activity.packageName
+                            )
+                        } catch (e: IllegalArgumentException) {
+                            result.error("BAD_APPS", e.message, null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val approval = VpnService.prepare(activity)
+                            activeEngine = "wireguard"
+                            if (approval != null) {
+                                waitingConfig = config
+                                waitingRouting = policy
+                                waitingEngine = "wireguard"
+                                WireGuardController.stage = "consent"
+                                WireGuardController.detail =
+                                    "در انتظار مجوز VPN اندروید برای WireGuard…"
+                                @Suppress("DEPRECATION")
+                                activity.startActivityForResult(approval, REQUEST_VPN)
+                                result.success("permission_requested")
+                            } else {
+                                launchWireGuard(activity, config, policy)
+                                result.success("starting")
+                            }
+                        } catch (e: Exception) {
+                            waitingConfig = null
+                            waitingRouting = null
+                            WireGuardController.stage = "error"
+                            WireGuardController.detail =
+                                "WireGuard اجرا نشد: " + e.javaClass.simpleName
+                            result.error("WIREGUARD_START_FAILED",
+                                "Could not start WireGuard", null)
                         }
                     }
                     "start" -> {
@@ -263,10 +342,7 @@ object SystemVpnBridge {
                             result.error("INVALID_CONFIG", "Invalid Xray JSON", null)
                             return@setMethodCallHandler
                         }
-                        if (SystemVpnService.stage == "running" ||
-                            SystemVpnService.stage == "starting" ||
-                            SystemVpnService.stage == "stopping" ||
-                            SystemVpnService.stage == "consent") {
+                        if (vpnBusy()) {
                             result.error("VPN_BUSY",
                                 "Wait for the current VPN operation to finish", null)
                             return@setMethodCallHandler
@@ -286,13 +362,16 @@ object SystemVpnBridge {
                             if (approval != null) {
                                 waitingConfig = config
                                 waitingRouting = policy
+                                waitingEngine = "xray"
+                                activeEngine = "xray"
                                 SystemVpnService.stage = "consent"
                                 SystemVpnService.detail = "Waiting for Android VPN permission"
                                 @Suppress("DEPRECATION")
                                 activity.startActivityForResult(approval, REQUEST_VPN)
                                 result.success("permission_requested")
                             } else {
-                                launch(activity, config, policy)
+                                activeEngine = "xray"
+                                launchXray(activity, config, policy)
                                 result.success("starting")
                             }
                         } catch (e: Exception) {
@@ -313,23 +392,49 @@ object SystemVpnBridge {
         if (requestCode != REQUEST_VPN) return false
         val config = waitingConfig
         val policy = waitingRouting
+        val engine = waitingEngine
         waitingConfig = null
         waitingRouting = null
         if (resultCode == Activity.RESULT_OK && config != null && policy != null) {
             try {
-                launch(activity, config, policy)
+                if (engine == "wireguard") {
+                    activeEngine = "wireguard"
+                    launchWireGuard(activity, config, policy)
+                } else {
+                    activeEngine = "xray"
+                    launchXray(activity, config, policy)
+                }
             } catch (e: Exception) {
-                SystemVpnService.stage = "error"
-                SystemVpnService.detail = e.javaClass.simpleName
+                if (engine == "wireguard") {
+                    WireGuardController.stage = "error"
+                    WireGuardController.detail =
+                        "WireGuard اجرا نشد: " + e.javaClass.simpleName
+                } else {
+                    SystemVpnService.stage = "error"
+                    SystemVpnService.detail = e.javaClass.simpleName
+                }
             }
         } else {
-            SystemVpnService.stage = "off"
-            SystemVpnService.detail = "Android VPN permission was not granted"
+            if (engine == "wireguard") {
+                WireGuardController.stage = "off"
+                WireGuardController.detail = "مجوز VPN اندروید صادر نشد."
+            } else {
+                SystemVpnService.stage = "off"
+                SystemVpnService.detail = "Android VPN permission was not granted"
+            }
         }
         return true
     }
 
-    private fun launch(activity: Activity, config: String, policy: VpnRoutingPolicy) {
+    private fun launchWireGuard(
+        activity: Activity,
+        config: String,
+        policy: VpnRoutingPolicy
+    ) {
+        WireGuardController.start(activity, config, policy)
+    }
+
+    private fun launchXray(activity: Activity, config: String, policy: VpnRoutingPolicy) {
         val intent = Intent(activity, SystemVpnService::class.java)
             .putExtra(SystemVpnService.EXTRA_CONFIG, config)
             .putExtra(SystemVpnService.EXTRA_ROUTING_MODE, policy.mode)
