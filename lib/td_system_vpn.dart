@@ -22,6 +22,16 @@ class SystemVpnBridge {
     });
   }
 
+  /// Starts the embedded official WireGuard userspace backend with a standard
+  /// wg-quick configuration. Android app routing is applied natively so it
+  /// follows the same "all / selected apps" choice as the Xray engine.
+  static Future<void> startWireGuard(String wireGuardConfig,
+      {String mode = 'all', List<String> packages = const []}) async {
+    await channel.invokeMethod<String>('startWireGuard', {
+      'config': wireGuardConfig, 'mode': mode, 'packages': packages,
+    });
+  }
+
   /// Android 11+ exposes only launchable apps granted visibility in manifest.
   static Future<List<Map<String, String>>> installedApps() async {
     final response = await channel.invokeListMethod<dynamic>('installedApps');
@@ -88,6 +98,38 @@ class SystemVpnBridge {
   static Future<void> stopInternal() async {
     await channel.invokeMethod<void>('stopInternal');
   }
+}
+
+/// Performs fast client-side validation before handing a WireGuard profile
+/// to the official Android tunnel library, which performs the authoritative
+/// cryptographic/config parse on the native side.
+String validateWireGuardConfig(String supplied) {
+  final input = supplied.trim().replaceAll('\r\n', '\n');
+  if (input.isEmpty) {
+    throw const FormatException('کانفیگ WireGuard خالی است.');
+  }
+  if (input.length > 1024 * 1024) {
+    throw const FormatException('کانفیگ WireGuard بیش از حد بزرگ است.');
+  }
+  final lower = input.toLowerCase();
+  if (!lower.contains('[interface]') ||
+      !RegExp(r'(?mi)^\s*PrivateKey\s*=\s*\S+').hasMatch(input)) {
+    throw const FormatException(
+        'بخش [Interface] یا PrivateKey در کانفیگ WireGuard وجود ندارد.');
+  }
+  if (!lower.contains('[peer]') ||
+      !RegExp(r'(?mi)^\s*PublicKey\s*=\s*\S+').hasMatch(input)) {
+    throw const FormatException(
+        'بخش [Peer] یا PublicKey در کانفیگ WireGuard وجود ندارد.');
+  }
+  if (!RegExp(r'(?mi)^\s*AllowedIPs\s*=\s*\S+').hasMatch(input)) {
+    throw const FormatException('AllowedIPs در کانفیگ WireGuard وجود ندارد.');
+  }
+  if (!RegExp(r'(?mi)^\s*Endpoint\s*=\s*\S+').hasMatch(input)) {
+    throw const FormatException(
+        'Endpoint برای اتصال WireGuard در کانفیگ وجود ندارد.');
+  }
+  return input;
 }
 
 /// Supported: VMess, VLESS, Trojan share links and Xray JSON.
