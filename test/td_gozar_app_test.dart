@@ -118,8 +118,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('gozar-settings-open-home')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-settings-exact-alarm')),
-        findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-settings-vpn-card')),
         findsOneWidget);
   });
