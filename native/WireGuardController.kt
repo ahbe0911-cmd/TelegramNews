@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
  * Embedded WireGuard engine for Gozar. It uses WireGuard's official Android
  * tunnel library and mirrors Gozar's existing all/selected-app routing policy.
  */
-object WireGuardController {
+internal object WireGuardController {
     @Volatile var stage: String = "off"
     @Volatile var detail: String = "WireGuard خاموش است."
     @Volatile private var operationId: Int = 0
