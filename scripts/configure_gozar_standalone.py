@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Build Gozar as a launcher + notes app with no VPN components."""
+"""Build Gozar as launcher + notes with an Xray VPN controlled only in Settings."""
 
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 
 (root / 'pubspec.yaml').write_text('''name: telegram_news
-description: Gozar launcher and local notes
+description: Gozar launcher, notes and Settings-only Xray VPN
 publish_to: none
-version: 1.3.0+1
+version: 1.4.0+1
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -16,6 +16,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  flutter_secure_storage: ^9.2.4
   shared_preferences: 2.3.2
   shamsi_date: ^1.0.4
 dev_dependencies:
@@ -46,6 +47,13 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         GozarPlatformBridge.attach(this, flutterEngine)
         GozarReminderBridge.attach(this, flutterEngine)
+        GozarVpnBridge.attach(this, flutterEngine)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        GozarVpnBridge.onActivityResult(this, requestCode, resultCode)
     }
 
     override fun onRequestPermissionsResult(
@@ -62,13 +70,17 @@ class MainActivity : FlutterActivity() {
 }
 ''')
 
-# Only non-network Gozar platform helpers are packaged.
-for name in ('GozarPlatformBridge.kt', 'GozarWebActivity.kt',
-             'GozarReminderBridge.kt'):
+for name in (
+    'GozarPlatformBridge.kt',
+    'GozarWebActivity.kt',
+    'GozarReminderBridge.kt',
+    'GozarVpnBridge.kt',
+    'GozarVpnService.kt',
+):
     (activity.parent / name).write_bytes((root / 'native' / name).read_bytes())
 
-# Explicitly remove old generated network/tunnel components if a reused host
-# ever contains them. They are not part of this application variant.
+# Remove all legacy VPN implementations. The standalone build packages only
+# the dedicated Xray-only GozarVpnBridge/GozarVpnService pair.
 for name in (
     'SystemVpnBridge.kt',
     'SystemVpnService.kt',
@@ -85,8 +97,6 @@ for name in (
 manifest = host / 'AndroidManifest.xml'
 source = manifest.read_text()
 
-# Let the launcher enumerate only activities that explicitly advertise the
-# standard Android launcher intent.
 if '<queries>' not in source:
     source = source.replace(
         '<application',
@@ -100,11 +110,11 @@ if '<queries>' not in source:
         1,
     )
 
-# Local reminder permissions only.
 permissions = (
-    '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
     '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
     '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>\n'
 )
 source = source.replace('<application', permissions + '    <application', 1)
 
@@ -115,6 +125,19 @@ source = source.replace(
             android:name=".GozarWebActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar" />
+        <service
+            android:name=".GozarVpnService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started Xray VPN tunnel controlled only from Gozar Settings" />
+        </service>
         <receiver
             android:name=".GozarReminderReceiver"
             android:exported="false" />
@@ -134,16 +157,34 @@ source = source.replace(
 )
 manifest.write_text(source)
 
-final_manifest = manifest.read_text()
-for forbidden in (
-    'BIND_VPN_SERVICE',
-    'android.net.VpnService',
-    'SystemVpnService',
-    'InternalTelegramProxyService',
-    'FOREGROUND_SERVICE_SPECIAL_USE',
-):
-    assert forbidden not in final_manifest, forbidden
+gradle = root / 'android/app/build.gradle.kts'
+gradle_source = gradle.read_text()
+assert gradle_source.count('android {') == 1
+gradle_source = gradle_source.replace(
+    'android {',
+    '''android {
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+''',
+    1,
+)
+gradle_source += '\ndependencies { implementation(files("libs/libv2ray.aar")) }\n'
+gradle.write_text(gradle_source)
 
-assert 'GozarPlatformBridge.attach' in activity.read_text()
-assert 'SystemVpnBridge' not in activity.read_text()
-print('Gozar: launcher + notes only; no VPN service or tunnel engine packaged')
+final_manifest = manifest.read_text()
+assert 'android.permission.BIND_VPN_SERVICE' in final_manifest
+assert 'android.net.VpnService' in final_manifest
+assert 'GozarVpnService' in final_manifest
+assert 'SystemVpnService' not in final_manifest
+assert 'WireGuard' not in final_manifest
+assert 'InternalTelegramProxyService' not in final_manifest
+
+main_code = activity.read_text()
+assert 'GozarVpnBridge.attach(this, flutterEngine)' in main_code
+assert 'SystemVpnBridge' not in main_code
+assert 'WireGuard' not in main_code
+
+print('Gozar: launcher + notes + Settings-only Xray VPN')
