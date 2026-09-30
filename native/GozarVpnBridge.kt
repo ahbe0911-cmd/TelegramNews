@@ -9,7 +9,7 @@ import io.flutter.plugin.common.MethodChannel
 
 /**
  * Xray-only VPN bridge used from the Settings screen.
- * No WireGuard/OpenVPN code is present in this bridge.
+ * This bridge exposes only the embedded Xray tunnel lifecycle.
  */
 object GozarVpnBridge {
     private const val CHANNEL = "ir.channel.telegram_tdnews/gozar_vpn"
