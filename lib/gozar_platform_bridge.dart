@@ -6,8 +6,13 @@ class GozarPlatformBridge {
   static const MethodChannel channel =
       MethodChannel('ir.channel.telegram_tdnews/gozar_platform');
 
-  static Future<List<Map<String, String>>> installedApps() async {
-    final response = await channel.invokeListMethod<dynamic>('installedApps');
+  static Future<List<Map<String, String>>> installedApps({
+    bool force = false,
+  }) async {
+    final response = await channel.invokeListMethod<dynamic>(
+      'installedApps',
+      {'force': force},
+    );
     if (response == null) return [];
     return response.whereType<Map>().map((raw) => <String, String>{
       'package': raw['package']?.toString() ?? '',
