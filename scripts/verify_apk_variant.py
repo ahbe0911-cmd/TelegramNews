@@ -21,21 +21,20 @@ manifest = subprocess.check_output(
 with zipfile.ZipFile(apk) as archive:
     names = set(archive.namelist())
     if variant == 'gozar':
-        assert 'android.permission.BIND_VPN_SERVICE' in manifest
-        assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
-        assert 'android.net.VpnService' in manifest
-        assert 'GozarVpnService' in manifest
+        assert 'android.permission.BIND_VPN_SERVICE' not in manifest
+        assert 'android.net.VpnService' not in manifest
+        assert 'GozarVpnService' not in manifest
         assert 'SystemVpnService' not in manifest
         assert 'InternalTelegramProxyService' not in manifest
+        assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
         assert 'lib/arm64-v8a/libtdjson.so' not in names, 'Gozar must not bundle TDLib'
-        assert any(
-            'libv2ray' in entry.lower() or 'libgojni.so' in entry.lower()
+        assert not any(
+            'libv2ray' in entry.lower() or
+            'libgojni.so' in entry.lower() or
+            'libwg-go.so' in entry.lower()
             for entry in names
-        ), 'Gozar must bundle the Xray Android engine'
-        assert not any('libwg-go.so' in entry.lower() for entry in names), (
-            'WireGuard engine must not be bundled in the Xray-only Gozar build'
-        )
-        print('APK verified: Gozar Xray VPN + all-app launcher visibility, no Telegram/WireGuard engine')
+        ), 'Gozar must not bundle any VPN tunnel engine'
+        print('APK verified: Gozar launcher + notes, VPN fully removed')
         sys.exit(0)
     assert 'android.permission.BIND_VPN_SERVICE' not in manifest
     assert 'SystemVpnService' not in manifest
