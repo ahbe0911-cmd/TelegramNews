@@ -172,8 +172,34 @@ class _GozarShortcutIconState extends State<GozarShortcutIcon> {
     builder: (context, snapshot) {
       final data = snapshot.data;
       if (data != null && data.isNotEmpty) {
-        return Image.memory(data, width: widget.size, height: widget.size,
-            fit: BoxFit.contain, gaplessPlayback: true);
+        return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(widget.size * .23),
+              color: const Color(0xfff8fcff),
+              border: Border.all(
+                color: const Color(0xffd3e5f3),
+                width: .8,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(widget.size * .22),
+              child: Transform.scale(
+                scale: 1.06,
+                child: Image.memory(
+                  data,
+                  width: widget.size,
+                  height: widget.size,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+            ),
+          ),
+        );
       }
       return Icon(widget.shortcut.kind == 'web'
           ? Icons.public_rounded : Icons.apps_rounded,
