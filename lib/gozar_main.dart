@@ -173,8 +173,12 @@ class _GozarHomeState extends State<GozarHome> {
     unawaited(_loadVpnData());
     unawaited(_refreshVpnStatus());
     vpnTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(_refreshVpnStatus()),
+      const Duration(seconds: 3),
+      (_) {
+        if (currentPage == 2 || vpnStage != 'off') {
+          unawaited(_refreshVpnStatus());
+        }
+      },
     );
   }
 
@@ -1280,6 +1284,9 @@ class _GozarHomeState extends State<GozarHome> {
       selectedIndex: currentPage,
       onDestinationSelected: (index) {
         setState(() { currentPage = index; });
+        if (index == 2) {
+          unawaited(_refreshVpnStatus());
+        }
       },
       destinations: const [
         NavigationDestination(
