@@ -25,6 +25,7 @@ on:
       - 'native/GozarPlatformBridge.kt'
       - 'native/GozarVpnBridge.kt'
       - 'native/GozarVpnService.kt'
+      - 'native/GozarDirectAppPolicy.kt'
       - 'native/GozarTelegramWebView.kt'
       - 'scripts/configure_variant.py'
       - 'native/GozarReminderBridge.kt'
@@ -142,8 +143,11 @@ jobs:
               assert launcher.count(f'"{method}" ->') == 1, method
           vpn = next((folder / 'kotlin').rglob('GozarVpnBridge.kt')).read_text()
           service = next((folder / 'kotlin').rglob('GozarVpnService.kt')).read_text()
+          bypass = next((folder / 'kotlin').rglob('GozarDirectAppPolicy.kt')).read_text()
           assert '"start" ->' in vpn and '"stop" ->' in vpn
           assert 'Libv2ray.newCoreController' in service
+          assert 'GozarDirectAppPolicy.installedPackages' in service
+          assert 'ApplicationInfo.CATEGORY_FINANCE' in bypass
           assert 'WireGuard' not in vpn + service
           main = next((folder / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (folder / 'AndroidManifest.xml').read_text()
@@ -153,6 +157,7 @@ jobs:
           assert 'BIND_VPN_SERVICE' in manifest
           assert 'android.net.VpnService' in manifest
           assert 'GozarVpnService' in manifest
+          assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
           assert not list((folder / 'kotlin').rglob('SystemVpnService.kt'))
           assert not list((folder / 'kotlin').rglob('WireGuardController.kt'))
           assert '.GozarWebActivity' in manifest
