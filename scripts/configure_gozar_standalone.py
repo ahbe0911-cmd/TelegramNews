@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[1]
 (root / 'pubspec.yaml').write_text('''name: telegram_news
 description: Gozar launcher, notes and Settings-only Xray VPN
 publish_to: none
-version: 1.4.0+1
+version: 1.5.0+1
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -76,6 +76,7 @@ for name in (
     'GozarReminderBridge.kt',
     'GozarVpnBridge.kt',
     'GozarVpnService.kt',
+    'GozarDirectAppPolicy.kt',
 ):
     (activity.parent / name).write_bytes((root / 'native' / name).read_bytes())
 
@@ -111,6 +112,7 @@ if '<queries>' not in source:
     )
 
 permissions = (
+    '    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>\n'
     '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
     '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n'
     '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
@@ -178,6 +180,7 @@ final_manifest = manifest.read_text()
 assert 'android.permission.BIND_VPN_SERVICE' in final_manifest
 assert 'android.net.VpnService' in final_manifest
 assert 'GozarVpnService' in final_manifest
+assert 'android.permission.QUERY_ALL_PACKAGES' in final_manifest
 assert 'SystemVpnService' not in final_manifest
 assert 'WireGuard' not in final_manifest
 assert 'InternalTelegramProxyService' not in final_manifest
@@ -187,4 +190,4 @@ assert 'GozarVpnBridge.attach(this, flutterEngine)' in main_code
 assert 'SystemVpnBridge' not in main_code
 assert 'WireGuard' not in main_code
 
-print('Gozar: launcher + notes + Settings-only Xray VPN')
+print('Gozar: full launcher visibility + notes + smart-bypass Settings Xray VPN')
