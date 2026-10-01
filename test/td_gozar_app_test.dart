@@ -45,6 +45,10 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 250));
 
+    expect(find.byKey(const ValueKey('gozar-home-motivation')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-home-motivation-text')),
+        findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-launcher-top-toolbar')),
         findsOneWidget);
     expect(find.byType(NavigationDestination), findsNWidgets(3));
@@ -82,6 +86,8 @@ void main() {
     expect(find.byKey(const ValueKey('gozar-settings-vpn-card')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-settings-vpn-power')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('gozar-vpn-status-dot')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-vpn-add-account')),
         findsOneWidget);
