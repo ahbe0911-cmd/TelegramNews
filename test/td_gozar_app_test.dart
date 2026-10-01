@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:telegram_news/gozar_main.dart';
 import 'package:telegram_news/gozar_notes_store.dart';
-import 'package:telegram_news/gozar_vpn.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -17,25 +16,13 @@ void main() {
       if (call.method == 'takeOpenedReminder') return false;
       return null;
     });
-    messenger.setMockMethodCallHandler(
-        GozarVpnBridge.channel, (call) async {
-      if (call.method == 'status') {
-        return <String, dynamic>{
-          'stage': 'off',
-          'detail': 'VPN خاموش است.',
-        };
-      }
-      return null;
-    });
     addTearDown(() {
       messenger.setMockMethodCallHandler(
           GozarReminderBridge.channel, null);
-      messenger.setMockMethodCallHandler(
-          GozarVpnBridge.channel, null);
     });
   }
 
-  testWidgets('Gozar starts on Home and has exactly three main tabs',
+  testWidgets('Rosha starts on Home and has exactly three main tabs',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await configureChannels();
@@ -61,52 +48,16 @@ void main() {
           .toList(),
       <String>['خانه', 'یادداشت', 'تنظیمات'],
     );
-    expect(
-      navigation.destinations
-          .map((item) => (item as NavigationDestination).label),
-      isNot(contains('VPN')),
-    );
-  });
 
-  testWidgets('VPN exists only inside Settings with a circular power control',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await configureChannels();
-
-    await tester.pumpWidget(GozarApp(
-      preferences: await SharedPreferences.getInstance(),
-    ));
-    await tester.pump(const Duration(milliseconds: 250));
-
-    await tester.tap(find.text('تنظیمات'));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byKey(const ValueKey('gozar-settings-page')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-settings-vpn-card')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-settings-vpn-power')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-vpn-status-dot')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-vpn-add-account')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-vpn-add-subscription')),
-        findsOneWidget);
-    expect(find.text('Xray-core 26.9.9'), findsOneWidget);
+    expect(find.text('VPN'), findsNothing);
+    expect(find.textContaining('Xray'), findsNothing);
     expect(find.textContaining('WireGuard'), findsNothing);
-
-    final navigation =
-        tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(
-      navigation.destinations
-          .map((item) => (item as NavigationDestination).label)
-          .toList(),
-      <String>['خانه', 'یادداشت', 'تنظیمات'],
-    );
+    expect(find.byKey(const ValueKey('gozar-settings-vpn-card')),
+        findsNothing);
   });
 
-  testWidgets('Notes remain available beside Settings VPN', (tester) async {
+  testWidgets('Notes and Settings remain available with VPN removed',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     await configureChannels();
 
@@ -122,10 +73,16 @@ void main() {
 
     await tester.tap(find.text('تنظیمات'));
     await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('gozar-settings-page')),
+        findsOneWidget);
     expect(find.byKey(const ValueKey('gozar-settings-open-home')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('gozar-settings-vpn-card')),
+    expect(find.byKey(const ValueKey('gozar-settings-exact-alarm')),
         findsOneWidget);
+
+    expect(find.text('VPN'), findsNothing);
+    expect(find.textContaining('Xray'), findsNothing);
+    expect(find.textContaining('WireGuard'), findsNothing);
   });
 
   testWidgets('Reminder launch opens Notes tab', (tester) async {
@@ -142,21 +99,9 @@ void main() {
       }
       return null;
     });
-    messenger.setMockMethodCallHandler(
-        GozarVpnBridge.channel, (call) async {
-      if (call.method == 'status') {
-        return <String, dynamic>{
-          'stage': 'off',
-          'detail': 'VPN خاموش است.',
-        };
-      }
-      return null;
-    });
     addTearDown(() {
       messenger.setMockMethodCallHandler(
           GozarReminderBridge.channel, null);
-      messenger.setMockMethodCallHandler(
-          GozarVpnBridge.channel, null);
     });
 
     await tester.pumpWidget(GozarApp(
