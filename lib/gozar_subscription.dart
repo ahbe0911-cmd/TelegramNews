@@ -163,12 +163,16 @@ Future<String> _downloadSubscription(
   String userAgent, {
   required Duration timeout,
   required int maxBytes,
+  bool throughXray = false,
 }) async {
   final client = HttpClient()
     ..connectionTimeout = timeout
     ..idleTimeout = timeout
     ..userAgent = userAgent
     ..autoUncompress = true;
+  if (throughXray) {
+    client.findProxy = (_) => 'PROXY 127.0.0.1:17890';
+  }
 
   try {
     final request = await client.getUrl(uri).timeout(timeout);
@@ -210,6 +214,7 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
   String input, {
   Duration timeout = const Duration(seconds: 35),
   int maxBytes = 4 * 1024 * 1024,
+  bool preferXrayProxy = false,
 }) async {
   final normalized = normalizeGozarSubscriptionUrl(input);
   final uri = Uri.parse(normalized);
@@ -221,21 +226,28 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
     'Gozar/1.6 Android',
   ];
 
-  for (var index = 0; index < userAgents.length; index++) {
-    try {
-      final payload = await _downloadSubscription(
-        uri,
-        userAgents[index],
-        timeout: timeout,
-        maxBytes: maxBytes,
-      );
-      return parseGozarSubscription(payload);
-    } catch (error) {
-      lastError = error;
-      if (index + 1 < userAgents.length) {
-        await Future<void>.delayed(
-          Duration(milliseconds: 350 * (index + 1)),
+  final routes = preferXrayProxy
+      ? const [true, false]
+      : const [false];
+
+  for (final throughXray in routes) {
+    for (var index = 0; index < userAgents.length; index++) {
+      try {
+        final payload = await _downloadSubscription(
+          uri,
+          userAgents[index],
+          timeout: timeout,
+          maxBytes: maxBytes,
+          throughXray: throughXray,
         );
+        return parseGozarSubscription(payload);
+      } catch (error) {
+        lastError = error;
+        if (index + 1 < userAgents.length) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 350 * (index + 1)),
+          );
+        }
       }
     }
   }
@@ -252,6 +264,17 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
   throw const FormatException(
     'ساب دریافت شد اما هیچ سرور سازگار در پاسخ آن پیدا نشد.',
   );
+}
+
+bool gozarSubscriptionRefreshDue(
+  int lastRefreshMillis, {
+  DateTime? now,
+  Duration interval = const Duration(hours: 6),
+}) {
+  if (lastRefreshMillis <= 0) return true;
+  final current = now ?? DateTime.now();
+  final last = DateTime.fromMillisecondsSinceEpoch(lastRefreshMillis);
+  return current.difference(last) >= interval;
 }
 
 ({String host, int port}) gozarEndpoint(String link) {
