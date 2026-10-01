@@ -362,6 +362,13 @@ String buildGozarXrayConfig(String supplied) {
           'routeOnly': true,
         },
       },
+      {
+        'tag': 'subscription-proxy',
+        'listen': '127.0.0.1',
+        'port': 17890,
+        'protocol': 'http',
+        'settings': <String, dynamic>{},
+      },
     ],
     'outbounds': [
       primary,
@@ -374,6 +381,11 @@ String buildGozarXrayConfig(String supplied) {
     'routing': {
       'domainStrategy': 'IPIfNonMatch',
       'rules': [
+        {
+          'type': 'field',
+          'inboundTag': ['subscription-proxy'],
+          'outboundTag': 'proxy',
+        },
         {
           'type': 'field',
           'domain': [
