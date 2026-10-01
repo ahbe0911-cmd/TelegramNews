@@ -18,6 +18,7 @@ on:
       - 'native/GozarReminderBridge.kt'
       - 'native/GozarVpnBridge.kt'
       - 'native/GozarVpnService.kt'
+      - 'native/GozarDirectAppPolicy.kt'
       - 'test/gozar_launcher_test.dart'
       - 'test/gozar_notes_test.dart'
       - 'test/gozar_shortcuts_test.dart'
@@ -93,8 +94,12 @@ jobs:
               assert launcher.count(f'"{action}" ->') == 1, action
           vpn = next((root / 'kotlin').rglob('GozarVpnBridge.kt')).read_text()
           service = next((root / 'kotlin').rglob('GozarVpnService.kt')).read_text()
+          bypass = next((root / 'kotlin').rglob('GozarDirectAppPolicy.kt')).read_text()
           assert '"start" ->' in vpn and '"stop" ->' in vpn and '"status" ->' in vpn
           assert 'Libv2ray.newCoreController' in service
+          assert 'GozarDirectAppPolicy.installedPackages' in service
+          assert 'ApplicationInfo.CATEGORY_FINANCE' in bypass
+          assert 'getInstalledApplications' in launcher
           assert 'WireGuard' not in vpn + service
           main = next((root / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (root / 'AndroidManifest.xml').read_text()
@@ -107,6 +112,7 @@ jobs:
           assert 'BIND_VPN_SERVICE' in manifest
           assert 'android.net.VpnService' in manifest
           assert 'GozarVpnService' in manifest
+          assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
           main_dart = Path('lib/gozar_main.dart').read_text()
           assert main_dart.count('NavigationDestination(') == 3
           assert "label: 'VPN'" not in main_dart
@@ -115,6 +121,7 @@ jobs:
           assert "label: 'تنظیمات'" in main_dart
           assert "ValueKey('gozar-settings-vpn-card')" in main_dart
           assert "ValueKey('gozar-settings-vpn-power')" in main_dart
+          assert "ValueKey('gozar-home-motivation')" in main_dart
           assert 'Xray-core 26.9.9' in main_dart
           assert 'WireGuard' not in main_dart
           icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
@@ -125,7 +132,7 @@ jobs:
           for action in ('setExactAndAllowWhileIdle', 'setAndAllowWhileIdle',
                          'POST_NOTIFICATIONS', 'ACTION_BOOT_COMPLETED'):
               assert action in alarm, action
-          print('Settings-only Xray VPN and launcher/reminders are packaged.')
+          print('Settings-only Xray VPN, smart bypass, full launcher visibility and reminders are packaged.')
           PY
       - name: Compile Gozar ARM64 without full artifact quota
         run: |
