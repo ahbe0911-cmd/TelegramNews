@@ -102,10 +102,25 @@ class _GozarHomeState extends State<GozarHome> {
   static const _profilesKey = 'gozar_xray_profiles_v4';
   static const _subscriptionsKey = 'gozar_xray_subscriptions_v2';
   static const _engineVersion = 'Xray-core 26.9.9';
+  static const _motivationalQuotes = <String>[
+    'امروز لازم نیست بی‌نقص باشی؛ کافی است یک قدم بهتر از دیروز برداری.',
+    'کارهای بزرگ از تصمیم‌های کوچک و پیوسته ساخته می‌شوند.',
+    'آرام پیش برو، اما از چیزی که برایت مهم است دست نکش.',
+    'توان تو بیشتر از چیزی است که یک روز سخت نشان می‌دهد.',
+    'هر شروع تازه، فرصتی است برای ساختن نسخه بهتر خودت.',
+    'تمرکز روی قدم بعدی، مسیرهای بلند را کوتاه می‌کند.',
+    'پیشرفت واقعی آرام است؛ مهم این است که متوقف نشوی.',
+    'به جای منتظر ماندن برای زمان مناسب، همین لحظه را بهتر کن.',
+    'انرژی‌ات را روی چیزهایی بگذار که می‌توانی تغییرشان بدهی.',
+    'موفقیت، جمع همان کارهای کوچکی است که هر روز ادامه می‌دهی.',
+    'اگر مسیر سخت شده، شاید دقیقاً در حال رشد کردن هستی.',
+    'امروز یک فرصت تازه است؛ آن را با هدف شروع کن.',
+  ];
 
   int currentPage = 0;
   late final GozarLauncher launcherPage;
   late final GozarNotesScreen notesPage;
+  late final String homeQuote;
 
   List<GozarVpnProfile> vpnProfiles = [];
   List<String> vpnSubscriptions = [];
@@ -120,6 +135,16 @@ class _GozarHomeState extends State<GozarHome> {
   @override
   void initState() {
     super.initState();
+    final previousQuote =
+        widget.preferences.getInt('gozar_home_quote_index_v1') ?? -1;
+    final nextQuote =
+        (previousQuote + 1) % _motivationalQuotes.length;
+    homeQuote = _motivationalQuotes[nextQuote];
+    unawaited(widget.preferences.setInt(
+      'gozar_home_quote_index_v1',
+      nextQuote,
+    ));
+
     launcherPage = GozarLauncher(
       preferences: widget.preferences,
       onOpenApp: _openShortcut,
@@ -197,13 +222,14 @@ class _GozarHomeState extends State<GozarHome> {
         if (parsed is List) {
           for (final value in parsed) {
             final text = value?.toString().trim() ?? '';
-            final uri = Uri.tryParse(text);
-            if (uri != null &&
-                uri.scheme == 'https' &&
-                uri.host.isNotEmpty &&
-                !subscriptions.contains(text)) {
-              subscriptions.add(text);
-            }
+            if (text.isEmpty) continue;
+            try {
+              final normalized =
+                  normalizeGozarSubscriptionUrl(text);
+              if (!subscriptions.contains(normalized)) {
+                subscriptions.add(normalized);
+              }
+            } on FormatException {}
           }
         }
       }
@@ -452,7 +478,7 @@ class _GozarHomeState extends State<GozarHome> {
             enableSuggestions: false,
             decoration: const InputDecoration(
               labelText: 'لینک Subscription',
-              hintText: 'https://...',
+              hintText: 'https://...  یا  sub://...',
             ),
           ),
           actions: [
@@ -463,21 +489,17 @@ class _GozarHomeState extends State<GozarHome> {
             FilledButton(
               key: const ValueKey('gozar-vpn-save-subscription'),
               onPressed: () {
-                final value = input.text.trim();
-                final uri = Uri.tryParse(value);
-                if (uri == null ||
-                    uri.scheme != 'https' ||
-                    uri.host.isEmpty) {
+                try {
+                  final value =
+                      normalizeGozarSubscriptionUrl(input.text);
+                  Navigator.of(dialog).pop(value);
+                } on FormatException catch (error) {
                   ScaffoldMessenger.of(dialog).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'لینک ساب باید یک نشانی HTTPS معتبر باشد.',
-                      ),
+                    SnackBar(
+                      content: Text(error.message.toString()),
                     ),
                   );
-                  return;
                 }
-                Navigator.of(dialog).pop(value);
               },
               child: const Text('دریافت و ذخیره'),
             ),
@@ -496,18 +518,19 @@ class _GozarHomeState extends State<GozarHome> {
     bool quiet = false,
   }) async {
     if (vpnImporting) return;
+    final sourceUrl = normalizeGozarSubscriptionUrl(url);
     setState(() { vpnImporting = true; });
     try {
-      final nodes = await fetchGozarSubscription(url);
+      final nodes = await fetchGozarSubscription(sourceUrl);
       final direct = vpnProfiles
-          .where((item) => item.subscription != url)
+          .where((item) => item.subscription != sourceUrl)
           .toList();
       final imported = [
         for (final node in nodes)
           GozarVpnProfile(
             node.name,
             node.link,
-            subscription: url,
+            subscription: sourceUrl,
           ),
       ];
       final merged = <GozarVpnProfile>[];
@@ -517,8 +540,8 @@ class _GozarHomeState extends State<GozarHome> {
       }
       final subscriptions =
           List<String>.from(vpnSubscriptions);
-      if (!subscriptions.contains(url)) {
-        subscriptions.add(url);
+      if (!subscriptions.contains(sourceUrl)) {
+        subscriptions.add(sourceUrl);
       }
 
       final preferredLink =
@@ -581,7 +604,7 @@ class _GozarHomeState extends State<GozarHome> {
               GozarVpnProfile(
                 node.name,
                 node.link,
-                subscription: url,
+                subscription: sourceUrl,
               ),
           ]);
           ok++;
@@ -786,6 +809,39 @@ class _GozarHomeState extends State<GozarHome> {
     ]),
   );
 
+  Widget _homeTab() => Column(children: [
+    Container(
+      key: const ValueKey('gozar-home-motivation'),
+      margin: const EdgeInsets.fromLTRB(12, 7, 12, 0),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xfff8fcff),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xffb9d8ee)),
+      ),
+      child: Row(children: [
+        const Icon(
+          Icons.auto_awesome_rounded,
+          color: Color(0xffc58a14),
+          size: 20,
+        ),
+        const SizedBox(width: 9),
+        Expanded(child: Text(
+          homeQuote,
+          key: const ValueKey('gozar-home-motivation-text'),
+          style: const TextStyle(
+            color: GozarPalette.text,
+            fontSize: 12.5,
+            height: 1.55,
+            fontWeight: FontWeight.w700,
+          ),
+        )),
+      ]),
+    ),
+    const SizedBox(height: 2),
+    Expanded(child: launcherPage),
+  ]);
+
   Widget _notesTab() => Column(children: [
     _pageHeader(
       Icons.event_note_rounded,
@@ -804,6 +860,11 @@ class _GozarHomeState extends State<GozarHome> {
             selectedVpnProfile < vpnProfiles.length
         ? vpnProfiles[selectedVpnProfile]
         : null;
+    final statusColor = connected
+        ? const Color(0xff159947)
+        : (connecting || stopping)
+            ? const Color(0xffd78a16)
+            : const Color(0xffd63f3f);
 
     final buttonLabel = connected
         ? 'برای قطع لمس کنید'
@@ -815,14 +876,14 @@ class _GozarHomeState extends State<GozarHome> {
 
     return GozarPanel(
       key: const ValueKey('gozar-settings-vpn-card'),
-      glow: connected ? GozarPalette.cyan : GozarPalette.purple,
+      glow: statusColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            const Icon(
+            Icon(
               Icons.shield_outlined,
-              color: GozarPalette.cyan,
+              color: statusColor,
               size: 22,
             ),
             const SizedBox(width: 8),
@@ -834,6 +895,16 @@ class _GozarHomeState extends State<GozarHome> {
                 fontSize: 17,
               ),
             )),
+            Container(
+              key: const ValueKey('gozar-vpn-status-dot'),
+              width: 11,
+              height: 11,
+              margin: const EdgeInsets.only(left: 8),
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: 8,
@@ -865,21 +936,14 @@ class _GozarHomeState extends State<GozarHome> {
                 height: 112,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: connected
-                      ? const Color(0xffd9f7f1)
-                      : const Color(0xffe9f1fb),
+                  color: statusColor.withOpacity(.13),
                   border: Border.all(
-                    color: connected
-                        ? GozarPalette.cyan
-                        : const Color(0xff7aa5c8),
+                    color: statusColor,
                     width: 3,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (connected
-                          ? GozarPalette.cyan
-                          : GozarPalette.purple)
-                          .withOpacity(.16),
+                      color: statusColor.withOpacity(.18),
                       blurRadius: 22,
                       spreadRadius: 2,
                     ),
@@ -888,9 +952,7 @@ class _GozarHomeState extends State<GozarHome> {
                 child: Icon(
                   Icons.power_settings_new_rounded,
                   size: 48,
-                  color: connected
-                      ? GozarPalette.cyan
-                      : GozarPalette.text,
+                  color: statusColor,
                 ),
               ),
             ),
@@ -1038,7 +1100,9 @@ class _GozarHomeState extends State<GozarHome> {
           const SizedBox(height: 5),
           const Text(
             'اکانت‌ها و لینک‌های ساب در فضای امن گوشی ذخیره می‌شوند. '
-            'VPN فقط از همین بخش تنظیمات کنترل می‌شود و تب جداگانه ندارد.',
+            'برنامه‌های بانکی، روبیکا، بله، ایتا و شاد به‌صورت خودکار '
+            'از مسیر مستقیم استفاده می‌کنند و سایت‌های .ir نیز مستقیم '
+            'مسیریابی می‌شوند.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: GozarPalette.muted,
@@ -1200,7 +1264,7 @@ class _GozarHomeState extends State<GozarHome> {
       child: IndexedStack(
         index: currentPage,
         children: [
-          launcherPage,
+          _homeTab(),
           _notesTab(),
           _settingsTab(),
         ],
