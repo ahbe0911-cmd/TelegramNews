@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build Gozar as launcher + notes only, with no VPN components."""
+"""Build Rosha as launcher + notes only, with all VPN components removed."""
 
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 
 (root / 'pubspec.yaml').write_text('''name: telegram_news
-description: Gozar launcher and local notes
+description: Rosha launcher and local notes
 publish_to: none
 version: 1.6.0+1
 environment:
@@ -156,4 +156,4 @@ assert 'GozarPlatformBridge.attach(this, flutterEngine)' in main_code
 assert 'GozarVpnBridge' not in main_code
 assert 'SystemVpnBridge' not in main_code
 
-print('Gozar: launcher + notes + reminders only; VPN fully removed')
+print('Rosha: launcher + notes + reminders only; VPN fully removed')
