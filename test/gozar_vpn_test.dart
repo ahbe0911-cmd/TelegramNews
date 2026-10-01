@@ -80,6 +80,26 @@ void main() {
     expect(settings['method'], 'aes-128-gcm');
   });
 
+  test('subscription localhost HTTP inbound always uses proxy', () {
+    final config =
+        jsonDecode(buildGozarXrayConfig(vmess())) as Map<String, dynamic>;
+    final inbounds = config['inbounds'] as List;
+    final local = inbounds.whereType<Map>().firstWhere(
+      (item) => item['tag'] == 'subscription-proxy',
+    );
+    expect(local['listen'], '127.0.0.1');
+    expect(local['port'], 17890);
+    expect(local['protocol'], 'http');
+
+    final rules = (config['routing'] as Map)['rules'] as List;
+    final route = rules.whereType<Map>().firstWhere(
+      (item) =>
+          (item['inboundTag'] as List?)?.contains('subscription-proxy') ??
+          false,
+    );
+    expect(route['outboundTag'], 'proxy');
+  });
+
   test('Iranian domains have direct routing with sniffing', () {
     final config =
         jsonDecode(buildGozarXrayConfig(vmess())) as Map<String, dynamic>;
