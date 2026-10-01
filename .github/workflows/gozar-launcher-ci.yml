@@ -1,4 +1,4 @@
-name: Validate Gozar Native Launcher
+name: Validate Rosha Native Launcher
 
 on:
   workflow_dispatch:
@@ -7,8 +7,6 @@ on:
     paths:
       - 'lib/gozar_launcher.dart'
       - 'lib/gozar_main.dart'
-      - 'lib/gozar_vpn.dart'
-      - 'lib/gozar_subscription.dart'
       - 'lib/gozar_platform_bridge.dart'
       - 'lib/gozar_notes_store.dart'
       - 'lib/gozar_notes_screen.dart'
@@ -16,28 +14,24 @@ on:
       - 'native/GozarPlatformBridge.kt'
       - 'native/GozarWebActivity.kt'
       - 'native/GozarReminderBridge.kt'
-      - 'native/GozarVpnBridge.kt'
-      - 'native/GozarVpnService.kt'
-      - 'native/GozarDirectAppPolicy.kt'
       - 'test/gozar_launcher_test.dart'
       - 'test/gozar_notes_test.dart'
       - 'test/gozar_shortcuts_test.dart'
       - 'test/td_gozar_app_test.dart'
-      - 'test/gozar_vpn_test.dart'
-      - 'test/gozar_subscription_test.dart'
       - 'scripts/configure_gozar_standalone.py'
       - 'scripts/configure_variant.py'
+      - 'scripts/verify_apk_variant.py'
       - '.github/workflows/gozar-launcher-ci.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: gozar-launcher-${{ github.ref }}
+  group: rosha-launcher-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gozar:
+  rosha:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -50,18 +44,11 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Prepare standalone Gozar Android host
+      - name: Prepare standalone Rosha Android host
         run: |
           python3 scripts/prepare_android.py --profile modern
           python3 scripts/configure_variant.py gozar
           python3 scripts/configure_gozar_standalone.py
-      - name: Install pinned Xray engine v26.9.9
-        run: |
-          mkdir -p android/app/libs
-          curl -fL --retry 3 --retry-delay 3 \
-            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar \
-            -o android/app/libs/libv2ray.aar
-          echo '9ecf4c921568d8f4cb8550d3bafe08ff6f1d1984f45a6ad183dcdf52ee9302de  android/app/libs/libv2ray.aar' | sha256sum -c -
       - name: Install licensed Vazirmatn assets
         run: |
           mkdir -p assets/fonts
@@ -73,18 +60,16 @@ jobs:
       - name: Verify Flutter launcher code
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_platform_bridge.dart lib/gozar_vpn.dart lib/gozar_subscription.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/td_gozar_app_test.dart test/gozar_vpn_test.dart test/gozar_subscription_test.dart
+          flutter analyze --no-fatal-infos lib/gozar_launcher.dart lib/gozar_main.dart lib/gozar_platform_bridge.dart lib/gozar_shortcuts.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/gozar_launcher_test.dart test/gozar_notes_test.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart
       - name: Test launcher persistence and interaction
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Test Persian notes and in-app calendar
         run: flutter test --reporter expanded test/gozar_notes_test.dart
-      - name: Test Settings-only VPN and Gozar navigation
+      - name: Test Rosha navigation without VPN
         run: |
-          flutter test --reporter expanded test/gozar_vpn_test.dart
-          flutter test --reporter expanded test/gozar_subscription_test.dart
           flutter test --reporter expanded test/td_gozar_app_test.dart
           flutter test --reporter expanded test/gozar_shortcuts_test.dart
-      - name: Verify Settings-only Xray VPN packaging
+      - name: Verify Android host has no VPN components
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -92,61 +77,75 @@ jobs:
           launcher = next((root / 'kotlin').rglob('GozarPlatformBridge.kt')).read_text()
           for action in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
               assert launcher.count(f'"{action}" ->') == 1, action
-          vpn = next((root / 'kotlin').rglob('GozarVpnBridge.kt')).read_text()
-          service = next((root / 'kotlin').rglob('GozarVpnService.kt')).read_text()
-          bypass = next((root / 'kotlin').rglob('GozarDirectAppPolicy.kt')).read_text()
-          assert '"start" ->' in vpn and '"stop" ->' in vpn and '"status" ->' in vpn
-          assert 'Libv2ray.newCoreController' in service
-          assert 'GozarDirectAppPolicy.installedPackages' in service
-          assert 'bankingLabelHints' in bypass and 'packageHints' in bypass
           assert 'getInstalledApplications' in launcher
-          assert 'WireGuard' not in vpn + service
+
           main = next((root / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (root / 'AndroidManifest.xml').read_text()
           alarm = next((root / 'kotlin').rglob('GozarReminderBridge.kt')).read_text()
+
           assert 'GozarPlatformBridge.attach(this, flutterEngine)' in main
-          assert 'GozarVpnBridge.attach(this, flutterEngine)' in main
-          assert 'SystemVpnBridge' not in main
+          for forbidden in ('GozarVpnBridge', 'SystemVpnBridge', 'WireGuard'):
+              assert forbidden not in main, forbidden
+          assert not list((root / 'kotlin').rglob('GozarVpnService.kt'))
           assert not list((root / 'kotlin').rglob('SystemVpnService.kt'))
           assert not list((root / 'kotlin').rglob('WireGuardController.kt'))
-          assert 'BIND_VPN_SERVICE' in manifest
-          assert 'android.net.VpnService' in manifest
-          assert 'GozarVpnService' in manifest
+
+          for forbidden in (
+              'BIND_VPN_SERVICE',
+              'android.net.VpnService',
+              'GozarVpnService',
+              'FOREGROUND_SERVICE_SPECIAL_USE',
+          ):
+              assert forbidden not in manifest, forbidden
           assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
+          assert '.GozarWebActivity' in manifest
+          assert 'android.intent.category.LAUNCHER' in manifest
+
           main_dart = Path('lib/gozar_main.dart').read_text()
           assert main_dart.count('NavigationDestination(') == 3
-          assert "label: 'VPN'" not in main_dart
+          for forbidden in (
+              'VPN', 'Xray', 'WireGuard', 'GozarVpnBridge',
+              'gozar_vpn.dart', 'gozar_subscription.dart',
+          ):
+              assert forbidden not in main_dart, forbidden
           assert "label: 'خانه'" in main_dart
           assert "label: 'یادداشت'" in main_dart
           assert "label: 'تنظیمات'" in main_dart
-          assert "ValueKey('gozar-settings-vpn-card')" in main_dart
-          assert "ValueKey('gozar-settings-vpn-power')" in main_dart
           assert "ValueKey('gozar-home-motivation')" in main_dart
-          assert 'Xray-core 26.9.9' in main_dart
-          assert 'WireGuard' not in main_dart
+
           icon = (root / 'res/mipmap-anydpi/ic_launcher.xml').read_text()
-          assert '#0C5489' in icon and '#61E9DA' in icon
-          for name in ('GozarReminderReceiver', 'GozarReminderBootReceiver',
-                       'SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED'):
+          assert '#163B65' in icon
+          assert '#61E9DA' in icon
+          assert '#F3B63E' in icon
+
+          for name in (
+              'GozarReminderReceiver',
+              'GozarReminderBootReceiver',
+              'SCHEDULE_EXACT_ALARM',
+              'RECEIVE_BOOT_COMPLETED',
+          ):
               assert name in manifest, name
-          for action in ('setExactAndAllowWhileIdle', 'setAndAllowWhileIdle',
-                         'POST_NOTIFICATIONS', 'ACTION_BOOT_COMPLETED'):
+          for action in (
+              'setExactAndAllowWhileIdle',
+              'setAndAllowWhileIdle',
+              'POST_NOTIFICATIONS',
+              'ACTION_BOOT_COMPLETED',
+          ):
               assert action in alarm, action
-          print('Settings-only Xray VPN, smart bypass, full launcher visibility and reminders are packaged.')
+          print('Rosha launcher + notes verified; VPN is fully absent.')
           PY
-      - name: Compile Gozar ARM64 without full artifact quota
+      - name: Compile Rosha ARM64
         run: |
           python3 scripts/configure_build.py
           flutter build apk --release --target lib/gozar_main.dart --target-platform android-arm64 --build-number=${{ github.run_number }} --dart-define=APP_VARIANT=gozar
           python3 scripts/verify_apk_variant.py gozar
           test -s build/app/outputs/flutter-apk/app-release.apk
           sha256sum build/app/outputs/flutter-apk/app-release.apk
-          echo 'Gozar APK compiled and verified.'
-      - name: Publish verified Gozar launcher APK
+      - name: Publish verified Rosha APK
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: Gozar-Launcher-A54
+          name: Rosha-A54
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 1
