@@ -30,7 +30,7 @@ object GozarPlatformBridge {
     ): List<ApplicationInfo> =
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             packageManager.getInstalledApplications(
-                PackageManager.ApplicationInfoFlags.of(0)
+                PackageManager.ApplicationInfoFlags.of(0L)
             )
         } else {
             packageManager.getInstalledApplications(0)
@@ -72,11 +72,7 @@ object GozarPlatformBridge {
                 )
             }
             .distinctBy { it["package"] }
-            .sortedWith(
-                compareBy<Map<String, String>>(
-                    String.CASE_INSENSITIVE_ORDER
-                ) { it["label"] ?: "" }
-            )
+            .sortedBy { (it["label"] ?: "").lowercase() }
 
         cachedApps = apps
         cachedAt = now
