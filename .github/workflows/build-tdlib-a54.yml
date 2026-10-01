@@ -9,6 +9,7 @@ on:
       - 'lib/td_telegram_saved_page.dart'
       - 'lib/td_system_vpn.dart'
       - 'lib/gozar_main.dart'
+      - 'lib/rosha_quotes.dart'
       - 'lib/gozar_platform_bridge.dart'
       - 'lib/gozar_telegram_web.dart'
       - 'lib/gozar_visuals.dart'
@@ -127,6 +128,9 @@ jobs:
           for method in ('openShortcutApp', 'openShortcutWeb', 'appIcon', 'installedApps'):
               assert launcher.count(f'"{method}" ->') == 1, method
           assert 'getInstalledApplications' in launcher
+          assert 'queryIntentActivities' in launcher
+          assert 'CATEGORY_LAUNCHER' in launcher
+          assert 'MATCH_ALL' in launcher
 
           main = next((folder / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (folder / 'AndroidManifest.xml').read_text()
@@ -198,7 +202,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib
       - name: Validate Rosha launcher and notes source
         if: matrix.variant == 'gozar'
-        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/gozar_visuals.dart lib/gozar_platform_bridge.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart test/gozar_notes_test.dart
+        run: flutter analyze --no-fatal-infos lib/gozar_main.dart lib/rosha_quotes.dart lib/gozar_visuals.dart lib/gozar_platform_bridge.dart lib/gozar_shortcuts.dart lib/gozar_launcher.dart lib/gozar_notes_store.dart lib/gozar_notes_screen.dart test/td_gozar_app_test.dart test/gozar_shortcuts_test.dart test/gozar_notes_test.dart test/rosha_quotes_test.dart
       - name: Test channel parsing and local sources
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_engine_test.dart
@@ -220,7 +224,9 @@ jobs:
         run: flutter test --reporter expanded test/gozar_launcher_test.dart
       - name: Verify standalone Rosha without VPN
         if: matrix.variant == 'gozar'
-        run: flutter test --reporter expanded test/td_gozar_app_test.dart
+        run: |
+          flutter test --reporter expanded test/td_gozar_app_test.dart
+          flutter test --reporter expanded test/rosha_quotes_test.dart
       - name: Verify home and settings layout
         if: matrix.variant != 'gozar'
         run: flutter test test/td_news_ui_test.dart
