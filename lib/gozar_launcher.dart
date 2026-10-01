@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -152,12 +153,30 @@ class _GozarLauncherState extends State<GozarLauncher> {
     super.initState();
     sections = GozarLauncherStore.load(widget.preferences);
     if (sections.isNotEmpty) draftSectionTitle = sections.first.title;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_warmInstalledApps());
+    });
   }
 
   @override
   void dispose() {
     pages.dispose();
     super.dispose();
+  }
+
+  Future<void> _warmInstalledApps() async {
+    // Never block the first frame. Populate the picker cache shortly after
+    // Home is already visible so opening "افزودن" feels immediate.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted || cachedInstalledApps != null) return;
+    try {
+      final apps = await GozarPlatformBridge.installedApps(force: true);
+      if (!mounted) return;
+      cachedInstalledApps = apps;
+      installedAppsFetchedAt = DateTime.now();
+    } catch (_) {
+      // The picker itself will retry if Android was still starting services.
+    }
   }
 
   void notice(String text) {
@@ -545,19 +564,44 @@ class _GozarLauncherState extends State<GozarLauncher> {
     List<Map<String, String>> installed;
     final cached = cachedInstalledApps;
     final fetched = installedAppsFetchedAt;
-    if (cached != null && fetched != null &&
-        DateTime.now().difference(fetched) < const Duration(seconds: 30)) {
-      installed = cached;
+    if (cached != null &&
+        cached.isNotEmpty &&
+        fetched != null &&
+        DateTime.now().difference(fetched) < const Duration(minutes: 5)) {
+      installed = List<Map<String, String>>.from(cached);
     } else {
       try {
-        installed = await GozarPlatformBridge.installedApps();
+        installed = await GozarPlatformBridge.installedApps(force: true);
         cachedInstalledApps = installed;
         installedAppsFetchedAt = DateTime.now();
       } catch (_) {
-        notice('فهرست برنامه‌های نصب‌شده دریافت نشد.');
-        return;
+        if (cached != null && cached.isNotEmpty) {
+          installed = List<Map<String, String>>.from(cached);
+        } else {
+          notice('فهرست برنامه‌های نصب‌شده دریافت نشد.');
+          return;
+        }
       }
     }
+
+    // Keep already-saved shortcuts manageable even if an OEM temporarily
+    // hides one launcher activity from PackageManager.
+    final knownPackages = installed
+        .map((item) => item['package'] ?? '')
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    for (final app in section.apps) {
+      if (app.kind == 'app' && knownPackages.add(app.target)) {
+        installed.add({
+          'package': app.target,
+          'component': app.component,
+          'label': app.title,
+        });
+      }
+    }
+    installed.sort((a, b) =>
+        (a['label'] ?? '').toLowerCase().compareTo(
+            (b['label'] ?? '').toLowerCase()));
     if (!mounted) return;
     var filter = '';
     final selected = <String, GozarShortcut>{
@@ -578,10 +622,27 @@ class _GozarLauncherState extends State<GozarLauncher> {
             child: SizedBox(
               height: MediaQuery.sizeOf(sheetContext).height * .76,
               child: Column(children: [
-                const Padding(padding: EdgeInsets.all(12),
-                  child: Text('افزودن برنامه به بخش',
-                    style: TextStyle(color: GozarPalette.text,
-                      fontSize: 18, fontWeight: FontWeight.w800))),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: Row(children: [
+                    const Expanded(child: Text(
+                      'افزودن برنامه به بخش',
+                      style: TextStyle(
+                        color: GozarPalette.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )),
+                    Text(
+                      installed.length.toString() + ' برنامه',
+                      key: const ValueKey('gozar-launcher-installed-count'),
+                      style: const TextStyle(
+                        color: GozarPalette.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ]),
+                ),
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: TextField(
                     key: const ValueKey('gozar-launcher-app-search'),
