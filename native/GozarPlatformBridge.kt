@@ -36,6 +36,27 @@ object GozarPlatformBridge {
             packageManager.getInstalledApplications(0)
         }
 
+    @Suppress("DEPRECATION")
+    private fun launcherActivities(
+        packageManager: PackageManager
+    ): List<android.content.pm.ResolveInfo> {
+        val intent = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+        return if (android.os.Build.VERSION.SDK_INT >= 33) {
+            packageManager.queryIntentActivities(
+                intent,
+                PackageManager.ResolveInfoFlags.of(
+                    PackageManager.MATCH_ALL.toLong()
+                )
+            )
+        } else {
+            packageManager.queryIntentActivities(
+                intent,
+                PackageManager.MATCH_ALL
+            )
+        }
+    }
+
     private fun allLaunchableApps(
         activity: MainActivity,
         force: Boolean = false
@@ -47,31 +68,54 @@ object GozarPlatformBridge {
         }
 
         val pm = activity.packageManager
-        val apps = installedApplications(pm)
-            .mapNotNull { info ->
-                val pkg = info.packageName ?: return@mapNotNull null
-                if (pkg == activity.packageName) return@mapNotNull null
+        val merged = LinkedHashMap<String, Map<String, String>>()
 
-                val launch = try {
-                    pm.getLaunchIntentForPackage(pkg)
-                } catch (_: Throwable) {
-                    null
-                } ?: return@mapNotNull null
+        // Primary source: every activity Android itself exposes to a launcher.
+        // This catches apps whose package-level launch intent is not exposed
+        // reliably (Instagram and several vendor apps can fall into this case).
+        for (info in launcherActivities(pm)) {
+            val activityInfo = info.activityInfo ?: continue
+            val pkg = activityInfo.packageName ?: continue
+            if (pkg == activity.packageName) continue
 
-                val component = launch.component?.className ?: ""
-                val label = try {
-                    pm.getApplicationLabel(info).toString().trim()
-                } catch (_: Throwable) {
-                    pkg
-                }
-
-                mapOf(
-                    "package" to pkg,
-                    "component" to component,
-                    "label" to (if (label.isEmpty()) pkg else label)
-                )
+            val label = try {
+                info.loadLabel(pm).toString().trim()
+            } catch (_: Throwable) {
+                pkg
             }
-            .distinctBy { it["package"] }
+            merged[pkg] = mapOf(
+                "package" to pkg,
+                "component" to activityInfo.name,
+                "label" to (if (label.isEmpty()) pkg else label)
+            )
+        }
+
+        // Secondary source: installed packages with a normal launch intent.
+        // It fills gaps left by OEM launchers and unusual aliases.
+        for (info in installedApplications(pm)) {
+            val pkg = info.packageName ?: continue
+            if (pkg == activity.packageName || merged.containsKey(pkg)) {
+                continue
+            }
+            val launch = try {
+                pm.getLaunchIntentForPackage(pkg)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val label = try {
+                pm.getApplicationLabel(info).toString().trim()
+            } catch (_: Throwable) {
+                pkg
+            }
+            merged[pkg] = mapOf(
+                "package" to pkg,
+                "component" to (launch.component?.className ?: ""),
+                "label" to (if (label.isEmpty()) pkg else label)
+            )
+        }
+
+        val apps = merged.values
             .sortedBy { (it["label"] ?: "").lowercase() }
 
         cachedApps = apps
@@ -219,12 +263,20 @@ object GozarPlatformBridge {
                                     }
 
                                 val bitmap = Bitmap.createBitmap(
-                                    80,
-                                    80,
+                                    96,
+                                    96,
                                     Bitmap.Config.ARGB_8888
                                 )
                                 val canvas = Canvas(bitmap)
-                                drawable.setBounds(0, 0, 80, 80)
+                                // Slight overscan compensates for the safe-zone
+                                // padding used by many adaptive app icons.
+                                val overscan = 5
+                                drawable.setBounds(
+                                    -overscan,
+                                    -overscan,
+                                    96 + overscan,
+                                    96 + overscan
+                                )
                                 drawable.draw(canvas)
 
                                 val bytes = ByteArrayOutputStream()
