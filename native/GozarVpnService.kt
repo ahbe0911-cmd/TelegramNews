@@ -153,10 +153,17 @@ class GozarVpnService : VpnService() {
                     .addDnsServer("1.1.1.1")
                     .addDnsServer("2606:4700:4700::1111")
 
-                try {
-                    builder.addDisallowedApplication(packageName)
-                } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-                    // The current package always exists while the service runs.
+                val directPackages = listOf(packageName) +
+                    GozarDirectAppPolicy.installedPackages(
+                        packageManager,
+                        packageName
+                    )
+                directPackages.distinct().forEach { pkg ->
+                    try {
+                        builder.addDisallowedApplication(pkg)
+                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                        // An app can be removed between discovery and TUN setup.
+                    }
                 }
 
                 val fd = builder.establish()
@@ -202,7 +209,7 @@ class GozarVpnService : VpnService() {
                 synchronized(resourceLock) {
                     if (!stopping) {
                         stage = "running"
-                        detail = "Xray-core متصل است."
+                        detail = "Xray-core متصل است؛ برنامه‌های بانکی و سرویس‌های ایرانی مستقیم هستند."
                     }
                 }
             } catch (error: Throwable) {
