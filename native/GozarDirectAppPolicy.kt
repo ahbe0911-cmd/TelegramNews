@@ -71,7 +71,7 @@ object GozarDirectAppPolicy {
     ): List<ApplicationInfo> =
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             packageManager.getInstalledApplications(
-                PackageManager.ApplicationInfoFlags.of(0)
+                PackageManager.ApplicationInfoFlags.of(0L)
             )
         } else {
             packageManager.getInstalledApplications(0)
