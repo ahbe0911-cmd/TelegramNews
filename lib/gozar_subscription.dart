@@ -166,6 +166,7 @@ Future<String> _downloadSubscription(
 }) async {
   final client = HttpClient()
     ..connectionTimeout = timeout
+    ..idleTimeout = timeout
     ..userAgent = userAgent
     ..autoUncompress = true;
 
@@ -179,6 +180,7 @@ Future<String> _downloadSubscription(
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
     request.headers.set('pragma', 'no-cache');
+    request.headers.set(HttpHeaders.connectionHeader, 'close');
 
     final response = await request.close().timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -206,7 +208,7 @@ Future<String> _downloadSubscription(
 
 Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
   String input, {
-  Duration timeout = const Duration(seconds: 14),
+  Duration timeout = const Duration(seconds: 35),
   int maxBytes = 4 * 1024 * 1024,
 }) async {
   final normalized = normalizeGozarSubscriptionUrl(input);
@@ -215,25 +217,38 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
   Object? lastError;
   const userAgents = [
     'v2rayNG/1.10 Android',
-    'Gozar/1.5 Android',
+    'ClashMetaForAndroid/2.11 Meta',
+    'Gozar/1.6 Android',
   ];
 
-  for (final userAgent in userAgents) {
+  for (var index = 0; index < userAgents.length; index++) {
     try {
       final payload = await _downloadSubscription(
         uri,
-        userAgent,
+        userAgents[index],
         timeout: timeout,
         maxBytes: maxBytes,
       );
       return parseGozarSubscription(payload);
     } catch (error) {
       lastError = error;
+      if (index + 1 < userAgents.length) {
+        await Future<void>.delayed(
+          Duration(milliseconds: 350 * (index + 1)),
+        );
+      }
     }
   }
 
   if (lastError is FormatException) throw lastError;
   if (lastError is HttpException) throw lastError;
+  if (lastError is TimeoutException ||
+      lastError is SocketException) {
+    throw const FormatException(
+      'سرور ساب دیر پاسخ می‌دهد یا فعلاً در دسترس نیست؛ '
+      'برنامه در به‌روزرسانی خودکار دوباره تلاش می‌کند.',
+    );
+  }
   throw const FormatException(
     'ساب دریافت شد اما هیچ سرور سازگار در پاسخ آن پیدا نشد.',
   );
