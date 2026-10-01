@@ -131,6 +131,8 @@ class _GozarHomeState extends State<GozarHome> {
   bool vpnImporting = false;
   int? vpnLatencyMs;
   Timer? vpnTimer;
+  Timer? subscriptionTimer;
+  static const _subscriptionRefreshEvery = Duration(hours: 6);
 
   @override
   void initState() {
@@ -170,7 +172,9 @@ class _GozarHomeState extends State<GozarHome> {
       } catch (_) {}
     });
 
-    unawaited(_loadVpnData());
+    unawaited(
+      _loadVpnData().then((_) => _maybeAutoRefreshSubscriptions()),
+    );
     unawaited(_refreshVpnStatus());
     vpnTimer = Timer.periodic(
       const Duration(seconds: 3),
@@ -180,11 +184,16 @@ class _GozarHomeState extends State<GozarHome> {
         }
       },
     );
+    subscriptionTimer = Timer.periodic(
+      const Duration(minutes: 30),
+      (_) => unawaited(_maybeAutoRefreshSubscriptions()),
+    );
   }
 
   @override
   void dispose() {
     vpnTimer?.cancel();
+    subscriptionTimer?.cancel();
     GozarReminderBridge.channel.setMethodCallHandler(null);
     super.dispose();
   }
@@ -251,6 +260,27 @@ class _GozarHomeState extends State<GozarHome> {
     } catch (_) {}
   }
 
+  Future<void> _maybeAutoRefreshSubscriptions() async {
+    if (!mounted || vpnImporting || vpnSubscriptions.isEmpty) return;
+    final lastMillis = widget.preferences.getInt(
+          'gozar_subscription_last_refresh_v1',
+        ) ??
+        0;
+    if (!gozarSubscriptionRefreshDue(
+      lastMillis,
+      interval: _subscriptionRefreshEvery,
+    )) {
+      return;
+    }
+    await _refreshAllSubscriptions(quiet: true);
+  }
+
+  Future<void> _markSubscriptionsRefreshed() =>
+      widget.preferences.setInt(
+        'gozar_subscription_last_refresh_v1',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+
   Future<void> _persistVpnData() async {
     await _vault.write(
       key: _profilesKey,
@@ -273,6 +303,8 @@ class _GozarHomeState extends State<GozarHome> {
       final nextStage = status['stage']?.toString() ?? 'off';
       final nextDetail =
           status['detail']?.toString() ?? 'VPN خاموش است.';
+      final becameConnected =
+          vpnStage != 'running' && nextStage == 'running';
       if (nextStage != vpnStage || nextDetail != vpnDetail) {
         setState(() {
           vpnStage = nextStage;
@@ -281,6 +313,9 @@ class _GozarHomeState extends State<GozarHome> {
             vpnLatencyMs = null;
           }
         });
+      }
+      if (becameConnected) {
+        unawaited(_maybeAutoRefreshSubscriptions());
       }
     } catch (_) {}
   }
@@ -525,7 +560,10 @@ class _GozarHomeState extends State<GozarHome> {
     final sourceUrl = normalizeGozarSubscriptionUrl(url);
     setState(() { vpnImporting = true; });
     try {
-      final nodes = await fetchGozarSubscription(sourceUrl);
+      final nodes = await fetchGozarSubscription(
+        sourceUrl,
+        preferXrayProxy: vpnStage == 'running',
+      );
       final direct = vpnProfiles
           .where((item) => item.subscription != sourceUrl)
           .toList();
@@ -572,6 +610,7 @@ class _GozarHomeState extends State<GozarHome> {
         selectedVpnProfile = nextIndex;
       });
       await _persistVpnData();
+      await _markSubscriptionsRefreshed();
       if (!quiet) {
         notice(
           '${nodes.length} سرور از ساب اضافه شد.',
@@ -590,7 +629,9 @@ class _GozarHomeState extends State<GozarHome> {
     }
   }
 
-  Future<void> _refreshAllSubscriptions() async {
+  Future<void> _refreshAllSubscriptions({
+    bool quiet = false,
+  }) async {
     if (vpnSubscriptions.isEmpty || vpnImporting) return;
     final sources = List<String>.from(vpnSubscriptions);
     var ok = 0;
@@ -599,7 +640,10 @@ class _GozarHomeState extends State<GozarHome> {
       var current = List<GozarVpnProfile>.from(vpnProfiles);
       for (final url in sources) {
         try {
-          final nodes = await fetchGozarSubscription(url);
+          final nodes = await fetchGozarSubscription(
+            url,
+            preferXrayProxy: vpnStage == 'running',
+          );
           current = current
               .where((item) => item.subscription != url)
               .toList();
@@ -639,11 +683,16 @@ class _GozarHomeState extends State<GozarHome> {
         selectedVpnProfile = nextIndex;
       });
       await _persistVpnData();
-      notice(
-        ok == sources.length
-            ? 'همه ساب‌ها به‌روزرسانی شدند.'
-            : '$ok از ${sources.length} ساب به‌روزرسانی شد.',
-      );
+      if (ok > 0) {
+        await _markSubscriptionsRefreshed();
+      }
+      if (!quiet) {
+        notice(
+          ok == sources.length
+              ? 'همه ساب‌ها به‌روزرسانی شدند.'
+              : '$ok از ${sources.length} ساب به‌روزرسانی شد.',
+        );
+      }
     } finally {
       if (mounted) setState(() { vpnImporting = false; });
     }
@@ -1286,6 +1335,7 @@ class _GozarHomeState extends State<GozarHome> {
         setState(() { currentPage = index; });
         if (index == 2) {
           unawaited(_refreshVpnStatus());
+          unawaited(_maybeAutoRefreshSubscriptions());
         }
       },
       destinations: const [
