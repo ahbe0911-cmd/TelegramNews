@@ -65,11 +65,10 @@ void main() {
   });
 
   test('Xray config accepts SIP002 Shadowsocks', () {
-    final credentials = base64Url.encode(
-      utf8.encode('aes-128-gcm:strong-password'),
-    ).replaceAll('=', '');
-    final link =
-        'ss://' + credentials + '@ss.example:8388#shadow';
+    final credentials = base64Url
+        .encode(utf8.encode('aes-128-gcm:strong-password'))
+        .replaceAll('=', '');
+    final link = 'ss://' + credentials + '@ss.example:8388#shadow';
     final raw = buildGozarXrayConfig(link);
     final config = jsonDecode(raw) as Map<String, dynamic>;
     final outbound =
@@ -81,28 +80,26 @@ void main() {
     expect(settings['method'], 'aes-128-gcm');
   });
 
-  test('Iranian domains have a direct routing rule with sniffing', () {
+  test('Iranian domains have direct routing with sniffing', () {
     final config =
         jsonDecode(buildGozarXrayConfig(vmess())) as Map<String, dynamic>;
     final inbound =
         (config['inbounds'] as List).first as Map<String, dynamic>;
     expect((inbound['sniffing'] as Map)['enabled'], isTrue);
+
     final outbounds = config['outbounds'] as List;
     expect(
       outbounds.whereType<Map>().any((item) => item['tag'] == 'direct'),
       isTrue,
     );
+
     final rules = (config['routing'] as Map)['rules'] as List;
     final direct = rules.whereType<Map>()
         .firstWhere((item) => item['outboundTag'] == 'direct');
-    expect((direct['domain'] as List), contains(r'regexp:.*\.ir  test('display protocol label stays compact', () {
-    expect(gozarProtocolLabel('vless://x'), 'VLESS');
-    expect(gozarProtocolLabel('vmess://x'), 'VMess');
-    expect(gozarProtocolLabel('trojan://x'), 'Trojan');
-    expect(gozarProtocolLabel('ss://x'), 'Shadowsocks');
-  });
-}
-));
+    expect(
+      (direct['domain'] as List),
+      contains('regexp:.*\\.ir\$'),
+    );
     expect((direct['domain'] as List), contains('domain:bale.ai'));
     expect((direct['domain'] as List), contains('domain:eitaa.com'));
   });
@@ -111,5 +108,6 @@ void main() {
     expect(gozarProtocolLabel('vless://x'), 'VLESS');
     expect(gozarProtocolLabel('vmess://x'), 'VMess');
     expect(gozarProtocolLabel('trojan://x'), 'Trojan');
+    expect(gozarProtocolLabel('ss://x'), 'Shadowsocks');
   });
 }
