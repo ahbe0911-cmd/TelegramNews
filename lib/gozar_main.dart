@@ -8,6 +8,7 @@ import 'gozar_notes_store.dart';
 import 'gozar_platform_bridge.dart';
 import 'gozar_shortcuts.dart';
 import 'gozar_visuals.dart';
+import 'rosha_quotes.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,38 +67,27 @@ class GozarHome extends StatefulWidget {
   State<GozarHome> createState() => _GozarHomeState();
 }
 
-class _GozarHomeState extends State<GozarHome> {
-  static const _motivationalQuotes = <String>[
-    'امروز لازم نیست بی‌نقص باشی؛ کافی است یک قدم بهتر از دیروز برداری.',
-    'کارهای بزرگ از تصمیم‌های کوچک و پیوسته ساخته می‌شوند.',
-    'آرام پیش برو، اما از چیزی که برایت مهم است دست نکش.',
-    'توان تو بیشتر از چیزی است که یک روز سخت نشان می‌دهد.',
-    'هر شروع تازه، فرصتی است برای ساختن نسخه بهتر خودت.',
-    'تمرکز روی قدم بعدی، مسیرهای بلند را کوتاه می‌کند.',
-    'پیشرفت واقعی آرام است؛ مهم این است که متوقف نشوی.',
-    'به جای منتظر ماندن برای زمان مناسب، همین لحظه را بهتر کن.',
-    'انرژی‌ات را روی چیزهایی بگذار که می‌توانی تغییرشان بدهی.',
-    'موفقیت، جمع همان کارهای کوچکی است که هر روز ادامه می‌دهی.',
-    'اگر مسیر سخت شده، شاید دقیقاً در حال رشد کردن هستی.',
-    'امروز یک فرصت تازه است؛ آن را با هدف شروع کن.',
-  ];
-
+class _GozarHomeState extends State<GozarHome>
+    with WidgetsBindingObserver {
   int currentPage = 0;
   late final GozarLauncher launcherPage;
   late final GozarNotesScreen notesPage;
-  late final String homeQuote;
+  late String homeQuote;
+  late int homeQuoteIndex;
+  bool wasBackgrounded = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final previousQuote =
         widget.preferences.getInt('gozar_home_quote_index_v1') ?? -1;
-    final nextQuote =
-        (previousQuote + 1) % _motivationalQuotes.length;
-    homeQuote = _motivationalQuotes[nextQuote];
+    homeQuoteIndex =
+        (previousQuote + 1) % roshaMotivationalQuotes.length;
+    homeQuote = roshaMotivationalQuotes[homeQuoteIndex];
     widget.preferences.setInt(
       'gozar_home_quote_index_v1',
-      nextQuote,
+      homeQuoteIndex,
     );
 
     launcherPage = GozarLauncher(
@@ -129,7 +119,33 @@ class _GozarHomeState extends State<GozarHome> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      wasBackgrounded = true;
+      return;
+    }
+    if (state == AppLifecycleState.resumed &&
+        wasBackgrounded &&
+        mounted) {
+      wasBackgrounded = false;
+      final next =
+          (homeQuoteIndex + 1) % roshaMotivationalQuotes.length;
+      setState(() {
+        homeQuoteIndex = next;
+        homeQuote = roshaMotivationalQuotes[next];
+      });
+      widget.preferences.setInt(
+        'gozar_home_quote_index_v1',
+        next,
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     GozarReminderBridge.channel.setMethodCallHandler(null);
     super.dispose();
   }
