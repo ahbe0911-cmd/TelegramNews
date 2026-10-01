@@ -94,14 +94,10 @@ Map<String, dynamic> _parseShadowsocksShare(String input) {
   return {
     'protocol': 'shadowsocks',
     'settings': {
-      'servers': [
-        {
-          'address': host,
-          'port': port,
-          'method': method,
-          'password': password,
-        }
-      ],
+      'address': host,
+      'port': port,
+      'method': method,
+      'password': password,
     },
   };
 }
