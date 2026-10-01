@@ -1,9 +1,5 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'gozar_launcher.dart';
@@ -11,34 +7,7 @@ import 'gozar_notes_screen.dart';
 import 'gozar_notes_store.dart';
 import 'gozar_platform_bridge.dart';
 import 'gozar_shortcuts.dart';
-import 'gozar_subscription.dart';
 import 'gozar_visuals.dart';
-import 'gozar_vpn.dart';
-
-class GozarVpnProfile {
-  final String name;
-  final String link;
-  final String? subscription;
-
-  const GozarVpnProfile(
-    this.name,
-    this.link, {
-    this.subscription,
-  });
-
-  factory GozarVpnProfile.fromJson(Map<String, dynamic> input) =>
-      GozarVpnProfile(
-        input['name']?.toString() ?? 'سرور',
-        input['link']?.toString() ?? '',
-        subscription: input['subscription']?.toString(),
-      );
-
-  Map<String, String> toJson() => {
-    'name': name,
-    'link': link,
-    if (subscription != null) 'subscription': subscription!,
-  };
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -98,10 +67,6 @@ class GozarHome extends StatefulWidget {
 }
 
 class _GozarHomeState extends State<GozarHome> {
-  static const _vault = FlutterSecureStorage();
-  static const _profilesKey = 'gozar_xray_profiles_v4';
-  static const _subscriptionsKey = 'gozar_xray_subscriptions_v2';
-  static const _engineVersion = 'Xray-core 26.9.9';
   static const _motivationalQuotes = <String>[
     'امروز لازم نیست بی‌نقص باشی؛ کافی است یک قدم بهتر از دیروز برداری.',
     'کارهای بزرگ از تصمیم‌های کوچک و پیوسته ساخته می‌شوند.',
@@ -122,18 +87,6 @@ class _GozarHomeState extends State<GozarHome> {
   late final GozarNotesScreen notesPage;
   late final String homeQuote;
 
-  List<GozarVpnProfile> vpnProfiles = [];
-  List<String> vpnSubscriptions = [];
-  int selectedVpnProfile = -1;
-  String vpnStage = 'off';
-  String vpnDetail = 'VPN خاموش است.';
-  bool vpnBusy = false;
-  bool vpnImporting = false;
-  int? vpnLatencyMs;
-  Timer? vpnTimer;
-  Timer? subscriptionTimer;
-  static const _subscriptionRefreshEvery = Duration(hours: 6);
-
   @override
   void initState() {
     super.initState();
@@ -142,10 +95,10 @@ class _GozarHomeState extends State<GozarHome> {
     final nextQuote =
         (previousQuote + 1) % _motivationalQuotes.length;
     homeQuote = _motivationalQuotes[nextQuote];
-    unawaited(widget.preferences.setInt(
+    widget.preferences.setInt(
       'gozar_home_quote_index_v1',
       nextQuote,
-    ));
+    );
 
     launcherPage = GozarLauncher(
       preferences: widget.preferences,
@@ -169,31 +122,14 @@ class _GozarHomeState extends State<GozarHome> {
         if (opened && mounted) {
           setState(() { currentPage = 1; });
         }
-      } catch (_) {}
+      } catch (_) {
+        // Widget tests and unsupported hosts.
+      }
     });
-
-    unawaited(
-      _loadVpnData().then((_) => _maybeAutoRefreshSubscriptions()),
-    );
-    unawaited(_refreshVpnStatus());
-    vpnTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) {
-        if (currentPage == 2 || vpnStage != 'off') {
-          unawaited(_refreshVpnStatus());
-        }
-      },
-    );
-    subscriptionTimer = Timer.periodic(
-      const Duration(minutes: 30),
-      (_) => unawaited(_maybeAutoRefreshSubscriptions()),
-    );
   }
 
   @override
   void dispose() {
-    vpnTimer?.cancel();
-    subscriptionTimer?.cancel();
     GozarReminderBridge.channel.setMethodCallHandler(null);
     super.dispose();
   }
@@ -202,606 +138,6 @@ class _GozarHomeState extends State<GozarHome> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _loadVpnData() async {
-    try {
-      final rawProfiles = await _vault.read(key: _profilesKey);
-      final rawSubscriptions = await _vault.read(key: _subscriptionsKey);
-      final profiles = <GozarVpnProfile>[];
-      if (rawProfiles != null) {
-        final parsed = jsonDecode(rawProfiles);
-        if (parsed is List) {
-          for (final item in parsed) {
-            if (item is Map) {
-              final profile = GozarVpnProfile.fromJson(
-                Map<String, dynamic>.from(item),
-              );
-              if (profile.link.isNotEmpty) {
-                try {
-                  buildGozarXrayConfig(profile.link);
-                  profiles.add(profile);
-                } on FormatException {}
-              }
-            }
-          }
-        }
-      }
-
-      final subscriptions = <String>[];
-      if (rawSubscriptions != null) {
-        final parsed = jsonDecode(rawSubscriptions);
-        if (parsed is List) {
-          for (final value in parsed) {
-            final text = value?.toString().trim() ?? '';
-            if (text.isEmpty) continue;
-            try {
-              final normalized =
-                  normalizeGozarSubscriptionUrl(text);
-              if (!subscriptions.contains(normalized)) {
-                subscriptions.add(normalized);
-              }
-            } on FormatException {}
-          }
-        }
-      }
-
-      if (!mounted) return;
-      final savedIndex =
-          widget.preferences.getInt('gozar_xray_profile_index') ?? 0;
-      setState(() {
-        vpnProfiles = profiles;
-        vpnSubscriptions = subscriptions;
-        selectedVpnProfile = profiles.isEmpty
-            ? -1
-            : savedIndex.clamp(0, profiles.length - 1);
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _maybeAutoRefreshSubscriptions() async {
-    if (!mounted || vpnImporting || vpnSubscriptions.isEmpty) return;
-    final lastMillis = widget.preferences.getInt(
-          'gozar_subscription_last_refresh_v1',
-        ) ??
-        0;
-    if (!gozarSubscriptionRefreshDue(
-      lastMillis,
-      interval: _subscriptionRefreshEvery,
-    )) {
-      return;
-    }
-    await _refreshAllSubscriptions(quiet: true);
-  }
-
-  Future<void> _markSubscriptionsRefreshed() =>
-      widget.preferences.setInt(
-        'gozar_subscription_last_refresh_v1',
-        DateTime.now().millisecondsSinceEpoch,
-      );
-
-  Future<void> _persistVpnData() async {
-    await _vault.write(
-      key: _profilesKey,
-      value: jsonEncode(vpnProfiles.map((item) => item.toJson()).toList()),
-    );
-    await _vault.write(
-      key: _subscriptionsKey,
-      value: jsonEncode(vpnSubscriptions),
-    );
-    await widget.preferences.setInt(
-      'gozar_xray_profile_index',
-      selectedVpnProfile < 0 ? 0 : selectedVpnProfile,
-    );
-  }
-
-  Future<void> _refreshVpnStatus() async {
-    try {
-      final status = await GozarVpnBridge.status();
-      if (!mounted) return;
-      final nextStage = status['stage']?.toString() ?? 'off';
-      final nextDetail =
-          status['detail']?.toString() ?? 'VPN خاموش است.';
-      final becameConnected =
-          vpnStage != 'running' && nextStage == 'running';
-      if (nextStage != vpnStage || nextDetail != vpnDetail) {
-        setState(() {
-          vpnStage = nextStage;
-          vpnDetail = nextDetail;
-          if (nextStage != 'running') {
-            vpnLatencyMs = null;
-          }
-        });
-      }
-      if (becameConnected) {
-        unawaited(_maybeAutoRefreshSubscriptions());
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _toggleVpn() async {
-    if (vpnBusy || vpnStage == 'stopping') return;
-
-    if (vpnStage == 'running' ||
-        vpnStage == 'starting' ||
-        vpnStage == 'consent') {
-      setState(() {
-        vpnBusy = true;
-        vpnLatencyMs = null;
-      });
-      try {
-        await GozarVpnBridge.stop();
-        await Future<void>.delayed(
-          const Duration(milliseconds: 350),
-        );
-        await _refreshVpnStatus();
-      } catch (_) {
-        notice('قطع VPN انجام نشد؛ دوباره امتحان کنید.');
-      } finally {
-        if (mounted) setState(() { vpnBusy = false; });
-      }
-      return;
-    }
-
-    if (vpnProfiles.isEmpty) {
-      notice('ابتدا یک اکانت یا ساب VPN اضافه کنید.');
-      return;
-    }
-
-    final index = selectedVpnProfile >= 0 &&
-            selectedVpnProfile < vpnProfiles.length
-        ? selectedVpnProfile
-        : 0;
-
-    setState(() {
-      vpnBusy = true;
-      selectedVpnProfile = index;
-      vpnLatencyMs = null;
-    });
-
-    try {
-      final config =
-          buildGozarXrayConfig(vpnProfiles[index].link);
-      await widget.preferences.setInt(
-        'gozar_xray_profile_index',
-        index,
-      );
-      await GozarVpnBridge.start(config);
-      await _refreshVpnStatus();
-    } on FormatException catch (error) {
-      notice(error.message.toString());
-    } catch (_) {
-      notice(
-        'اتصال برقرار نشد؛ کانفیگ و مجوز VPN اندروید را بررسی کنید.',
-      );
-      await _refreshVpnStatus();
-    } finally {
-      if (mounted) setState(() { vpnBusy = false; });
-    }
-  }
-
-  Future<void> _testVpnConnection() async {
-    if (vpnStage != 'running' || vpnBusy) return;
-    setState(() {
-      vpnBusy = true;
-      vpnLatencyMs = null;
-    });
-    try {
-      final latency = await GozarVpnBridge.measureConnection();
-      if (!mounted) return;
-      setState(() { vpnLatencyMs = latency; });
-      if (latency == null) {
-        notice(
-          'آزمون پاسخ نگرفت؛ این نتیجه به‌تنهایی به معنی قطع بودن VPN نیست.',
-        );
-      }
-    } catch (_) {
-      notice('آزمون اتصال انجام نشد.');
-    } finally {
-      if (mounted) setState(() { vpnBusy = false; });
-    }
-  }
-
-  Future<void> _addVpnAccount() async {
-    final name = TextEditingController();
-    final link = TextEditingController();
-    try {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          title: const Text('افزودن اکانت VPN'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: name,
-                    maxLength: 50,
-                    decoration: const InputDecoration(
-                      labelText: 'نام اکانت',
-                      hintText: 'مثلاً سرور شخصی',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    key: const ValueKey('gozar-vpn-account-input'),
-                    controller: link,
-                    minLines: 4,
-                    maxLines: 9,
-                    textDirection: TextDirection.ltr,
-                    textAlign: TextAlign.left,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'لینک یا کانفیگ',
-                      hintText:
-                          'vless://  vmess://  trojan://  یا Xray JSON',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialog).pop(false),
-              child: const Text('انصراف'),
-            ),
-            FilledButton(
-              key: const ValueKey('gozar-vpn-save-account'),
-              onPressed: () {
-                try {
-                  buildGozarXrayConfig(link.text);
-                  Navigator.of(dialog).pop(true);
-                } on FormatException catch (error) {
-                  ScaffoldMessenger.of(dialog).showSnackBar(
-                    SnackBar(content: Text(error.message.toString())),
-                  );
-                }
-              },
-              child: const Text('ذخیره'),
-            ),
-          ],
-        ),
-      );
-      if (approved != true || !mounted) return;
-
-      final raw = link.text.trim();
-      buildGozarXrayConfig(raw);
-      final label = name.text.trim().isEmpty
-          ? '${gozarProtocolLabel(raw)} ${vpnProfiles.length + 1}'
-          : name.text.trim();
-
-      final updated = List<GozarVpnProfile>.from(vpnProfiles);
-      final existing =
-          updated.indexWhere((item) => item.link == raw);
-      if (existing >= 0) {
-        updated[existing] = GozarVpnProfile(label, raw);
-      } else {
-        updated.add(GozarVpnProfile(label, raw));
-      }
-      final index =
-          existing >= 0 ? existing : updated.length - 1;
-
-      setState(() {
-        vpnProfiles = updated;
-        selectedVpnProfile = index;
-      });
-      await _persistVpnData();
-      notice('اکانت VPN ذخیره شد.');
-    } finally {
-      name.dispose();
-      link.dispose();
-    }
-  }
-
-  Future<void> _addVpnSubscription() async {
-    final input = TextEditingController();
-    try {
-      final url = await showDialog<String>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          title: const Text('افزودن ساب VPN'),
-          content: TextField(
-            key: const ValueKey('gozar-vpn-subscription-input'),
-            controller: input,
-            minLines: 2,
-            maxLines: 4,
-            keyboardType: TextInputType.url,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: const InputDecoration(
-              labelText: 'لینک Subscription',
-              hintText: 'https://...  یا  sub://...',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('انصراف'),
-            ),
-            FilledButton(
-              key: const ValueKey('gozar-vpn-save-subscription'),
-              onPressed: () {
-                try {
-                  final value =
-                      normalizeGozarSubscriptionUrl(input.text);
-                  Navigator.of(dialog).pop(value);
-                } on FormatException catch (error) {
-                  ScaffoldMessenger.of(dialog).showSnackBar(
-                    SnackBar(
-                      content: Text(error.message.toString()),
-                    ),
-                  );
-                }
-              },
-              child: const Text('دریافت و ذخیره'),
-            ),
-          ],
-        ),
-      );
-      if (url == null || !mounted) return;
-      await _importSubscription(url);
-    } finally {
-      input.dispose();
-    }
-  }
-
-  Future<void> _importSubscription(
-    String url, {
-    bool quiet = false,
-  }) async {
-    if (vpnImporting) return;
-    final sourceUrl = normalizeGozarSubscriptionUrl(url);
-    setState(() { vpnImporting = true; });
-    try {
-      final nodes = await fetchGozarSubscription(
-        sourceUrl,
-        preferXrayProxy: vpnStage == 'running',
-      );
-      final direct = vpnProfiles
-          .where((item) => item.subscription != sourceUrl)
-          .toList();
-      final imported = [
-        for (final node in nodes)
-          GozarVpnProfile(
-            node.name,
-            node.link,
-            subscription: sourceUrl,
-          ),
-      ];
-      final merged = <GozarVpnProfile>[];
-      final seen = <String>{};
-      for (final item in [...direct, ...imported]) {
-        if (seen.add(item.link)) merged.add(item);
-      }
-      final subscriptions =
-          List<String>.from(vpnSubscriptions);
-      if (!subscriptions.contains(sourceUrl)) {
-        subscriptions.add(sourceUrl);
-      }
-
-      final preferredLink =
-          selectedVpnProfile >= 0 &&
-                  selectedVpnProfile < vpnProfiles.length
-              ? vpnProfiles[selectedVpnProfile].link
-              : null;
-      var nextIndex = preferredLink == null
-          ? -1
-          : merged.indexWhere(
-              (item) => item.link == preferredLink,
-            );
-      if (nextIndex < 0 && imported.isNotEmpty) {
-        nextIndex = merged.indexWhere(
-          (item) => item.link == imported.first.link,
-        );
-      }
-      if (nextIndex < 0 && merged.isNotEmpty) nextIndex = 0;
-
-      if (!mounted) return;
-      setState(() {
-        vpnProfiles = merged;
-        vpnSubscriptions = subscriptions;
-        selectedVpnProfile = nextIndex;
-      });
-      await _persistVpnData();
-      await _markSubscriptionsRefreshed();
-      if (!quiet) {
-        notice(
-          '${nodes.length} سرور از ساب اضافه شد.',
-        );
-      }
-    } on FormatException catch (error) {
-      if (!quiet) notice(error.message.toString());
-    } catch (_) {
-      if (!quiet) {
-        notice(
-          'دریافت ساب انجام نشد؛ اینترنت یا لینک اشتراک را بررسی کنید.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() { vpnImporting = false; });
-    }
-  }
-
-  Future<void> _refreshAllSubscriptions({
-    bool quiet = false,
-  }) async {
-    if (vpnSubscriptions.isEmpty || vpnImporting) return;
-    final sources = List<String>.from(vpnSubscriptions);
-    var ok = 0;
-    setState(() { vpnImporting = true; });
-    try {
-      var current = List<GozarVpnProfile>.from(vpnProfiles);
-      for (final url in sources) {
-        try {
-          final nodes = await fetchGozarSubscription(
-            url,
-            preferXrayProxy: vpnStage == 'running',
-          );
-          current = current
-              .where((item) => item.subscription != url)
-              .toList();
-          current.addAll([
-            for (final node in nodes)
-              GozarVpnProfile(
-                node.name,
-                node.link,
-                subscription: url,
-              ),
-          ]);
-          ok++;
-        } catch (_) {}
-      }
-
-      final unique = <GozarVpnProfile>[];
-      final seen = <String>{};
-      for (final item in current) {
-        if (seen.add(item.link)) unique.add(item);
-      }
-
-      final previousLink =
-          selectedVpnProfile >= 0 &&
-                  selectedVpnProfile < vpnProfiles.length
-              ? vpnProfiles[selectedVpnProfile].link
-              : null;
-      var nextIndex = previousLink == null
-          ? -1
-          : unique.indexWhere(
-              (item) => item.link == previousLink,
-            );
-      if (nextIndex < 0 && unique.isNotEmpty) nextIndex = 0;
-
-      if (!mounted) return;
-      setState(() {
-        vpnProfiles = unique;
-        selectedVpnProfile = nextIndex;
-      });
-      await _persistVpnData();
-      if (ok > 0) {
-        await _markSubscriptionsRefreshed();
-      }
-      if (!quiet) {
-        notice(
-          ok == sources.length
-              ? 'همه ساب‌ها به‌روزرسانی شدند.'
-              : '$ok از ${sources.length} ساب به‌روزرسانی شد.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() { vpnImporting = false; });
-    }
-  }
-
-  Future<void> _deleteVpnProfile(int index) async {
-    if (vpnStage == 'running' ||
-        vpnStage == 'starting' ||
-        vpnStage == 'consent') {
-      notice('برای حذف اکانت، ابتدا VPN را قطع کنید.');
-      return;
-    }
-    if (index < 0 || index >= vpnProfiles.length) return;
-
-    final updated = List<GozarVpnProfile>.from(vpnProfiles)
-      ..removeAt(index);
-    var next = selectedVpnProfile;
-    if (updated.isEmpty) {
-      next = -1;
-    } else if (selectedVpnProfile == index) {
-      next = 0;
-    } else if (selectedVpnProfile > index) {
-      next--;
-    }
-
-    setState(() {
-      vpnProfiles = updated;
-      selectedVpnProfile = next;
-    });
-    await _persistVpnData();
-  }
-
-  Future<void> _manageVpnProfiles() async {
-    if (vpnProfiles.isEmpty) {
-      notice('هنوز اکانت VPN ذخیره نشده است.');
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheet) => StatefulBuilder(
-        builder: (sheet, update) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheet).height * .68,
-            child: Column(children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
-                child: Text(
-                  'مدیریت اکانت‌های VPN',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Expanded(child: ListView.separated(
-                padding:
-                    const EdgeInsets.fromLTRB(12, 0, 12, 18),
-                itemCount: vpnProfiles.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1),
-                itemBuilder: (_, index) {
-                  final item = vpnProfiles[index];
-                  final selected =
-                      selectedVpnProfile == index;
-                  return ListTile(
-                    key: ValueKey(
-                        'gozar-vpn-profile-$index'),
-                    leading: Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      color: selected
-                          ? GozarPalette.cyan
-                          : GozarPalette.muted,
-                    ),
-                    title: Text(item.name),
-                    subtitle: Text(
-                      item.subscription == null
-                          ? gozarProtocolLabel(item.link)
-                          : '${gozarProtocolLabel(item.link)} • ساب',
-                    ),
-                    onTap: () async {
-                      setState(() {
-                        selectedVpnProfile = index;
-                      });
-                      await _persistVpnData();
-                      if (sheet.mounted) Navigator.of(sheet).pop();
-                    },
-                    trailing: IconButton(
-                      tooltip: 'حذف',
-                      onPressed: vpnStage == 'running'
-                          ? null
-                          : () async {
-                              await _deleteVpnProfile(index);
-                              if (sheet.mounted) update(() {});
-                            },
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                      ),
-                    ),
-                  );
-                },
-              )),
-            ]),
-          ),
-        ),
-      ),
     );
   }
 
@@ -834,33 +170,34 @@ class _GozarHomeState extends State<GozarHome> {
     IconData icon,
     String title,
     String subtitle,
-  ) => Container(
-    margin: const EdgeInsets.fromLTRB(12, 7, 12, 7),
-    padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
-    decoration: BoxDecoration(
-      color: const Color(0xfff8fcff),
-      borderRadius: BorderRadius.circular(21),
-      border: Border.all(color: const Color(0xffbfd9ee)),
-    ),
-    child: Row(children: [
-      Icon(icon, color: GozarPalette.cyan, size: 24),
-      const SizedBox(width: 9),
-      Expanded(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(
-            color: GozarPalette.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
+  ) =>
+      Container(
+        margin: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+        padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
+        decoration: BoxDecoration(
+          color: const Color(0xfff8fcff),
+          borderRadius: BorderRadius.circular(21),
+          border: Border.all(color: const Color(0xffbfd9ee)),
+        ),
+        child: Row(children: [
+          Icon(icon, color: GozarPalette.cyan, size: 24),
+          const SizedBox(width: 9),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(
+                color: GozarPalette.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              )),
+              Text(subtitle, style: const TextStyle(
+                color: GozarPalette.muted,
+                fontSize: 11,
+              )),
+            ],
           )),
-          Text(subtitle, style: const TextStyle(
-            color: GozarPalette.muted,
-            fontSize: 11,
-          )),
-        ],
-      )),
-    ]),
-  );
+        ]),
+      );
 
   Widget _homeTab() => Column(children: [
     Container(
@@ -904,281 +241,16 @@ class _GozarHomeState extends State<GozarHome> {
     Expanded(child: notesPage),
   ]);
 
-  Widget _vpnSettingsCard() {
-    final connected = vpnStage == 'running';
-    final connecting =
-        vpnStage == 'starting' || vpnStage == 'consent';
-    final stopping = vpnStage == 'stopping';
-    final selected = selectedVpnProfile >= 0 &&
-            selectedVpnProfile < vpnProfiles.length
-        ? vpnProfiles[selectedVpnProfile]
-        : null;
-    final statusColor = connected
-        ? const Color(0xff159947)
-        : (connecting || stopping)
-            ? const Color(0xffd78a16)
-            : const Color(0xffd63f3f);
-
-    final buttonLabel = connected
-        ? 'برای قطع لمس کنید'
-        : connecting
-            ? 'در حال اتصال…'
-            : stopping
-                ? 'در حال قطع…'
-                : 'برای اتصال لمس کنید';
-
-    return GozarPanel(
-      key: const ValueKey('gozar-settings-vpn-card'),
-      glow: statusColor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(children: [
-            Icon(
-              Icons.shield_outlined,
-              color: statusColor,
-              size: 22,
-            ),
-            const SizedBox(width: 8),
-            const Expanded(child: Text(
-              'VPN',
-              style: TextStyle(
-                color: GozarPalette.text,
-                fontWeight: FontWeight.w800,
-                fontSize: 17,
-              ),
-            )),
-            Container(
-              key: const ValueKey('gozar-vpn-status-dot'),
-              width: 11,
-              height: 11,
-              margin: const EdgeInsets.only(left: 8),
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xffe8f4ff),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                _engineVersion,
-                textDirection: TextDirection.ltr,
-                style: TextStyle(
-                  color: GozarPalette.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          Center(
-            child: GestureDetector(
-              key: const ValueKey('gozar-settings-vpn-power'),
-              onTap: vpnBusy ? null : _toggleVpn,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                width: 112,
-                height: 112,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: statusColor.withOpacity(.13),
-                  border: Border.all(
-                    color: statusColor,
-                    width: 3,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: statusColor.withOpacity(.18),
-                      blurRadius: 22,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.power_settings_new_rounded,
-                  size: 48,
-                  color: statusColor,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            buttonLabel,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: GozarPalette.text,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            vpnDetail,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: GozarPalette.muted,
-              fontSize: 11,
-            ),
-          ),
-          if (selected != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 9,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xfff5fbff),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xffbed9ed),
-                ),
-              ),
-              child: Row(children: [
-                const Icon(
-                  Icons.dns_outlined,
-                  size: 18,
-                  color: GozarPalette.cyan,
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      selected.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: GozarPalette.text,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      gozarProtocolLabel(selected.link),
-                      style: const TextStyle(
-                        color: GozarPalette.muted,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                )),
-                TextButton(
-                  onPressed: _manageVpnProfiles,
-                  child: const Text('تغییر'),
-                ),
-              ]),
-            ),
-          ],
-          if (vpnLatencyMs != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'پاسخ موتور: $vpnLatencyMs ms',
-              textAlign: TextAlign.center,
-              textDirection: TextDirection.rtl,
-              style: const TextStyle(
-                color: GozarPalette.cyan,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: OutlinedButton.icon(
-              key: const ValueKey('gozar-vpn-add-account'),
-              onPressed: vpnImporting ? null : _addVpnAccount,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('اکانت'),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(
-              key: const ValueKey('gozar-vpn-add-subscription'),
-              onPressed:
-                  vpnImporting ? null : _addVpnSubscription,
-              icon: const Icon(Icons.link_rounded),
-              label: const Text('ساب'),
-            )),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(child: TextButton.icon(
-              key: const ValueKey('gozar-vpn-manage-profiles'),
-              onPressed:
-                  vpnProfiles.isEmpty ? null : _manageVpnProfiles,
-              icon: const Icon(Icons.storage_outlined),
-              label: Text(
-                vpnProfiles.isEmpty
-                    ? 'بدون اکانت'
-                    : 'مدیریت ${vpnProfiles.length} اکانت',
-              ),
-            )),
-            if (vpnSubscriptions.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              TextButton.icon(
-                key: const ValueKey('gozar-vpn-refresh-subscriptions'),
-                onPressed: vpnImporting
-                    ? null
-                    : _refreshAllSubscriptions,
-                icon: vpnImporting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.refresh_rounded),
-                label: const Text('آپدیت ساب'),
-              ),
-            ],
-          ]),
-          if (connected) ...[
-            const SizedBox(height: 6),
-            OutlinedButton.icon(
-              key: const ValueKey('gozar-vpn-test-connection'),
-              onPressed:
-                  vpnBusy ? null : _testVpnConnection,
-              icon: const Icon(Icons.speed_rounded),
-              label: const Text('آزمون اتصال'),
-            ),
-          ],
-          const SizedBox(height: 5),
-          const Text(
-            'اکانت‌ها و لینک‌های ساب در فضای امن گوشی ذخیره می‌شوند. '
-            'برنامه‌های بانکی، روبیکا، بله، ایتا و شاد به‌صورت خودکار '
-            'از مسیر مستقیم استفاده می‌کنند و سایت‌های .ir نیز مستقیم '
-            'مسیریابی می‌شوند.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: GozarPalette.muted,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _settingsTab() => Column(children: [
     _pageHeader(
       Icons.settings_rounded,
       'تنظیمات',
-      'لانچر، VPN و یادآورها',
+      'تنظیمات عمومی خانه و یادآورها',
     ),
     Expanded(child: ListView(
       key: const ValueKey('gozar-settings-page'),
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 22),
       children: [
-        _vpnSettingsCard(),
-        const SizedBox(height: 12),
         GozarPanel(
           glow: GozarPalette.cyan,
           child: Column(
@@ -1191,14 +263,11 @@ class _GozarHomeState extends State<GozarHome> {
                   size: 21,
                 ),
                 SizedBox(width: 8),
-                Text(
-                  'خانه و لانچر',
-                  style: TextStyle(
-                    color: GozarPalette.text,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
+                Text('خانه و لانچر', style: TextStyle(
+                  color: GozarPalette.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                )),
               ]),
               const SizedBox(height: 8),
               const Text(
@@ -1212,8 +281,7 @@ class _GozarHomeState extends State<GozarHome> {
               const SizedBox(height: 10),
               FilledButton.icon(
                 key: const ValueKey('gozar-settings-open-home'),
-                onPressed: () =>
-                    setState(() { currentPage = 0; }),
+                onPressed: () => setState(() { currentPage = 0; }),
                 icon: const Icon(Icons.home_outlined),
                 label: const Text('رفتن به خانه'),
               ),
@@ -1233,14 +301,11 @@ class _GozarHomeState extends State<GozarHome> {
                   size: 21,
                 ),
                 SizedBox(width: 8),
-                Text(
-                  'یادآورها',
-                  style: TextStyle(
-                    color: GozarPalette.text,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
+                Text('یادآورها', style: TextStyle(
+                  color: GozarPalette.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                )),
               ]),
               const SizedBox(height: 8),
               const Text(
@@ -1253,12 +318,10 @@ class _GozarHomeState extends State<GozarHome> {
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                key: const ValueKey(
-                    'gozar-settings-exact-alarm'),
+                key: const ValueKey('gozar-settings-exact-alarm'),
                 onPressed: () async {
                   try {
-                    await GozarReminderBridge
-                        .openExactAlarmSettings();
+                    await GozarReminderBridge.openExactAlarmSettings();
                   } catch (_) {
                     notice(
                       'صفحه مجوز یادآورهای دقیق در گوشی پیدا نشد.',
@@ -1266,8 +329,7 @@ class _GozarHomeState extends State<GozarHome> {
                   }
                 },
                 icon: const Icon(Icons.alarm_on_rounded),
-                label:
-                    const Text('تنظیم مجوز یادآور دقیق'),
+                label: const Text('تنظیم مجوز یادآور دقیق'),
               ),
             ],
           ),
@@ -1284,20 +346,17 @@ class _GozarHomeState extends State<GozarHome> {
                   size: 21,
                 ),
                 SizedBox(width: 8),
-                Text(
-                  'حریم خصوصی',
-                  style: TextStyle(
-                    color: GozarPalette.text,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
+                Text('حریم خصوصی', style: TextStyle(
+                  color: GozarPalette.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                )),
               ]),
               SizedBox(height: 8),
               Text(
-                'فهرست بخش‌های خانه و یادداشت‌ها محلی است. '
-                'اطلاعات اکانت VPN و لینک‌های ساب در Secure Storage '
-                'گوشی نگهداری می‌شوند.',
+                'فهرست بخش‌های خانه و یادداشت‌ها به‌صورت محلی روی گوشی '
+                'نگهداری می‌شوند. برنامه برای نمایش آیکن‌ها فقط برنامه‌های '
+                'قابل اجرا روی همین دستگاه را می‌خواند.',
                 style: TextStyle(
                   color: GozarPalette.muted,
                   fontSize: 12,
@@ -1333,10 +392,6 @@ class _GozarHomeState extends State<GozarHome> {
       selectedIndex: currentPage,
       onDestinationSelected: (index) {
         setState(() { currentPage = index; });
-        if (index == 2) {
-          unawaited(_refreshVpnStatus());
-          unawaited(_maybeAutoRefreshSubscriptions());
-        }
       },
       destinations: const [
         NavigationDestination(
