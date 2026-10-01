@@ -64,11 +64,47 @@ void main() {
     );
   });
 
-  test('unsupported share protocols are rejected', () {
+  test('Xray config accepts SIP002 Shadowsocks', () {
+    final credentials = base64Url.encode(
+      utf8.encode('aes-128-gcm:strong-password'),
+    ).replaceAll('=', '');
+    final link =
+        'ss://' + credentials + '@ss.example:8388#shadow';
+    final raw = buildGozarXrayConfig(link);
+    final config = jsonDecode(raw) as Map<String, dynamic>;
+    final outbound =
+        (config['outbounds'] as List).first as Map<String, dynamic>;
+    expect(outbound['protocol'], 'shadowsocks');
+    final settings = outbound['settings'] as Map;
+    expect(settings['address'], 'ss.example');
+    expect(settings['port'], 8388);
+    expect(settings['method'], 'aes-128-gcm');
+  });
+
+  test('Iranian domains have a direct routing rule with sniffing', () {
+    final config =
+        jsonDecode(buildGozarXrayConfig(vmess())) as Map<String, dynamic>;
+    final inbound =
+        (config['inbounds'] as List).first as Map<String, dynamic>;
+    expect((inbound['sniffing'] as Map)['enabled'], isTrue);
+    final outbounds = config['outbounds'] as List;
     expect(
-      () => buildGozarXrayConfig('ss://unsupported'),
-      throwsFormatException,
+      outbounds.whereType<Map>().any((item) => item['tag'] == 'direct'),
+      isTrue,
     );
+    final rules = (config['routing'] as Map)['rules'] as List;
+    final direct = rules.whereType<Map>()
+        .firstWhere((item) => item['outboundTag'] == 'direct');
+    expect((direct['domain'] as List), contains(r'regexp:.*\.ir  test('display protocol label stays compact', () {
+    expect(gozarProtocolLabel('vless://x'), 'VLESS');
+    expect(gozarProtocolLabel('vmess://x'), 'VMess');
+    expect(gozarProtocolLabel('trojan://x'), 'Trojan');
+    expect(gozarProtocolLabel('ss://x'), 'Shadowsocks');
+  });
+}
+));
+    expect((direct['domain'] as List), contains('domain:bale.ai'));
+    expect((direct['domain'] as List), contains('domain:eitaa.com'));
   });
 
   test('display protocol label stays compact', () {
