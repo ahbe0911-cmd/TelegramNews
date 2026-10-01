@@ -115,7 +115,7 @@ String _expandSubscriptionPayload(String payload) {
 List<GozarSubscriptionNode> parseGozarSubscription(String payload) {
   final source = _expandSubscriptionPayload(payload);
   final matches = RegExp(
-    r'(?:vmess|vless|trojan|ss)://[^\s"\'<>]+',
+    r'''(?:vmess|vless|trojan|ss)://[^\s"'<>]+''',
     caseSensitive: false,
   ).allMatches(source);
 
@@ -249,16 +249,22 @@ Future<List<GozarSubscriptionNode>> fetchGozarSubscription(
   final settings = outbound['settings'] as Map;
   final endpoint = (settings['vnext'] as List?)?.first ??
       (settings['servers'] as List?)?.first;
-  if (endpoint is! Map ||
-      endpoint['address'] is! String ||
-      endpoint['port'] is! int) {
-    throw const FormatException(
-      'نشانی سرور برای آزمایش در دسترس نیست.',
+  if (endpoint is Map &&
+      endpoint['address'] is String &&
+      endpoint['port'] is int) {
+    return (
+      host: endpoint['address'] as String,
+      port: endpoint['port'] as int,
     );
   }
-  return (
-    host: endpoint['address'] as String,
-    port: endpoint['port'] as int,
+  if (settings['address'] is String && settings['port'] is int) {
+    return (
+      host: settings['address'] as String,
+      port: settings['port'] as int,
+    );
+  }
+  throw const FormatException(
+    'نشانی سرور برای آزمایش در دسترس نیست.',
   );
 }
 
