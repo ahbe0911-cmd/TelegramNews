@@ -21,7 +21,7 @@ class GozarApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'گذر',
+    title: 'روشا',
     debugShowCheckedModeBanner: false,
     locale: const Locale('fa'),
     supportedLocales: const [Locale('fa')],
