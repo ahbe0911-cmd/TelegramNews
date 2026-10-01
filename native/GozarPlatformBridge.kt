@@ -297,9 +297,23 @@ object GozarPlatformBridge {
                     "installedApps" -> {
                         val force =
                             call.argument<Boolean>("force") ?: false
-                        result.success(
-                            allLaunchableApps(activity, force)
-                        )
+                        Thread({
+                            try {
+                                val apps =
+                                    allLaunchableApps(activity, force)
+                                activity.runOnUiThread {
+                                    result.success(apps)
+                                }
+                            } catch (error: Throwable) {
+                                activity.runOnUiThread {
+                                    result.error(
+                                        "APP_LIST_FAILED",
+                                        error.javaClass.simpleName,
+                                        null
+                                    )
+                                }
+                            }
+                        }, "rosha-installed-apps").start()
                     }
 
                     else -> result.notImplemented()
