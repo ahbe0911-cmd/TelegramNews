@@ -2,25 +2,85 @@ package ir.channel.telegram_news
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 
 /**
  * Android helpers for Gozar's launcher and private HTTPS browser.
- * No VPN service, tunnel engine, proxy, or network-routing code lives here.
+ * Package visibility is intentionally broad so the user can add every
+ * launchable application installed on the device.
  */
 object GozarPlatformBridge {
     private const val CHANNEL = "ir.channel.telegram_tdnews/gozar_platform"
+    private const val CACHE_MS = 30000L
 
-    private fun launcherActivities(activity: MainActivity):
-        List<android.content.pm.ResolveInfo> {
-        val intent = Intent(Intent.ACTION_MAIN)
-            .addCategory(Intent.CATEGORY_LAUNCHER)
-        return activity.packageManager.queryIntentActivities(intent, 0)
+    @Volatile private var cachedApps: List<Map<String, String>>? = null
+    @Volatile private var cachedAt: Long = 0L
+
+    @Suppress("DEPRECATION")
+    private fun installedApplications(
+        packageManager: PackageManager
+    ): List<ApplicationInfo> =
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            packageManager.getInstalledApplications(
+                PackageManager.ApplicationInfoFlags.of(0)
+            )
+        } else {
+            packageManager.getInstalledApplications(0)
+        }
+
+    private fun allLaunchableApps(
+        activity: MainActivity,
+        force: Boolean = false
+    ): List<Map<String, String>> {
+        val now = SystemClock.elapsedRealtime()
+        val existing = cachedApps
+        if (!force && existing != null && now - cachedAt < CACHE_MS) {
+            return existing
+        }
+
+        val pm = activity.packageManager
+        val apps = installedApplications(pm)
+            .mapNotNull { info ->
+                val pkg = info.packageName ?: return@mapNotNull null
+                if (pkg == activity.packageName) return@mapNotNull null
+
+                val launch = try {
+                    pm.getLaunchIntentForPackage(pkg)
+                } catch (_: Throwable) {
+                    null
+                } ?: return@mapNotNull null
+
+                val component = launch.component?.className ?: ""
+                val label = try {
+                    pm.getApplicationLabel(info).toString().trim()
+                } catch (_: Throwable) {
+                    pkg
+                }
+
+                mapOf(
+                    "package" to pkg,
+                    "component" to component,
+                    "label" to (if (label.isEmpty()) pkg else label)
+                )
+            }
+            .distinctBy { it["package"] }
+            .sortedWith(
+                compareBy<Map<String, String>>(
+                    String.CASE_INSENSITIVE_ORDER
+                ) { it["label"] ?: "" }
+            )
+
+        cachedApps = apps
+        cachedAt = now
+        return apps
     }
 
     fun attach(activity: MainActivity, engine: FlutterEngine) {
@@ -39,23 +99,20 @@ object GozarPlatformBridge {
                         } else {
                             try {
                                 val pm = activity.packageManager
-                                val entries = launcherActivities(activity)
-                                    .filter { it.activityInfo.packageName == pkg }
-                                val selected = entries.firstOrNull {
-                                    it.activityInfo.name == component
-                                } ?: entries.firstOrNull()
                                 val launchers = mutableListOf<Intent>()
-                                if (selected != null) {
+
+                                if (!component.isNullOrBlank()) {
                                     launchers += Intent(Intent.ACTION_MAIN)
                                         .addCategory(Intent.CATEGORY_LAUNCHER)
-                                        .setClassName(
-                                            selected.activityInfo.packageName,
-                                            selected.activityInfo.name
+                                        .setComponent(
+                                            ComponentName(pkg, component)
                                         )
                                 }
+
                                 pm.getLaunchIntentForPackage(pkg)?.let {
                                     launchers += it
                                 }
+
                                 var opened = false
                                 var lastError: Exception? = null
                                 for (launch in launchers) {
@@ -71,6 +128,7 @@ object GozarPlatformBridge {
                                         lastError = error
                                     }
                                 }
+
                                 if (opened) {
                                     result.success(null)
                                 } else {
@@ -101,6 +159,7 @@ object GozarPlatformBridge {
                         } catch (_: Exception) {
                             null
                         }
+
                         if (address?.scheme != "https" ||
                             address.host.isNullOrBlank() ||
                             !address.userInfo.isNullOrEmpty()
@@ -115,8 +174,14 @@ object GozarPlatformBridge {
                                 val title =
                                     call.argument<String>("title") ?: "وب"
                                 activity.startActivity(
-                                    Intent(activity, GozarWebActivity::class.java)
-                                        .putExtra(GozarWebActivity.EXTRA_URL, raw)
+                                    Intent(
+                                        activity,
+                                        GozarWebActivity::class.java
+                                    )
+                                        .putExtra(
+                                            GozarWebActivity.EXTRA_URL,
+                                            raw
+                                        )
                                         .putExtra(
                                             GozarWebActivity.EXTRA_TITLE,
                                             title.take(48)
@@ -141,23 +206,31 @@ object GozarPlatformBridge {
                                 result.success(null)
                             } else {
                                 val pm = activity.packageManager
-                                val drawable = if (component.isNullOrEmpty()) {
-                                    pm.getApplicationIcon(pkg)
-                                } else {
-                                    try {
-                                        pm.getActivityIcon(
-                                            ComponentName(pkg, component)
-                                        )
-                                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                                val drawable =
+                                    if (component.isNullOrEmpty()) {
                                         pm.getApplicationIcon(pkg)
+                                    } else {
+                                        try {
+                                            pm.getActivityIcon(
+                                                ComponentName(
+                                                    pkg,
+                                                    component
+                                                )
+                                            )
+                                        } catch (_: PackageManager.NameNotFoundException) {
+                                            pm.getApplicationIcon(pkg)
+                                        }
                                     }
-                                }
+
                                 val bitmap = Bitmap.createBitmap(
-                                    80, 80, Bitmap.Config.ARGB_8888
+                                    80,
+                                    80,
+                                    Bitmap.Config.ARGB_8888
                                 )
                                 val canvas = Canvas(bitmap)
                                 drawable.setBounds(0, 0, 80, 80)
                                 drawable.draw(canvas)
+
                                 val bytes = ByteArrayOutputStream()
                                 bitmap.compress(
                                     Bitmap.CompressFormat.PNG,
@@ -174,26 +247,11 @@ object GozarPlatformBridge {
                     }
 
                     "installedApps" -> {
-                        val entries = launcherActivities(activity)
-                            .mapNotNull { info ->
-                                val pkg = info.activityInfo.packageName
-                                if (pkg == activity.packageName) {
-                                    null
-                                } else {
-                                    mapOf(
-                                        "package" to pkg,
-                                        "component" to info.activityInfo.name,
-                                        "label" to info.loadLabel(
-                                            activity.packageManager
-                                        ).toString()
-                                    )
-                                }
-                            }
-                            .distinctBy {
-                                it["package"] + "/" + it["component"]
-                            }
-                            .sortedBy { it["label"]?.lowercase() }
-                        result.success(entries)
+                        val force =
+                            call.argument<Boolean>("force") ?: false
+                        result.success(
+                            allLaunchableApps(activity, force)
+                        )
                     }
 
                     else -> result.notImplemented()
