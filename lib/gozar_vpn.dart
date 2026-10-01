@@ -377,18 +377,7 @@ String buildGozarXrayConfig(String supplied) {
         {
           'type': 'field',
           'domain': [
-            r'regexp:.*\.ir
-/// Returns a compact protocol label for display only.
-String gozarProtocolLabel(String raw) {
-  final input = raw.trim().toLowerCase();
-  if (input.startsWith('vmess://')) return 'VMess';
-  if (input.startsWith('vless://')) return 'VLESS';
-  if (input.startsWith('trojan://')) return 'Trojan';
-  if (input.startsWith('ss://')) return 'Shadowsocks';
-  if (input.startsWith('{')) return 'Xray JSON';
-  return 'Xray';
-}
-,
+            'regexp:.*\\.ir\$',
             'domain:bale.ai',
             'domain:eitaa.com',
             'domain:aparat.com',
@@ -416,6 +405,7 @@ String gozarProtocolLabel(String raw) {
   if (input.startsWith('vmess://')) return 'VMess';
   if (input.startsWith('vless://')) return 'VLESS';
   if (input.startsWith('trojan://')) return 'Trojan';
+  if (input.startsWith('ss://')) return 'Shadowsocks';
   if (input.startsWith('{')) return 'Xray JSON';
   return 'Xray';
 }
