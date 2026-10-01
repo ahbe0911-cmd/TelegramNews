@@ -165,9 +165,8 @@ class _GozarLauncherState extends State<GozarLauncher> {
   }
 
   Future<void> _warmInstalledApps() async {
-    // Never block the first frame. Populate the picker cache shortly after
-    // Home is already visible so opening "افزودن" feels immediate.
-    await Future<void>.delayed(const Duration(milliseconds: 350));
+    // This runs only after the first frame. Native package enumeration itself
+    // is on a background Android thread, so no delay/timer is needed here.
     if (!mounted || cachedInstalledApps != null) return;
     try {
       final apps = await GozarPlatformBridge.installedApps(force: true);
