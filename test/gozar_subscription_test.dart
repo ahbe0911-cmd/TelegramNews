@@ -62,6 +62,26 @@ void main() {
     expect(nodes.single.name, 'shadow');
   });
 
+  test('automatic subscription refresh is due after six hours', () {
+    final now = DateTime(2026, 10, 1, 12);
+    final recent = now.subtract(const Duration(hours: 5))
+        .millisecondsSinceEpoch;
+    final stale = now.subtract(const Duration(hours: 7))
+        .millisecondsSinceEpoch;
+    expect(
+      gozarSubscriptionRefreshDue(recent, now: now),
+      isFalse,
+    );
+    expect(
+      gozarSubscriptionRefreshDue(stale, now: now),
+      isTrue,
+    );
+    expect(
+      gozarSubscriptionRefreshDue(0, now: now),
+      isTrue,
+    );
+  });
+
   test('invalid subscription is rejected', () {
     expect(() => parseGozarSubscription('not a subscription'),
         throwsFormatException);
