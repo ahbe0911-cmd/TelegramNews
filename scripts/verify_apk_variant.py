@@ -22,6 +22,7 @@ with zipfile.ZipFile(apk) as archive:
     names = set(archive.namelist())
     if variant == 'gozar':
         assert 'android.permission.BIND_VPN_SERVICE' in manifest
+        assert 'android.permission.QUERY_ALL_PACKAGES' in manifest
         assert 'android.net.VpnService' in manifest
         assert 'GozarVpnService' in manifest
         assert 'SystemVpnService' not in manifest
@@ -34,7 +35,7 @@ with zipfile.ZipFile(apk) as archive:
         assert not any('libwg-go.so' in entry.lower() for entry in names), (
             'WireGuard engine must not be bundled in the Xray-only Gozar build'
         )
-        print('APK verified: Gozar Settings-only Xray VPN, no Telegram/WireGuard engine')
+        print('APK verified: Gozar Xray VPN + all-app launcher visibility, no Telegram/WireGuard engine')
         sys.exit(0)
     assert 'android.permission.BIND_VPN_SERVICE' not in manifest
     assert 'SystemVpnService' not in manifest
