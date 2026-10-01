@@ -147,7 +147,7 @@ jobs:
           assert '"start" ->' in vpn and '"stop" ->' in vpn
           assert 'Libv2ray.newCoreController' in service
           assert 'GozarDirectAppPolicy.installedPackages' in service
-          assert 'ApplicationInfo.CATEGORY_FINANCE' in bypass
+          assert 'bankingLabelHints' in bypass and 'packageHints' in bypass
           assert 'WireGuard' not in vpn + service
           main = next((folder / 'kotlin').rglob('MainActivity.kt')).read_text()
           manifest = (folder / 'AndroidManifest.xml').read_text()
