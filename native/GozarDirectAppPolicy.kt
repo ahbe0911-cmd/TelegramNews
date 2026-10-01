@@ -4,9 +4,9 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 
 /**
- * Packages that should stay on the device's direct network while the VPN is on.
- * This keeps Iranian banking/payment apps and the requested local messengers
- * usable without asking the user to maintain a per-app list.
+ * Packages that should stay on the device's direct network while VPN is on.
+ * Detection is deliberately local: known Iranian messenger package/labels,
+ * banking/payment product labels, and package-name hints.
  */
 object GozarDirectAppPolicy {
     private val exactPackages = setOf(
@@ -21,42 +21,49 @@ object GozarDirectAppPolicy {
         "rubika",
         "eitaa",
         ".shad",
-        "bankmellat",
-        "bankmelli",
-        "bankmeli",
-        "tejaratbank",
-        "banktejarat",
-        "banksaderat",
-        "banksepah",
-        "bankmaskan",
-        "bankrefah",
-        "bankshahr",
-        "bankpasargad",
-        "parsianbank",
-        "samanbank",
+        "bank",
+        "mellat",
+        "melli",
+        "bmi.",
+        ".bmi",
+        "bsi.",
+        ".bsi",
+        "tejarat",
+        "saderat",
+        "sepah",
+        "maskan",
+        "refah",
+        "shahr",
+        "pasargad",
+        "parsian",
+        "saman",
         "resalat",
         "eghtesadnovin",
         "blubank",
         "wepod",
         "sadad",
         "asanpardakht",
-        "behpardakht"
+        "behpardakht",
+        "sepehr",
+        "pec."
     )
 
     private val bankingLabelHints = listOf(
         "بانک",
         "همراه بانک",
         "موبایل بانک",
+        "بانکداری",
         "بلوبانک",
         "بلو بانک",
         "ویپاد",
+        "بام",
         "همراه کارت",
         "ایوا",
         "سکه",
         "۷۲۴"
     )
 
-    private val exactLocalLabels = setOf(
+    private val exactDirectLabels = setOf(
         "روبیکا",
         "بله",
         "ایتا",
@@ -84,7 +91,7 @@ object GozarDirectAppPolicy {
         val output = LinkedHashSet<String>()
 
         for (info in installedApplications(packageManager)) {
-            val pkg = info.packageName ?: continue
+            val pkg = info.packageName
             if (pkg == selfPackage) continue
 
             val lowerPackage = pkg.lowercase()
@@ -97,20 +104,17 @@ object GozarDirectAppPolicy {
             }
             val lowerLabel = label.lowercase()
 
-            val isFinance =
-                info.category == ApplicationInfo.CATEGORY_FINANCE
-            val exactLocal =
+            val exactDirect =
                 exactPackages.contains(pkg) ||
-                    exactLocalLabels.contains(label)
+                    exactDirectLabels.contains(label)
             val packageMatched =
                 packageHints.any { lowerPackage.contains(it) }
-            val labelMatched =
+            val bankingLabelMatched =
                 bankingLabelHints.any { lowerLabel.contains(it) }
 
-            if (isFinance ||
-                exactLocal ||
+            if (exactDirect ||
                 packageMatched ||
-                labelMatched) {
+                bankingLabelMatched) {
                 output += pkg
             }
         }
