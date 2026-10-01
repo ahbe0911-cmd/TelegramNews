@@ -604,7 +604,7 @@ class _GozarHomeState extends State<GozarHome> {
               GozarVpnProfile(
                 node.name,
                 node.link,
-                subscription: sourceUrl,
+                subscription: url,
               ),
           ]);
           ok++;
