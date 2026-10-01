@@ -8,7 +8,7 @@ package = ('ir.channel.gozar_vpn' if variant == 'gozar' else
            'ir.channel.telegram_dual' if variant == 'dual' else
            'ir.channel.telegram_cafenet' if variant == 'cafenet' else
            'ir.channel.telegram_tdnews')
-label = 'گذر' if variant == 'gozar' else 'نبض خبر و کافی‌نت' if variant == 'dual' else 'کافی‌نت' if variant == 'cafenet' else 'نبض خبر'
+label = 'روشا' if variant == 'gozar' else 'نبض خبر و کافی‌نت' if variant == 'dual' else 'کافی‌نت' if variant == 'cafenet' else 'نبض خبر'
 apk = Path('build/app/outputs/flutter-apk/app-release.apk')
 aapt = next(Path(os.environ['ANDROID_HOME']).glob('build-tools/*/aapt'))
 badging = subprocess.check_output([str(aapt), 'dump', 'badging', str(apk)], text=True)
