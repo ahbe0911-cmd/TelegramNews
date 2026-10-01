@@ -26,6 +26,42 @@ void main() {
     expect(plain.map((node) => node.name), containsAll(['beta', 'gamma']));
   });
 
+
+  test('JSON and URL-safe base64 subscriptions are accepted', () {
+    final body = [
+      'vless://$id@b.example:443?security=tls#beta',
+      'trojan://secret@c.example:443#gamma',
+    ].join('\n');
+    final jsonBody = jsonEncode({
+      'servers': [body.split('\n').first, body.split('\n').last],
+    });
+    expect(parseGozarSubscription(jsonBody), hasLength(2));
+
+    final packed = base64Url.encode(utf8.encode(body))
+        .replaceAll('=', '');
+    expect(parseGozarSubscription(packed), hasLength(2));
+  });
+
+  test('sub wrapper normalizes an encoded subscription URL', () {
+    const url = 'https://example.com/sub?id=42';
+    final encoded = base64Url.encode(utf8.encode(url))
+        .replaceAll('=', '');
+    expect(normalizeGozarSubscriptionUrl('sub://' + encoded), url);
+    expect(normalizeGozarSubscriptionUrl('http://example.com/sub'),
+        'http://example.com/sub');
+  });
+
+  test('valid Shadowsocks node is retained in a mixed subscription', () {
+    final credentials = base64Url.encode(
+      utf8.encode('aes-128-gcm:strong-password'),
+    ).replaceAll('=', '');
+    final nodes = parseGozarSubscription(
+      'ss://' + credentials + '@ss.example:8388#shadow',
+    );
+    expect(nodes, hasLength(1));
+    expect(nodes.single.name, 'shadow');
+  });
+
   test('invalid subscription is rejected', () {
     expect(() => parseGozarSubscription('not a subscription'),
         throwsFormatException);
