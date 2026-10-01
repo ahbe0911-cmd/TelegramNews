@@ -35,8 +35,79 @@ class GozarVpnBridge {
   }
 }
 
-/// Converts a VMess/VLESS/Trojan share link (or Xray JSON config) into the
-/// Android TUN configuration consumed by Xray-core.
+String _decodeShareBase64(String value) {
+  var normalized = value.trim().replaceAll(RegExp(r'\\s+'), '')
+      .replaceAll('-', '+').replaceAll('_', '/');
+  while (normalized.length % 4 != 0) {
+    normalized += '=';
+  }
+  return utf8.decode(base64.decode(normalized));
+}
+
+Map<String, dynamic> _parseShadowsocksShare(String input) {
+  final uri = Uri.tryParse(input);
+  if (uri == null || uri.scheme.toLowerCase() != 'ss') {
+    throw const FormatException('لینک Shadowsocks معتبر نیست.');
+  }
+  if ((uri.queryParameters['plugin'] ?? '').isNotEmpty) {
+    throw const FormatException(
+        'Shadowsocks دارای plugin در این نسخه پشتیبانی نمی‌شود.');
+  }
+
+  String host = uri.host;
+  int port = uri.hasPort ? uri.port : 0;
+  String credentials = Uri.decodeComponent(uri.userInfo);
+
+  if (host.isEmpty || port < 1) {
+    final raw = input.substring(5).split('#').first.split('?').first;
+    String decoded;
+    try {
+      decoded = _decodeShareBase64(Uri.decodeComponent(raw));
+    } catch (_) {
+      throw const FormatException('ساختار لینک Shadowsocks معتبر نیست.');
+    }
+    final expanded = Uri.tryParse('ss://$decoded');
+    if (expanded == null || expanded.host.isEmpty || !expanded.hasPort) {
+      throw const FormatException('آدرس Shadowsocks معتبر نیست.');
+    }
+    host = expanded.host;
+    port = expanded.port;
+    credentials = Uri.decodeComponent(expanded.userInfo);
+  }
+
+  if (!credentials.contains(':')) {
+    try {
+      credentials = _decodeShareBase64(credentials);
+    } catch (_) {
+      throw const FormatException('رمز Shadowsocks قابل خواندن نیست.');
+    }
+  }
+  final separator = credentials.indexOf(':');
+  if (separator <= 0 || separator == credentials.length - 1) {
+    throw const FormatException('روش رمزگذاری یا رمز Shadowsocks ناقص است.');
+  }
+  final method = credentials.substring(0, separator);
+  final password = credentials.substring(separator + 1);
+  if (port < 1 || port > 65535) {
+    throw const FormatException('پورت Shadowsocks معتبر نیست.');
+  }
+  return {
+    'protocol': 'shadowsocks',
+    'settings': {
+      'servers': [
+        {
+          'address': host,
+          'port': port,
+          'method': method,
+          'password': password,
+        }
+      ],
+    },
+  };
+}
+
+/// Converts a VMess/VLESS/Trojan/Shadowsocks share link (or Xray JSON config)
+/// into the Android TUN configuration consumed by Xray-core.
 String buildGozarXrayConfig(String supplied) {
   final input = supplied.trim();
   if (input.isEmpty) {
@@ -46,6 +117,8 @@ String buildGozarXrayConfig(String supplied) {
   Map<String, dynamic> primary;
   if (input.toLowerCase().startsWith('vmess://')) {
     primary = parseVmessShareLink(input);
+  } else if (input.toLowerCase().startsWith('ss://')) {
+    primary = _parseShadowsocksShare(input);
   } else if (input.startsWith('{')) {
     final parsed = jsonDecode(input);
     if (parsed is! Map || parsed['outbounds'] is! List) {
@@ -272,7 +345,7 @@ String buildGozarXrayConfig(String supplied) {
       };
     } else {
       throw const FormatException(
-          'لینک VMess، VLESS، Trojan یا JSON معتبر وارد کنید.');
+          'لینک VMess، VLESS، Trojan، Shadowsocks یا JSON معتبر وارد کنید.');
     }
   }
 
@@ -287,12 +360,50 @@ String buildGozarXrayConfig(String supplied) {
           'name': 'xray0',
           'MTU': 1500,
         },
+        'sniffing': {
+          'enabled': true,
+          'destOverride': ['http', 'tls', 'quic'],
+          'routeOnly': true,
+        },
       },
     ],
-    'outbounds': [primary],
+    'outbounds': [
+      primary,
+      {
+        'tag': 'direct',
+        'protocol': 'freedom',
+        'settings': <String, dynamic>{},
+      },
+    ],
     'routing': {
-      'domainStrategy': 'AsIs',
+      'domainStrategy': 'IPIfNonMatch',
       'rules': [
+        {
+          'type': 'field',
+          'domain': [
+            r'regexp:.*\.ir
+/// Returns a compact protocol label for display only.
+String gozarProtocolLabel(String raw) {
+  final input = raw.trim().toLowerCase();
+  if (input.startsWith('vmess://')) return 'VMess';
+  if (input.startsWith('vless://')) return 'VLESS';
+  if (input.startsWith('trojan://')) return 'Trojan';
+  if (input.startsWith('ss://')) return 'Shadowsocks';
+  if (input.startsWith('{')) return 'Xray JSON';
+  return 'Xray';
+}
+,
+            'domain:bale.ai',
+            'domain:eitaa.com',
+            'domain:aparat.com',
+            'domain:digikala.com',
+            'domain:torob.com',
+            'domain:rubika.ir',
+            'domain:shad.ir',
+            'domain:shadmessenger.com',
+          ],
+          'outboundTag': 'direct',
+        },
         {
           'type': 'field',
           'inboundTag': ['vpn'],
